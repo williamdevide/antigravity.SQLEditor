@@ -47,7 +47,46 @@ const INITIAL_TABS: TabItem[] = [
 
 
 export const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<ActiveView>('workspace');
+  const [activeView, setActiveViewState] = useState<ActiveView>(() => {
+    try {
+      // 1. Tenta recuperar do hash da URL (#about, #settings, #er-diagram, #history, #workspace)
+      const hash = window.location.hash.replace(/^#\/?/, '') as ActiveView;
+      if (['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(hash)) {
+        return hash;
+      }
+      // 2. Tenta recuperar do localStorage salvo
+      const saved = localStorage.getItem('sqleditor_active_view') as ActiveView;
+      if (saved && ['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(saved)) {
+        return saved;
+      }
+    } catch (_) {}
+    return 'workspace';
+  });
+
+  const setActiveView = useCallback((view: ActiveView) => {
+    setActiveViewState(view);
+    try {
+      localStorage.setItem('sqleditor_active_view', view);
+      if (view === 'workspace') {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      } else {
+        window.location.hash = `#${view}`;
+      }
+    } catch (_) {}
+  }, []);
+
+  // Ouve navegação por botões Voltar/Avançar do navegador
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = (window.location.hash.replace(/^#\/?/, '') || 'workspace') as ActiveView;
+      if (['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(hash)) {
+        setActiveViewState(hash);
+        try { localStorage.setItem('sqleditor_active_view', hash); } catch (_) {}
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   const [schemas, setSchemas] = useState<DatabaseSchema[]>([]);
   const [activeDatabase, setActiveDatabase] = useState<string>('');
   const [currentPreset, setCurrentPreset] = useState<DatabasePreset>('empty');

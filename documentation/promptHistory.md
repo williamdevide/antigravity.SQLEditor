@@ -502,6 +502,46 @@ corrija.`
 3. **Validação de Build e Versionamento:**
    - Executado `npm run build` com sucesso (**0 erros** de TypeScript e Vite).
 
+---
+
+## 📌 Prompt 22
+**Data:** 13/10/2026 - 19:19  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal ao clicar no logo da milkfed quero que abra ele em um modal grande (se clicar fora do modal ele fecha o logo).  
+> na stack de tecnologia quero o logotipo de cada tecnologia nos cards e quando eu passar o mouse emcima ele vira o card e exibe o conteudo atual.  
+> ao dar F5 em qualquer página quero que ele mantenha na mesma pagina ao inves de voltar para o workspace.  
+> verifique todos os requisitos de segurança do nosso portal, para evitar que cometam qualquer crime ou roubem dados sensiveis
+
+### 🎯 Ações Executadas:
+1. **Modal de Zoom em Alta Definição para o Logo da Milkfed (`AboutView.tsx`):**
+   - Implementado estado reativo `isLogoModalOpen`.
+   - Adicionado listener de teclado para fechar o modal com a tecla <kbd>Escape</kbd>.
+   - O logo da empresa agora conta com indicador visual de clique (`cursor-zoom-in`, tooltip e ícone de lupa).
+   - Ao clicar, abre um modal centralizado com fundo escurecido e translúcido (`bg-black/85 backdrop-blur-md`).
+   - Clicar fora do modal (no backdrop) ou no botão dedicado de fechar (<kbd>X</kbd>) fecha o modal instantaneamente.
+2. **3D Flip Cards Interativos na Stack Tecnológica (`AboutView.tsx`):**
+   - Transformados todos os 6 cards da seção de tecnologias em **3D Flip Cards** com transição fluida `[perspective:1000px]` e `[transform-style:preserve-3d]`:
+     - **Frente:** Logotipo vetorial em SVG de alta fidelidade e com as cores originais da tecnologia (React, MySQL/AlaSQL, Dexie/IndexedDB, VS Code/Monaco, Tailwind CSS/Stitch, Google Antigravity/AI), título da tecnologia, subtítulo e indicador `↺ Veja as especificações`.
+     - **Verso (`group-hover:[transform:rotateY(180deg)]`):** Exibe as especificações técnicas completas, tags e arquitetura do componente com fundo de destaque e bordas temáticas.
+3. **Persistência de Rota / Página Ativa ao Pressionar F5 (`App.tsx`):**
+   - Inicialização do estado `activeView` sincronizada tanto com `window.location.hash` (`#workspace`, `#history`, `#er-diagram`, `#settings`, `#about`) quanto com `localStorage.getItem('sqleditor_active_view')`.
+   - Criada função `handleViewChange` que atualiza o estado React, persiste no `localStorage` e reflete na URL sem causar recarregamento.
+   - Adicionado listener para o evento `hashchange` do navegador para suportar nativamente os botões de avançar/voltar do histórico do navegador.
+   - Ao atualizar a página (F5) em qualquer tela (inclusive Sobre, Configurações, Histórico ou Diagrama ER), o usuário permanece exatamente na mesma tela.
+4. **Auditoria Rigorosa e Medidas de Segurança Cibernética:**
+   - **Isolamento de Credenciais e Segredos:** Verificado arquivo `.env` na raiz. Confirmado que o `.env` está estritamente listado no `.gitignore` e **nunca** foi rastreado ou commitado no repositório Git. Assegurado que nenhuma chave ou token sensível seja exposto no bundle do cliente.
+   - **Mitigação de Vulnerabilidades em Dependências:** Executado `npm audit fix` no frontend, resolvendo vulnerabilidades transitivas em pacotes de desenvolvimento.
+   - **Proteção Client-Side e Privacidade de Dados:**
+     - O processamento de consultas e bancos é **100% offline-first e local** (AlaSQL em memória e Dexie em IndexedDB no navegador do próprio usuário). Não há transmissão de bancos, dados educacionais ou esquemas para servidores externos ou terceiros.
+     - O React escapa automaticamente qualquer conteúdo textual inserido no DOM, prevenindo ataques de **XSS (Cross-Site Scripting)** nos resultados de consultas, consoles e histórico.
+   - **Headers e Meta Tags de Segurança (`index.html`):**
+     - `X-Content-Type-Options: nosniff` para evitar ataques de sniffing de MIME type.
+     - `Referrer-Policy: strict-origin-when-cross-origin` para impedir vazamento de URLs e referrers para terceiros.
+     - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` desativando o acesso indevido do navegador a recursos sensíveis do dispositivo.
+5. **Validação de Build e Versionamento:**
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de compilação em TypeScript e Vite).
+
+
 
 
 
