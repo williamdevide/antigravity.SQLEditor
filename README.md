@@ -8,9 +8,12 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![IndexedDB](https://img.shields.io/badge/Storage-IndexedDB%20%2B%20AlaSQL-FF6B00?style=for-the-badge&logo=mysql&logoColor=white)
+![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white)
 
 **Ambiente Web Interativo e Educacional para Prática de Banco de Dados MySQL com Persistência 100% Offline no Navegador**  
 *Interactive Web Educational Environment for MySQL Database Practice with 100% In-Browser Offline Persistence*
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwilliamdevide%2Fantigravity.SQLEditor&root-directory=frontend)
 
 [Português](#-português) • [English](#-english)
 
@@ -56,7 +59,7 @@ Este projeto foi concebido e orquestrado através do **Google Antigravity**:
 └── README.md         # Documentação mestre do repositório
 ```
 
-### 🚀 Como Executar
+### 🚀 Como Executar Localmente
 1. Dê um duplo clique no arquivo `executar.bat` ou:
 ```bash
 cd frontend
@@ -64,6 +67,20 @@ npm install
 npm run dev
 ```
 2. Acesse `http://localhost:5173` no seu navegador.
+
+### 🌐 Publicação no Vercel
+Você pode publicar o projeto na nuvem da Vercel de duas formas:
+
+#### Opção A: 1-Clique com GitHub (Recomendado)
+1. Clique no botão [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwilliamdevide%2Fantigravity.SQLEditor&root-directory=frontend)
+2. Conecte sua conta do GitHub e clique em **Deploy**. O arquivo `vercel.json` configurado na raiz cuidará do build automático de produção.
+
+#### Opção B: Via Terminal (Vercel CLI)
+```bash
+cd frontend
+npx vercel login
+npx vercel --prod
+```
 
 ---
 
