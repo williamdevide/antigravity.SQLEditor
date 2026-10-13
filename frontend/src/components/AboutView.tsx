@@ -95,6 +95,72 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
           </div>
         </div>
 
+        {/* Card da Empresa: Milkfed Devs && Reqs Lords */}
+        <div className="mb-8 p-6 sm:p-7 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-xl relative overflow-hidden transition-all hover:border-[#FF6B00]/40">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-[#FF6B00]/10 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-[var(--accent-yellow)]/5 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 sm:gap-8 relative z-10">
+            {/* Logo da Empresa */}
+            <div className="shrink-0 flex items-center justify-center p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg shadow-black/20 group">
+              <img
+                src="/logo-milkfed.png"
+                alt="Milkfed Devs && Reqs Lords Logo"
+                className="w-28 h-28 sm:w-36 sm:h-36 object-contain drop-shadow-[0_4px_16px_rgba(255,107,0,0.35)] group-hover:scale-105 transition-transform duration-300"
+              />
+            </div>
+
+            {/* Conteúdo Institucional */}
+            <div className="flex-1 space-y-3 text-center md:text-left">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/30 uppercase tracking-wider">
+                  Software House &amp; Tech Consulting
+                </span>
+                <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/20">
+                  Engineering &amp; Requirements Mastery
+                </span>
+              </div>
+
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                  Milkfed Devs <span className="text-[#FF6B00]">&amp;&amp;</span> Reqs Lords
+                </h2>
+                <p className="text-xs sm:text-sm font-medium text-[var(--accent-yellow)] mt-0.5">
+                  Engenharia de Software de Alta Precisão, Requisitos Refinados e Soluções Guiadas por IA
+                </p>
+              </div>
+
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
+                A <strong>Milkfed Devs &amp;&amp; Reqs Lords</strong> nasceu da convicção de que o verdadeiro diferencial em tecnologia reside no equilíbrio perfeito entre código de alto padrão (<em>Devs</em>) e a maestria profunda na especificação de regras de negócio e requisitos (<em>Reqs Lords</em>).
+              </p>
+
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] leading-relaxed">
+                Especializada no desenvolvimento de sistemas complexos, ferramentas de produtividade para desenvolvedores e plataformas educacionais inovadoras — como o ecossistema <strong>SQLEditor</strong> —, nossa atuação combina arquiteturas offline-first, microsserviços resilientes, processamento local de dados em tempo real e orquestração autônoma de agentes de Inteligência Artificial para entregar produtos robustos, escaláveis e esteticamente impecáveis.
+              </p>
+
+              {/* Pilares / Destaques da Empresa */}
+              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                  <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">verified_user</span>
+                  <span className="text-[var(--text-primary)] font-medium">Engenharia de Requisitos &amp; Domínio de Negócio</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                  <span className="material-symbols-outlined text-[16px] text-[var(--status-success)]">speed</span>
+                  <span className="text-[var(--text-primary)] font-medium">Aplicações Offline-First &amp; Performance Extrema</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                  <span className="material-symbols-outlined text-[16px] text-[var(--accent-yellow)]">smart_toy</span>
+                  <span className="text-[var(--text-primary)] font-medium">Inteligência Artificial Generativa &amp; Agentes Autônomos</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                  <span className="material-symbols-outlined text-[16px] text-blue-400">school</span>
+                  <span className="text-[var(--text-primary)] font-medium">EdTech, Simuladores &amp; Ferramentas para Desenvolvedores</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Informações da Stack Tecnológica */}
         <div className="space-y-6">
           <div className="flex items-center gap-2">
