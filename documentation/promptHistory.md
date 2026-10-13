@@ -485,6 +485,24 @@ corrija.`
 3. **Validação de Build e Versionamento:**
    - Compilação realizada com `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
 
+## Prompt 21
+`substitua o WK pela minha foto "foto-william.jpg". no logo-milkfed.png fora do logo esta o quadriculado de quando removi o fundo. consegue remover esse quadriculado`
+
+### Ações Executadas:
+1. **Substituição do Avatar pelas Iniciais 'WK' pela Foto Oficial do Professor William:**
+   - O arquivo `documentation/files/milkfed/foto-william.jpg` foi copiado para a pasta pública `frontend/public/foto-william.jpg`.
+   - No componente [AboutView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/AboutView.tsx), substituído o bloco de texto com iniciais `WK` por uma imagem circular com moldura gradiente elegante (`bg-gradient-to-tr from-[#FF6B00] via-[var(--accent-yellow)] to-[var(--status-success)]`), sombra suave e ajuste responsivo (`w-16 h-16 sm:w-20 sm:h-20 object-cover`).
+2. **Remoção do Padrão Quadriculado do `logo-milkfed.png` e Criação de Fundo 100% Transparente:**
+   - Identificada a causa do problema: a imagem original continha o quadriculado de "transparência falsa" do editor de imagens gravado em pixels RGB opacos (blocos xadrez alternados em tons cinza-claro neutros ~236 e ~249).
+   - Desenvolvido processamento via script Python com Pillow:
+     - Convertida a imagem para o modo **RGBA** com canal alfa verdadeiro.
+     - Identificados os pixels do quadriculado de fundo e vazados internos, convertendo-os em transparência total (`alpha = 0`).
+     - Aplicada suavização de bordas (*antialiasing*) para preservar os contornos sem serrilhado ou artefatos.
+     - Imagem salva com transparência real tanto em `frontend/public/logo-milkfed.png` quanto em `documentation/files/milkfed/logo-milkfed.png`.
+3. **Validação de Build e Versionamento:**
+   - Executado `npm run build` com sucesso (**0 erros** de TypeScript e Vite).
+
+
 
 
 

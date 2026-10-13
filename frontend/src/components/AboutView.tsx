@@ -40,10 +40,12 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
           
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#FF6B00] via-[var(--accent-yellow)] to-[var(--status-success)] p-0.5 shadow-md">
-                <div className="w-full h-full rounded-full bg-[var(--bg-surface)] flex items-center justify-center text-[var(--text-primary)] font-bold text-xl">
-                  WK
-                </div>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#FF6B00] via-[var(--accent-yellow)] to-[var(--status-success)] p-0.5 shadow-lg shrink-0 overflow-hidden">
+                <img
+                  src="/foto-william.jpg"
+                  alt="Professor William Devidé Komel"
+                  className="w-full h-full rounded-full object-cover shadow-inner"
+                />
               </div>
               <div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/30 uppercase tracking-wider">
