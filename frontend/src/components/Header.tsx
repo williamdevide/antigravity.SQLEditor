@@ -1,12 +1,17 @@
 import React from 'react';
 import type { ActiveView, ThemeMode } from '../types';
+import { NewTabDropdown } from './NewTabDropdown';
+import type { SolutionItem } from '../services/scriptsLoader';
 
 interface HeaderProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
   onRunQuery: () => void;
-  onNewTab: () => void;
+  onNewBlankTab: () => void;
+  onOpenSolution: (solution: SolutionItem) => void;
+  solutions: SolutionItem[];
   onClearEditor: () => void;
+  onCloseAllTabs: () => void;
   onResetDb: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
@@ -18,8 +23,11 @@ export const Header: React.FC<HeaderProps> = ({
   activeView,
   onViewChange,
   onRunQuery,
-  onNewTab,
+  onNewBlankTab,
+  onOpenSolution,
+  solutions,
   onClearEditor,
+  onCloseAllTabs,
   onResetDb,
   theme,
   onToggleTheme,
@@ -127,26 +135,54 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </button>
 
-        {/* Nova Aba */}
-        <button
-          onClick={onNewTab}
-          className="flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer"
-          title="Nova Aba (Ctrl+T)"
-          type="button"
-        >
-          <span className="material-symbols-outlined text-[15px] text-[#FFE600]">add</span>
-          <span className="hidden sm:inline">Nova Aba</span>
-        </button>
+        {/* Nova Aba com Menu Suspenso */}
+        <NewTabDropdown
+          onNewBlankTab={onNewBlankTab}
+          onSelectSolution={onOpenSolution}
+          solutions={solutions}
+          align="left"
+          triggerButton={({ isOpen, toggle }) => (
+            <button
+              onClick={toggle}
+              className={`flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer ${
+                isOpen ? 'border-[#FFE600] bg-[var(--bg-hover)] shadow-[0_0_8px_rgba(255,230,0,0.2)]' : ''
+              }`}
+              title="Nova Aba ou Carregar Solução (Ctrl+T)"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[15px] text-[#FFE600]">add</span>
+              <span className="hidden sm:inline">Nova Aba</span>
+              <span className="material-symbols-outlined text-[13px] text-[var(--text-muted)] -ml-0.5">
+                arrow_drop_down
+              </span>
+            </button>
+          )}
+        />
 
         {/* Limpar */}
         <button
           onClick={onClearEditor}
           className="hidden md:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer"
-          title="Limpar Editor Atual"
+          title="Limpar Conteúdo do Editor Atual"
           type="button"
         >
           <span className="material-symbols-outlined text-[15px]">clear_all</span>
           <span>Limpar</span>
+        </button>
+
+        {/* Excluir / Fechar Todas as Guias com Confirmação */}
+        <button
+          onClick={() => {
+            if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
+              onCloseAllTabs();
+            }
+          }}
+          className="hidden md:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-xs font-medium rounded transition-all cursor-pointer"
+          title="Fechar todas as guias de scripts abertas (com confirmação)"
+          type="button"
+        >
+          <span className="material-symbols-outlined text-[15px] text-[#FF3366]">delete_sweep</span>
+          <span>Fechar Todas</span>
         </button>
 
         {/* Resetar Banco */}

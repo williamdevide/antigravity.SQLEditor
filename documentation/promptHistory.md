@@ -344,3 +344,49 @@ CREATE TABLE tb_pagamentos (
    - Adicionado no [README.md](file:///f:/antigravity/projetos/antigravity.SQLEditor/README.md) o badge oficial e o botão **Deploy with Vercel** (com link direto de importação do repositório) e instruções claras para publicação em 1 clique ou via CLI (`npx vercel --prod`).
    - Enviado commit e push das configurações da Vercel para o repositório remoto.
 
+---
+
+## Prompt 17
+`/agente-orquestrador /grill-me /goal quero alterar um recurso existente: ao abrir a pagina a primeira vez não deve carregar nenhum banco, nem mesmo os de exemplo. mas agora se clicarmos com o botão direito sobre SCHEMA EXPLORER abrira um menu suspenso com 3 opções (Carregar vazio, Carregar BDs de exemplo, Carregar BDs Aula). logo carregar vazio não carrega qualquer banco, carregar dbs de exemplo carrega o ecommerce_db e o universidade_db. e por fim se selecionar carregar bds aula irá carregar os bancos de dados enviados pelo professor. No momento para o professor conseguir enviar qualquer banco o mesmo deverá estar salvo na pasta do projeto em uma pasta que você me apontar (por enquanto estão em documentation/files/bds.
+alem disso quando clicar em resetar banco ele volta ao estado original da opção selecionada em schema explorer.
+alem disso, quero ao lado do limpar um botão para excluir de uma só vez todos as guias de scripts abertas (mas deve ter confirmação)
+a barra de rolagens das guias criadas deve sempre rolar de forma a exibir a ultima e o botão de +
+o botão + Nova Aba deve exibir um menu suspenso com as opções Criar aba em branco, Carregar Soluções (quando escolher essa, abre um novo nivel de submenu com todos os arquivos de soluções disponibilizados e a pessoa escolhe qual exatamente quer).
+os arquivos de soluções ficarão por enquanto na pasta documentation/files/solutions e você irá movê-los para onde for mais indicado. depois que a pessoa clica, aparece esse script aberto.
+já me indique onde serão as pastas definitivas dos arquivos de bds e soluções, para que eu possa sempre salvar lá diretamente sem necessidade de prompts`
+
+### Ações Executadas:
+1. **Definição das Pastas Definitivas para Bancos de Dados e Soluções:**
+   - **Bancos de Dados de Aula:** `frontend/src/data/bds/` (arquivos `.sql`).
+   - **Arquivos de Soluções:** `frontend/src/data/solutions/` (arquivos `.sql`).
+   - Os arquivos existentes em `documentation/files/bds/` e `documentation/files/solutions/` foram copiados e sincronizados para as novas pastas oficiais.
+   - Utilizado `import.meta.glob` nativo do Vite com query `?raw` e `eager: true` em [scriptsLoader.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/services/scriptsLoader.ts), garantindo detecção e empacotamento 100% automático e offline de qualquer novo arquivo `.sql` adicionado nessas pastas sem necessidade de alterar o código.
+2. **Gerenciamento de Presets do Schema Explorer no DB Engine:**
+   - Modificado [dbEngine.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/services/dbEngine.ts) para que na primeira execução nenhum banco seja carregado (`preset = 'empty'`), mantendo o banco ativo como vazio e sem seed pré-carregado.
+   - Criado método `loadPreset(preset: 'empty' | 'samples' | 'class')`:
+     - `'empty'`: limpa todos os bancos e deixa o estado sem nenhum schema.
+     - `'samples'`: recarrega os bancos de exemplo `ecommerce_db` e `universidade_db`.
+     - `'class'`: executa e carrega em lote todos os scripts SQL da pasta `frontend/src/data/bds/` (`db_streamflix`, `db_pizzaria_express`, `db_escolaidiomas`, `db_rh`).
+   - Atualizado `resetDatabase()` para restaurar exatamente o estado original do modo ativo selecionado pelo usuário no Schema Explorer.
+3. **Menu de Contexto do Schema Explorer (Botão Direito):**
+   - Atualizado [Sidebar.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/Sidebar.tsx) e [ContextMenu.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/ContextMenu.tsx).
+   - Ao clicar com o botão direito no cabeçalho `SCHEMA EXPLORER` (ou no botão de opções dedicado), abre-se menu com as 3 opções:
+     - 🗑️ **Carregar vazio**
+     - 📦 **Carregar BDs de exemplo**
+     - 🎓 **Carregar BDs Aula**
+   - Adicionada mensagem instrutiva e amigável no painel esquerdo quando não há bancos carregados.
+4. **Menu Suspenso no Botão "+ Nova Aba" (Header e Abas):**
+   - Criado componente [NewTabDropdown.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/NewTabDropdown.tsx).
+   - Ao clicar em "+ Nova Aba" (no Header) ou "+" (na barra de guias):
+     - Opção 1: **Criar aba em branco**.
+     - Opção 2: **Carregar Soluções** com submenu automático listando todos os scripts de solução disponíveis em `frontend/src/data/solutions/`.
+     - Ao clicar na solução desejada, uma nova aba é aberta com o código SQL carregado e pronta para execução.
+5. **Botão de Fechar Todas as Guias com Confirmação:**
+   - Adicionado no [Header.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/Header.tsx) o botão **Fechar Todas** ao lado do botão **Limpar**.
+   - Ao ser clicado, solicita confirmação via `window.confirm` e, se confirmado, fecha todas as abas e cria uma aba nova em branco limpa.
+6. **Rolagem Automática na Barra de Abas:**
+   - Implementado no [EditorWorkspace.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/EditorWorkspace.tsx) um efeito com `scrollWidth` e rolagem suave para garantir que a última guia aberta e o botão `+` fiquem sempre visíveis e acessíveis.
+7. **Validação e Build:**
+   - Executado `npm run build` com sucesso absoluto (TypeScript 0 erros, Vite 0 erros).
+
+

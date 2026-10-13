@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -12,6 +12,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { dbEngine } from './services/dbEngine';
 import { dbStorage } from './services/storage';
 import { reviewSqlQuery } from './services/sqlReviewer';
+import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
 import type {
   ActiveView,
   TabItem,
@@ -21,53 +22,34 @@ import type {
   ThemeMode,
   ContextMenuTarget,
   SqlReview,
+  DatabasePreset,
 } from './types';
 
 const INITIAL_TABS: TabItem[] = [
   {
     id: 'tab-1',
-    title: 'consulta_produtos.sql',
+    title: 'script_1.sql',
     content: `-- Bem-vindo ao SQLEditor! (Google Antigravity - SENAI Edition)
--- O motor AlaSQL e IndexedDB mantém todos os seus bancos salvos 100% no navegador.
-
-USE ecommerce_db;
-
--- 1. Consultar produtos com suas categorias
-SELECT 
-  p.id,
-  p.nome AS produto,
-  p.preco,
-  p.estoque,
-  c.nome AS categoria
-FROM produtos p
-JOIN categorias c ON p.categoria_id = c.id
-ORDER BY p.preco DESC;
-`,
-  },
-  {
-    id: 'tab-2',
-    title: 'relatorio_pedidos.sql',
-    content: `USE ecommerce_db;
-
--- 2. Resumo de pedidos com valor total
-SELECT 
-  pd.id AS pedido_id,
-  u.nome AS cliente,
-  u.cidade,
-  pd.data_pedido,
-  pd.valor_total,
-  pd.status
-FROM pedidos pd
-JOIN usuarios u ON pd.usuario_id = u.id
-ORDER BY pd.data_pedido DESC;
+-- O motor AlaSQL e IndexedDB opera 100% no seu navegador.
+--
+-- 📌 Para carregar bancos de dados:
+--    Clique com o BOTÃO DIREITO sobre 'SCHEMA EXPLORER' na barra lateral:
+--    • Carregar vazio (iniciar sem nenhum banco)
+--    • Carregar BDs de exemplo (ecommerce_db e universidade_db)
+--    • Carregar BDs Aula (bancos enviados pelo professor em data/bds)
+--
+-- 💡 Para carregar soluções ou novas abas:
+--    Clique no botão '+ Nova Aba' para abrir aba em branco ou carregar soluções de aula.
 `,
   }
 ];
 
+
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveView>('workspace');
   const [schemas, setSchemas] = useState<DatabaseSchema[]>([]);
-  const [activeDatabase, setActiveDatabase] = useState<string>('ecommerce_db');
+  const [activeDatabase, setActiveDatabase] = useState<string>('');
+  const [currentPreset, setCurrentPreset] = useState<DatabasePreset>('empty');
   const [tabs, setTabs] = useState<TabItem[]>(INITIAL_TABS);
   const [activeTabId, setActiveTabId] = useState<string>('tab-1');
   const [results, setResults] = useState<QueryResult[]>([]);
@@ -79,6 +61,9 @@ export const App: React.FC = () => {
     console: 100,
   });
   const [contextMenuTarget, setContextMenuTarget] = useState<ContextMenuTarget | null>(null);
+
+  // Soluções de aula disponíveis
+  const solutions = useMemo(() => getAvailableSolutions(), []);
 
   // Aba de Revisão e Aba Ativa no Console
   const [sqlReview, setSqlReview] = useState<SqlReview | null>(null);
@@ -99,6 +84,7 @@ export const App: React.FC = () => {
       await dbEngine.initialize();
       const currentActiveDb = dbEngine.getActiveDatabase();
       setActiveDatabase(currentActiveDb);
+      setCurrentPreset(dbEngine.getPreset());
 
       const tree = await dbEngine.getSchemaTree();
       setSchemas(tree);
@@ -274,10 +260,13 @@ export const App: React.FC = () => {
   const handleNewTab = useCallback((initialContent?: string, tabName?: string) => {
     const newId = `tab-${Date.now()}`;
     const nextNum = tabs.length + 1;
+    const defaultContent = activeDatabase
+      ? `-- Novo script SQL\nUSE \`${activeDatabase}\`;\n\n`
+      : `-- Novo script SQL\n\n`;
     const newTab: TabItem = {
       id: newId,
       title: tabName || `script_${nextNum}.sql`,
-      content: initialContent || `-- Novo script SQL\nUSE \`${activeDatabase}\`;\n\n`,
+      content: initialContent !== undefined ? initialContent : defaultContent,
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
@@ -285,6 +274,63 @@ export const App: React.FC = () => {
       setActiveView('workspace');
     }
   }, [tabs.length, activeDatabase, activeView]);
+
+  // Criar Aba em Branco (via dropdown)
+  const handleNewBlankTab = useCallback(() => {
+    handleNewTab();
+  }, [handleNewTab]);
+
+  // Carregar Solução (via dropdown)
+  const handleOpenSolution = useCallback((solution: SolutionItem) => {
+    handleNewTab(solution.content, solution.fileName);
+  }, [handleNewTab]);
+
+  // Fechar Todas as Guias
+  const handleCloseAllTabs = useCallback(() => {
+    const newId = `tab-${Date.now()}`;
+    const defaultContent = activeDatabase
+      ? `-- Script SQL limpo\nUSE \`${activeDatabase}\`;\n\n`
+      : `-- Script SQL limpo\n\n`;
+    const newTab: TabItem = {
+      id: newId,
+      title: 'script_1.sql',
+      content: defaultContent,
+    };
+    setTabs([newTab]);
+    setActiveTabId(newId);
+  }, [activeDatabase]);
+
+  // Carregar Preset do Schema Explorer (Vazio, Exemplos, BDs Aula)
+  const handleLoadPreset = useCallback(async (preset: DatabasePreset) => {
+    setIsExecuting(true);
+    await dbEngine.loadPreset(preset);
+    setCurrentPreset(preset);
+    await refreshSchemas();
+    const newActiveDb = dbEngine.getActiveDatabase();
+    setActiveDatabase(newActiveDb);
+
+    let presetLabel = 'Vazio';
+    if (preset === 'samples') presetLabel = 'BDs de Exemplo (ecommerce_db, universidade_db)';
+    if (preset === 'class') presetLabel = 'BDs da Aula (Professor)';
+
+    setResults([
+      {
+        statement: `LOAD PRESET: ${preset.toUpperCase()};`,
+        columns: ['Status', 'Ambiente Ativo', 'Banco de Dados'],
+        rows: [{
+          Status: 'Ambiente carregado com sucesso!',
+          'Ambiente Ativo': presetLabel,
+          'Banco de Dados': newActiveDb || '(nenhum banco ativo)'
+        }],
+        executionTimeMs: 15,
+        status: 'success',
+        timestamp: new Date().toLocaleTimeString('pt-BR'),
+        database: newActiveDb,
+      },
+    ]);
+    setActiveConsoleTab('grid');
+    setIsExecuting(false);
+  }, [refreshSchemas]);
 
   // Criar Novo Banco de Dados (pelo botão na Sidebar)
   const handleCreateDatabase = useCallback(async (name: string) => {
@@ -316,21 +362,33 @@ export const App: React.FC = () => {
     );
   }, [activeTabId]);
 
-  // Resetar Banco de Dados
+  // Resetar Banco de Dados (restaura o estado da opção ativa no Schema Explorer)
   const handleResetDb = useCallback(async () => {
-    if (confirm('Deseja restaurar todos os bancos de dados para os valores padrão de estudo? Todas as alterações locais serão substituídas.')) {
+    const preset = dbEngine.getPreset();
+    let presetLabel = 'Vazio (sem bancos)';
+    if (preset === 'samples') presetLabel = 'BDs de Exemplo (ecommerce_db e universidade_db)';
+    if (preset === 'class') presetLabel = 'BDs da Aula (Professor)';
+
+    if (confirm(`Deseja restaurar o banco de dados para o estado original da opção selecionada (${presetLabel})? Todas as alterações locais serão substituídas.`)) {
       setIsExecuting(true);
       await dbEngine.resetDatabase();
       await refreshSchemas();
+      const newActiveDb = dbEngine.getActiveDatabase();
+      setActiveDatabase(newActiveDb);
+
       setResults([
         {
-          statement: 'RESTORE DEFAULTS;',
-          columns: ['Mensagem'],
-          rows: [{ Mensagem: 'Bancos de dados padrão restaurados com sucesso!' }],
+          statement: 'RESTORE DATABASE STATE;',
+          columns: ['Status', 'Modo Restaurado', 'Banco de Dados'],
+          rows: [{
+            Status: 'Banco restaurado com sucesso para o estado original da opção selecionada!',
+            'Modo Restaurado': presetLabel,
+            'Banco de Dados': newActiveDb || '(nenhum banco ativo)'
+          }],
           executionTimeMs: 10,
           status: 'success',
           timestamp: new Date().toLocaleTimeString('pt-BR'),
-          database: 'ecommerce_db',
+          database: newActiveDb,
         },
       ]);
       setActiveConsoleTab('grid');
@@ -432,13 +490,16 @@ export const App: React.FC = () => {
         activeView={activeView}
         onViewChange={setActiveView}
         onRunQuery={handleRunQuery}
-        onNewTab={() => handleNewTab()}
+        onNewBlankTab={handleNewBlankTab}
+        onOpenSolution={handleOpenSolution}
+        solutions={solutions}
         onClearEditor={handleClearEditor}
+        onCloseAllTabs={handleCloseAllTabs}
         onResetDb={handleResetDb}
         theme={theme}
         onToggleTheme={handleToggleTheme}
         isExecuting={isExecuting}
-        activeDatabase={activeDatabase}
+        activeDatabase={activeDatabase || '(nenhum)'}
       />
 
       {/* 2. Área Central Conforme Visão Selecionada */}
@@ -514,7 +575,9 @@ export const App: React.FC = () => {
                 activeTabId={activeTabId}
                 onSelectTab={setActiveTabId}
                 onCloseTab={handleCloseTab}
-                onNewTab={() => handleNewTab()}
+                onNewBlankTab={handleNewBlankTab}
+                onOpenSolution={handleOpenSolution}
+                solutions={solutions}
                 onUpdateContent={handleUpdateTabContent}
                 onRunQuery={handleRunQuery}
                 onRunSnippet={handleRunSnippet}
@@ -578,6 +641,8 @@ export const App: React.FC = () => {
         target={contextMenuTarget}
         onClose={() => setContextMenuTarget(null)}
         onAction={(sql) => handleNewTab(sql, 'script_contexto.sql')}
+        onSelectPreset={handleLoadPreset}
+        currentPreset={currentPreset}
       />
     </div>
   );

@@ -1,14 +1,18 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
+import { NewTabDropdown } from './NewTabDropdown';
 import type { TabItem, ThemeMode, DatabaseSchema } from '../types';
+import type { SolutionItem } from '../services/scriptsLoader';
 
 interface EditorWorkspaceProps {
   tabs: TabItem[];
   activeTabId: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
-  onNewTab: () => void;
+  onNewBlankTab: () => void;
+  onOpenSolution: (solution: SolutionItem) => void;
+  solutions: SolutionItem[];
   onUpdateContent: (id: string, content: string) => void;
   onRunQuery: () => void;
   onRunSnippet: (snippet: string) => void;
@@ -28,7 +32,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
-  onNewTab,
+  onNewBlankTab,
+  onOpenSolution,
+  solutions,
   onUpdateContent,
   onRunQuery,
   onRunSnippet,
@@ -43,6 +49,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   editorRefOut,
 }) => {
   const editorRef = useRef<any>(null);
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Rola automaticamente a barra de abas até o final (exibindo a última aba e o botão +)
+  useEffect(() => {
+    if (tabsContainerRef.current) {
+      tabsContainerRef.current.scrollTo({
+        left: tabsContainerRef.current.scrollWidth,
+        behavior: 'smooth',
+      });
+    }
+  }, [tabs.length, activeTabId]);
   const schemasRef = useRef(schemas);
   schemasRef.current = schemas;
   const activeDatabaseRef = useRef(activeDatabase);
@@ -319,7 +336,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     <div className="flex-1 flex flex-col min-h-[160px] bg-[var(--bg-secondary)] overflow-hidden transition-colors">
       {/* Barra de Abas e Controle de Zoom */}
       <div className="h-9 bg-[var(--bg-primary)] flex items-center justify-between border-b border-[var(--border-color)] px-2 select-none shrink-0">
-        <div className="flex items-center overflow-x-auto no-scrollbar gap-1 max-w-[calc(100%-140px)]">
+        <div
+          ref={tabsContainerRef}
+          className="flex items-center overflow-x-auto no-scrollbar gap-1 max-w-[calc(100%-140px)] scroll-smooth py-0.5"
+        >
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             return (
@@ -354,15 +374,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             );
           })}
 
-          {/* Botão de Adicionar Aba */}
-          <button
-            onClick={onNewTab}
-            title="Nova Aba de Script"
-            className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors ml-1"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[15px]">add</span>
-          </button>
+          {/* Botão de Adicionar Aba com Menu Suspenso */}
+          <NewTabDropdown
+            onNewBlankTab={onNewBlankTab}
+            onSelectSolution={onOpenSolution}
+            solutions={solutions}
+            align="left"
+            triggerButton={({ isOpen, toggle }) => (
+              <button
+                onClick={toggle}
+                title="Nova Aba ou Carregar Solução"
+                className={`w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors ml-1 cursor-pointer shrink-0 ${
+                  isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)] shadow-sm' : ''
+                }`}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px]">add</span>
+              </button>
+            )}
+          />
         </div>
 
         {/* Zoom do Editor */}

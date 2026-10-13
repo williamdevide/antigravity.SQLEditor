@@ -59,9 +59,11 @@ export interface ZoomLevels {
 export type ThemeMode = 'dark' | 'light';
 export type ActiveView = 'workspace' | 'history' | 'er-diagram' | 'settings' | 'about';
 
+export type DatabasePreset = 'empty' | 'samples' | 'class';
+
 export interface ContextMenuTarget {
-  type: 'database' | 'table';
-  dbName: string;
+  type: 'database' | 'table' | 'schema_explorer';
+  dbName?: string;
   tableName?: string;
   columns?: ColumnSchema[];
   x: number;
@@ -75,4 +77,5 @@ export interface SqlReview {
   recommendations: string[];
   timestamp: string;
 }
+
 

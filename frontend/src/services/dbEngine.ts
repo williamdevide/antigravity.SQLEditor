@@ -1,6 +1,7 @@
 import alasql from 'alasql';
 import { dbStorage } from './storage';
-import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem } from '../types';
+import { getClassroomDbScripts } from './scriptsLoader';
+import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
 import { registerMySQLFunctions } from './mysqlFunctions';
 
@@ -120,13 +121,21 @@ const DEFAULT_SEEDS = [
 ];
 
 class DatabaseEngine {
-  private activeDatabase: string = 'ecommerce_db';
+  private activeDatabase: string = '';
+  private currentPreset: DatabasePreset = 'empty';
   private isInitialized: boolean = false;
+
+  public getPreset(): DatabasePreset {
+    return this.currentPreset;
+  }
 
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     try {
+      const savedPreset = (localStorage.getItem('sqleditor_db_preset') as DatabasePreset) || 'empty';
+      this.currentPreset = savedPreset;
+
       const storedDbs = await dbStorage.databasesState.toArray();
 
       if (storedDbs.length > 0) {
@@ -154,30 +163,105 @@ class DatabaseEngine {
         }
 
         // Tenta usar o primeiro banco disponível
-        const firstDb = storedDbs[0]?.dbName || 'ecommerce_db';
+        const firstDb = storedDbs[0]?.dbName || '';
         this.activeDatabase = firstDb;
-        alasql(`USE ${firstDb};`);
-      } else {
-        // Inicializa com dados semente padrão
-        for (const sql of DEFAULT_SEEDS) {
-          try {
-            alasql(sql);
-          } catch (seedErr) {
-            console.error('Erro ao executar seed:', sql, seedErr);
-          }
+        if (firstDb) {
+          try { alasql(`USE ${firstDb};`); } catch (_) {}
         }
-        this.activeDatabase = 'ecommerce_db';
-        await this.persistAllDatabases();
+      } else {
+        // Na primeira vez ou sem dados salvos no IndexedDB:
+        if (savedPreset === 'samples') {
+          await this.loadPreset('samples');
+        } else if (savedPreset === 'class') {
+          await this.loadPreset('class');
+        } else {
+          // 'empty' (padrão absoluto): NÃO carrega nenhum banco!
+          this.activeDatabase = '';
+          this.currentPreset = 'empty';
+        }
       }
 
       this.isInitialized = true;
     } catch (err) {
       console.error('Falha na inicialização do DB Engine:', err);
-      // Fallback
-      for (const sql of DEFAULT_SEEDS) {
-        try { alasql(sql); } catch (_) {}
-      }
+      this.activeDatabase = '';
       this.isInitialized = true;
+    }
+  }
+
+  public async loadPreset(preset: DatabasePreset): Promise<void> {
+    this.currentPreset = preset;
+    try {
+      localStorage.setItem('sqleditor_db_preset', preset);
+    } catch (_) {}
+
+    // 1. Limpa bancos existentes em memória no AlaSQL
+    const currentDbs = Object.keys(alasql.databases).filter(d => d !== 'alasql');
+    for (const d of currentDbs) {
+      try {
+        alasql(`DROP DATABASE ${d};`);
+      } catch (_) {}
+    }
+
+    // 2. Limpa IndexedDB
+    await dbStorage.databasesState.clear();
+
+    if (preset === 'empty') {
+      this.activeDatabase = '';
+      return;
+    }
+
+    if (preset === 'samples') {
+      for (const sql of DEFAULT_SEEDS) {
+        try {
+          alasql(sql);
+        } catch (seedErr) {
+          console.error('Erro ao executar seed:', sql, seedErr);
+        }
+      }
+      this.activeDatabase = 'ecommerce_db';
+      try {
+        alasql(`USE ecommerce_db;`);
+      } catch (_) {}
+      await this.persistAllDatabases();
+      return;
+    }
+
+    if (preset === 'class') {
+      const classScripts = getClassroomDbScripts();
+      let firstDbDetected = '';
+
+      for (const scriptItem of classScripts) {
+        const statements = this.splitSqlStatements(scriptItem.content);
+        for (const stmt of statements) {
+          if (!stmt.trim()) continue;
+          try {
+            const createDbMatch = stmt.match(/^\s*CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"]?[\w-]+[`'"]?)/i);
+            const useMatch = stmt.match(/^\s*USE\s+([`'"]?[\w-]+[`'"]?)/i);
+
+            if (createDbMatch && !firstDbDetected) {
+              firstDbDetected = createDbMatch[1].replace(/[`'"]/g, '');
+            }
+            if (useMatch && !firstDbDetected) {
+              firstDbDetected = useMatch[1].replace(/[`'"]/g, '');
+            }
+
+            alasql(stmt);
+          } catch (e) {
+            console.warn(`Aviso ao carregar script de aula (${scriptItem.fileName}):`, e);
+          }
+        }
+      }
+
+      const availableDbs = Object.keys(alasql.databases).filter(d => d !== 'alasql');
+      this.activeDatabase = firstDbDetected || availableDbs[0] || '';
+      if (this.activeDatabase) {
+        try {
+          alasql(`USE \`${this.activeDatabase}\`;`);
+        } catch (_) {}
+      }
+      await this.persistAllDatabases();
+      return;
     }
   }
 
@@ -441,17 +525,7 @@ class DatabaseEngine {
   }
 
   public async resetDatabase(): Promise<void> {
-    await dbStorage.databasesState.clear();
-
-    // Limpa bancos em memória
-    for (const d of Object.keys(alasql.databases)) {
-      if (d !== 'alasql') {
-        try { alasql(`DROP DATABASE ${d};`); } catch (_) {}
-      }
-    }
-
-    this.isInitialized = false;
-    await this.initialize();
+    await this.loadPreset(this.currentPreset);
   }
 
   public async exportSQL(): Promise<string> {

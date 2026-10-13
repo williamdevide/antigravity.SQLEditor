@@ -78,7 +78,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] flex flex-col h-full select-none transition-colors"
     >
       {/* Topo do Schema Explorer */}
-      <div className="h-9 px-3 bg-[var(--bg-surface)] flex items-center justify-between border-b border-[var(--border-color)] shrink-0">
+      <div
+        className="h-9 px-3 bg-[var(--bg-surface)] flex items-center justify-between border-b border-[var(--border-color)] shrink-0 cursor-context-menu select-none hover:bg-[var(--bg-hover)]/30 transition-colors"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContextMenu({
+            type: 'schema_explorer',
+            x: e.clientX,
+            y: e.clientY,
+          });
+        }}
+        title="Clique com botão direito para alternar bancos (Vazio, Exemplos, BDs Aula)"
+      >
         <div className="flex items-center gap-1.5 truncate">
           <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">
             account_tree
@@ -102,6 +113,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
           >
             <span className="material-symbols-outlined text-[13px]">refresh</span>
+          </button>
+          <button
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              onContextMenu({
+                type: 'schema_explorer',
+                x: rect.left,
+                y: rect.bottom + 4,
+              });
+            }}
+            title="Opções de Banco de Dados (Carregar vazio, Exemplos, BDs Aula)"
+            className="w-5 h-5 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[14px]">more_vert</span>
           </button>
         </div>
       </div>
@@ -169,9 +195,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className="flex-1 overflow-y-auto p-2 space-y-1.5 font-mono"
         style={{ zoom: zoomScale }}
       >
-        {filteredSchemas.length === 0 ? (
+        {schemas.length === 0 ? (
+          <div className="text-center py-10 px-4 flex flex-col items-center gap-2 text-[var(--text-muted)] text-xs font-sans">
+            <span className="material-symbols-outlined text-3xl text-[var(--accent-yellow)]/60">
+              database
+            </span>
+            <span className="font-semibold text-[var(--text-primary)]">Nenhum banco carregado</span>
+            <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              Clique com o botão direito sobre <strong className="text-[var(--accent-yellow)]">SCHEMA EXPLORER</strong> para carregar bancos de exemplo ou da aula.
+            </p>
+          </div>
+        ) : filteredSchemas.length === 0 ? (
           <div className="text-center py-8 text-[var(--text-muted)] text-xs font-sans">
-            Nenhum banco ou tabela encontrado.
+            Nenhum banco ou tabela encontrado para o filtro.
           </div>
         ) : (
           filteredSchemas.map((db) => {
