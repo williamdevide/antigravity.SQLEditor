@@ -389,4 +389,41 @@ já me indique onde serão as pastas definitivas dos arquivos de bds e soluçõe
 7. **Validação e Build:**
    - Executado `npm run build` com sucesso absoluto (TypeScript 0 erros, Vite 0 erros).
 
+## Prompt 18
+`/agente-orquestrador /grill-me /goal do lado esquerdo do logo SQLEditor crie um menu hamburguer e leve para dentro dele as opções (Workspace, Histórico, Diagrama ER, Configurações e Sobre). Alem disso, crie nesse menu um submenu Visualização com 3 subopções (Exibir Schema Explorer, Exibir Scripts, Exibir Informações) essas 3 opções são alternaveis entre Exibir e Esconder eficam com um V de flag se estiver no modo Exibir.
+além disso precisamos do banco que aparece sempre como dbo? ou poderia haver uma configuração para ocultá-lo? se sim, faça.`
+
+### Ações Executadas:
+1. **Criação do Menu Hambúrguer Principal (`MainMenuDropdown.tsx`):**
+   - Criado componente [MainMenuDropdown.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/MainMenuDropdown.tsx) posicionado imediatamente à esquerda do logotipo `SQLEditor` no cabeçalho.
+   - Migradas as 5 seções principais de navegação para dentro do menu:
+     - 💻 **Workspace**
+     - 🕒 **Histórico**
+     - 📊 **Diagrama ER**
+     - ⚙️ **Configurações**
+     - ℹ️ **Sobre**
+   - Criado o submenu expansível **Visualização** contendo 3 opções com alternância (toggle):
+     - `Exibir Schema Explorer` (Barra Lateral Esquerda)
+     - `Exibir Scripts` (Editor Superior)
+     - `Exibir Informações` (Console Inferior de Resultados)
+   - Cada opção de visualização possui estado de toggle independente e exibe um indicador visual de `✓` (flag de confirmação) quando ativa no modo Exibir.
+2. **Atualização do Cabeçalho (`Header.tsx`):**
+   - Removida a barra de abas horizontal redundante que ocupava o centro do Header, deixando a interface limpa, focada e profissional.
+   - Adicionado o botão hambúrguer com visual moderno, efeito hover e suporte a fechamento ao clicar fora ou pressionar `Escape`.
+3. **Visibilidade Dinâmica de Painéis e Redimensionamento (`App.tsx`):**
+   - Adicionado estado persistente `visiblePanels` salvo no `localStorage` (`sqleditor_visible_panels`).
+   - Se o **Schema Explorer** for ocultado, a sidebar e seu divisor horizontal são removidos da renderização, expandindo o editor e o console para ocupar toda a largura.
+   - Se apenas o painel de **Scripts** estiver visível, ele expande automaticamente para 100% da altura da coluna central.
+   - Se apenas o painel de **Informações (Console)** estiver visível, ele expande automaticamente para 100% da altura.
+   - O divisor vertical de redimensionamento é renderizado apenas quando ambos os painéis centrais estiverem visíveis simultaneamente.
+   - Se ambos forem ocultados, é apresentada uma tela amigável informando a condição com botões de reexibição imediata.
+4. **Configuração e Tratamento do Banco de Dados Interno `dbo`:**
+   - O banco `dbo` é criado automaticamente pelo motor AlaSQL como dialeto padrão interno e não é necessário para os alunos nem para o fluxo didático MySQL.
+   - Adicionada configuração `hideSystemDatabases` (padrão: `true`) salva em `localStorage` no [dbEngine.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/services/dbEngine.ts).
+   - O banco `dbo` agora é filtrado automaticamente em `getSchemaTree()`, na listagem de bancos, em `persistAllDatabases()` e nos dumps de exportação SQL/JSON.
+   - Adicionado em [SettingsView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/SettingsView.tsx) o card **Bancos de Dados do Sistema** com uma caixa de alternância para o usuário ativar/desativar a exibição do banco `dbo` quando desejar.
+5. **Validação de Build:**
+   - Compilação realizada com `npm run build` com sucesso absoluto (TypeScript 0 erros, Vite 0 erros).
+
+
 

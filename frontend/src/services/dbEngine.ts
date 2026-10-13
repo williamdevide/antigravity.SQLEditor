@@ -123,10 +123,25 @@ const DEFAULT_SEEDS = [
 class DatabaseEngine {
   private activeDatabase: string = '';
   private currentPreset: DatabasePreset = 'empty';
+  private hideSystemDatabases: boolean = true;
   private isInitialized: boolean = false;
 
   public getPreset(): DatabasePreset {
     return this.currentPreset;
+  }
+
+  public isHidingSystemDatabases(): boolean {
+    return this.hideSystemDatabases;
+  }
+
+  public setHideSystemDatabases(hide: boolean): void {
+    this.hideSystemDatabases = hide;
+    try {
+      localStorage.setItem('sqleditor_hide_system_dbs', hide ? 'true' : 'false');
+    } catch (_) {}
+    if (hide && this.activeDatabase.toLowerCase() === 'dbo') {
+      this.activeDatabase = '';
+    }
   }
 
   public async initialize(): Promise<void> {
@@ -135,6 +150,9 @@ class DatabaseEngine {
     try {
       const savedPreset = (localStorage.getItem('sqleditor_db_preset') as DatabasePreset) || 'empty';
       this.currentPreset = savedPreset;
+
+      const savedHideSystem = localStorage.getItem('sqleditor_hide_system_dbs');
+      this.hideSystemDatabases = savedHideSystem === null ? true : savedHideSystem === 'true';
 
       const storedDbs = await dbStorage.databasesState.toArray();
 
@@ -429,7 +447,11 @@ class DatabaseEngine {
     const tree: DatabaseSchema[] = [];
 
     try {
-      const dbs = Object.keys(alasql.databases).filter(d => d !== 'alasql');
+      const dbs = Object.keys(alasql.databases).filter(d => {
+        if (d === 'alasql') return false;
+        if (this.hideSystemDatabases && d.toLowerCase() === 'dbo') return false;
+        return true;
+      });
 
       for (const dbName of dbs) {
         const dbObj = alasql.databases[dbName];
@@ -496,7 +518,11 @@ class DatabaseEngine {
 
   public async persistAllDatabases(): Promise<void> {
     try {
-      const dbs = Object.keys(alasql.databases).filter(d => d !== 'alasql');
+      const dbs = Object.keys(alasql.databases).filter(d => {
+        if (d === 'alasql') return false;
+        if (this.hideSystemDatabases && d.toLowerCase() === 'dbo') return false;
+        return true;
+      });
 
       for (const dbName of dbs) {
         const dbObj = alasql.databases[dbName];

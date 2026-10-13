@@ -13,6 +13,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onImportSqlSuccess,
 }) => {
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [hideDbo, setHideDbo] = useState<boolean>(() => dbEngine.isHidingSystemDatabases());
+
+  const handleToggleHideDbo = () => {
+    const newVal = !hideDbo;
+    setHideDbo(newVal);
+    dbEngine.setHideSystemDatabases(newVal);
+    onRefreshSchemas();
+  };
 
   const handleExportSQL = async () => {
     const sql = await dbEngine.exportSQL();
@@ -162,7 +170,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Atalhos de Teclado */}
+        {/* Card 4: Bancos de Dados do Sistema (dbo) */}
+        <div className="p-5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-4 shadow-sm">
+          <div className="flex items-center gap-2 text-[var(--accent-yellow)] font-semibold text-sm">
+            <span className="material-symbols-outlined text-[18px]">visibility_off</span>
+            <h3>Bancos de Dados do Sistema</h3>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)]">
+            O motor de banco interno (AlaSQL) cria por padrão um esquema chamado <code>dbo</code>. Ative esta opção para ocultá-lo da árvore de esquemas e da interface, mantendo o ambiente limpo para as aulas.
+          </p>
+
+          <div className="pt-2">
+            <label className="flex items-center gap-3 cursor-pointer select-none bg-[var(--bg-surface)] p-3 rounded border border-[var(--border-color)] hover:border-[#FF6B00]/40 transition-colors">
+              <input
+                type="checkbox"
+                checked={hideDbo}
+                onChange={handleToggleHideDbo}
+                className="w-4 h-4 rounded border-[var(--border-color)] text-[#FF6B00] focus:ring-[#FF6B00] cursor-pointer"
+              />
+              <div className="flex flex-col">
+                <span className="text-xs text-[var(--text-primary)] font-semibold">
+                  Ocultar banco de dados interno (<code className="text-[#FF6B00] font-mono">dbo</code>)
+                </span>
+                <span className="text-[11px] text-[var(--text-secondary)]">
+                  {hideDbo ? 'Ativado: o banco dbo está oculto da navegação.' : 'Desativado: o banco dbo é exibido no Schema Explorer.'}
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Card 5: Atalhos de Teclado */}
         <div className="p-5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-4 font-mono text-xs shadow-sm">
           <div className="flex items-center gap-2 text-[var(--accent-yellow)] font-semibold text-sm font-sans">
             <span className="material-symbols-outlined text-[18px]">keyboard</span>

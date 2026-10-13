@@ -1,11 +1,14 @@
 import React from 'react';
 import type { ActiveView, ThemeMode } from '../types';
 import { NewTabDropdown } from './NewTabDropdown';
+import { MainMenuDropdown, type VisiblePanels } from './MainMenuDropdown';
 import type { SolutionItem } from '../services/scriptsLoader';
 
 interface HeaderProps {
   activeView: ActiveView;
   onViewChange: (view: ActiveView) => void;
+  visiblePanels: VisiblePanels;
+  onTogglePanel: (panel: keyof VisiblePanels) => void;
   onRunQuery: () => void;
   onNewBlankTab: () => void;
   onOpenSolution: (solution: SolutionItem) => void;
@@ -22,6 +25,8 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   activeView,
   onViewChange,
+  visiblePanels,
+  onTogglePanel,
   onRunQuery,
   onNewBlankTab,
   onOpenSolution,
@@ -35,9 +40,17 @@ export const Header: React.FC<HeaderProps> = ({
   activeDatabase,
 }) => {
   return (
-    <header className="h-[52px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-4 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
-      {/* Brand & Navigation */}
-      <div className="flex items-center gap-3">
+    <header className="h-[52px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-3 sm:px-4 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
+      {/* Brand & Main Hamburger Menu */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Menu Hambúrguer ao lado esquerdo do logo */}
+        <MainMenuDropdown
+          activeView={activeView}
+          onViewChange={onViewChange}
+          visiblePanels={visiblePanels}
+          onTogglePanel={onTogglePanel}
+        />
+
         {/* Brand */}
         <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => onViewChange('workspace')}>
           <span className="material-symbols-outlined text-[var(--accent-yellow)] text-[22px] drop-shadow-[0_0_8px_var(--glow-yellow)]">
@@ -49,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Versão */}
-        <span className="px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
+        <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
           v2.5.5
         </span>
 
@@ -59,61 +72,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-[var(--text-muted)]">db:</span>
           <span className="font-semibold text-[var(--status-success)]">{activeDatabase}</span>
         </div>
-
-        {/* Navigation Tabs */}
-        <nav className="hidden lg:flex items-center gap-1 ml-2">
-          <button
-            onClick={() => onViewChange('workspace')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              activeView === 'workspace'
-                ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/60'
-            }`}
-          >
-            Workspace
-          </button>
-          <button
-            onClick={() => onViewChange('history')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              activeView === 'history'
-                ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/60'
-            }`}
-          >
-            Histórico
-          </button>
-          <button
-            onClick={() => onViewChange('er-diagram')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              activeView === 'er-diagram'
-                ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/60'
-            }`}
-          >
-            Diagrama ER
-          </button>
-          <button
-            onClick={() => onViewChange('settings')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              activeView === 'settings'
-                ? 'bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/60'
-            }`}
-          >
-            Configurações
-          </button>
-          <button
-            onClick={() => onViewChange('about')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
-              activeView === 'about'
-                ? 'bg-[var(--bg-hover)] text-[var(--accent-yellow)] border border-[var(--border-color)] font-bold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]/60'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[14px]">info</span>
-            <span>Sobre</span>
-          </button>
-        </nav>
       </div>
 
       {/* Action Buttons */}

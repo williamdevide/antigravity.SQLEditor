@@ -13,6 +13,7 @@ import { dbEngine } from './services/dbEngine';
 import { dbStorage } from './services/storage';
 import { reviewSqlQuery } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
+import type { VisiblePanels } from './components/MainMenuDropdown';
 import type {
   ActiveView,
   TabItem,
@@ -77,6 +78,25 @@ export const App: React.FC = () => {
   const [editorHeightPercent, setEditorHeightPercent] = useState<number>(60);
   const isResizingSidebar = useRef(false);
   const isResizingEditor = useRef(false);
+
+  // Painéis Visíveis (Sidebar, Scripts, Info)
+  const [visiblePanels, setVisiblePanels] = useState<VisiblePanels>(() => {
+    try {
+      const saved = localStorage.getItem('sqleditor_visible_panels');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return { sidebar: true, scripts: true, info: true };
+  });
+
+  const handleTogglePanel = useCallback((panel: keyof VisiblePanels) => {
+    setVisiblePanels(prev => {
+      const next = { ...prev, [panel]: !prev[panel] };
+      try {
+        localStorage.setItem('sqleditor_visible_panels', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+  }, []);
 
   // Carrega e restaura estado persistente ao inicializar
   useEffect(() => {
@@ -489,6 +509,8 @@ export const App: React.FC = () => {
       <Header
         activeView={activeView}
         onViewChange={setActiveView}
+        visiblePanels={visiblePanels}
+        onTogglePanel={handleTogglePanel}
         onRunQuery={handleRunQuery}
         onNewBlankTab={handleNewBlankTab}
         onOpenSolution={handleOpenSolution}
@@ -527,111 +549,199 @@ export const App: React.FC = () => {
         /* Workspace Principal (IDE) */
         <main className="flex-1 flex flex-row overflow-hidden relative">
           {/* A. Coluna da Esquerda: Schema Explorer */}
-          <div style={{ width: `${sidebarWidth}px` }} className="h-full shrink-0 flex flex-col overflow-hidden">
-            <Sidebar
-              schemas={schemas}
-              activeDatabase={activeDatabase}
-              onSelectDatabase={(db) => {
-                dbEngine.setActiveDatabase(db);
-                setActiveDatabase(db);
-              }}
-              onCreateDatabase={handleCreateDatabase}
-              onRefreshSchemas={refreshSchemas}
-              zoomLevel={zoomLevels.sidebar}
-              onZoomIn={() =>
-                setZoomLevels(p => ({ ...p, sidebar: Math.min(180, p.sidebar + 10) }))
-              }
-              onZoomOut={() =>
-                setZoomLevels(p => ({ ...p, sidebar: Math.max(70, p.sidebar - 10) }))
-              }
-              onZoomReset={() =>
-                setZoomLevels(p => ({ ...p, sidebar: 100 }))
-              }
-              onContextMenu={setContextMenuTarget}
-              onTableDoubleClick={(db, tbl) =>
-                handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
-              }
-            />
-          </div>
+          {visiblePanels.sidebar && (
+            <>
+              <div style={{ width: `${sidebarWidth}px` }} className="h-full shrink-0 flex flex-col overflow-hidden">
+                <Sidebar
+                  schemas={schemas}
+                  activeDatabase={activeDatabase}
+                  onSelectDatabase={(db) => {
+                    dbEngine.setActiveDatabase(db);
+                    setActiveDatabase(db);
+                  }}
+                  onCreateDatabase={handleCreateDatabase}
+                  onRefreshSchemas={refreshSchemas}
+                  zoomLevel={zoomLevels.sidebar}
+                  onZoomIn={() =>
+                    setZoomLevels(p => ({ ...p, sidebar: Math.min(180, p.sidebar + 10) }))
+                  }
+                  onZoomOut={() =>
+                    setZoomLevels(p => ({ ...p, sidebar: Math.max(70, p.sidebar - 10) }))
+                  }
+                  onZoomReset={() =>
+                    setZoomLevels(p => ({ ...p, sidebar: 100 }))
+                  }
+                  onContextMenu={setContextMenuTarget}
+                  onTableDoubleClick={(db, tbl) =>
+                    handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                  }
+                />
+              </div>
 
-          {/* Divisor Redimensionável Horizontal */}
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              isResizingSidebar.current = true;
-              document.body.style.cursor = 'col-resize';
-              document.body.style.userSelect = 'none';
-            }}
-            className="w-1.5 hover:w-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-col-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
-            title="Arraste para redimensionar a Barra Lateral"
-          />
+              {/* Divisor Redimensionável Horizontal */}
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  isResizingSidebar.current = true;
+                  document.body.style.cursor = 'col-resize';
+                  document.body.style.userSelect = 'none';
+                }}
+                className="w-1.5 hover:w-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-col-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
+                title="Arraste para redimensionar a Barra Lateral"
+              />
+            </>
+          )}
 
           {/* B. Coluna da Direita: Editor + Console */}
           <section id="workspace-panel" className="flex-1 flex flex-col h-full overflow-hidden">
-            {/* Editor de Código SQL (Parte Superior) */}
-            <div style={{ height: `${editorHeightPercent}%` }} className="min-h-[140px] flex flex-col">
-              <EditorWorkspace
-                tabs={tabs}
-                activeTabId={activeTabId}
-                onSelectTab={setActiveTabId}
-                onCloseTab={handleCloseTab}
-                onNewBlankTab={handleNewBlankTab}
-                onOpenSolution={handleOpenSolution}
-                solutions={solutions}
-                onUpdateContent={handleUpdateTabContent}
-                onRunQuery={handleRunQuery}
-                onRunSnippet={handleRunSnippet}
-                onReviewSnippet={handleReviewSnippet}
-                zoomLevel={zoomLevels.editor}
-                onZoomIn={() =>
-                  setZoomLevels(p => ({ ...p, editor: Math.min(180, p.editor + 10) }))
-                }
-                onZoomOut={() =>
-                  setZoomLevels(p => ({ ...p, editor: Math.max(70, p.editor - 10) }))
-                }
-                onZoomReset={() =>
-                  setZoomLevels(p => ({ ...p, editor: 100 }))
-                }
-                theme={theme}
-                schemas={schemas}
-                activeDatabase={activeDatabase}
-                editorRefOut={editorRef}
-              />
-            </div>
+            {visiblePanels.scripts && visiblePanels.info ? (
+              <>
+                {/* Ambos visíveis: Editor com % de altura e Console com o restante */}
+                <div style={{ height: `${editorHeightPercent}%` }} className="min-h-[140px] flex flex-col">
+                  <EditorWorkspace
+                    tabs={tabs}
+                    activeTabId={activeTabId}
+                    onSelectTab={setActiveTabId}
+                    onCloseTab={handleCloseTab}
+                    onNewBlankTab={handleNewBlankTab}
+                    onOpenSolution={handleOpenSolution}
+                    solutions={solutions}
+                    onUpdateContent={handleUpdateTabContent}
+                    onRunQuery={handleRunQuery}
+                    onRunSnippet={handleRunSnippet}
+                    onReviewSnippet={handleReviewSnippet}
+                    zoomLevel={zoomLevels.editor}
+                    onZoomIn={() =>
+                      setZoomLevels(p => ({ ...p, editor: Math.min(180, p.editor + 10) }))
+                    }
+                    onZoomOut={() =>
+                      setZoomLevels(p => ({ ...p, editor: Math.max(70, p.editor - 10) }))
+                    }
+                    onZoomReset={() =>
+                      setZoomLevels(p => ({ ...p, editor: 100 }))
+                    }
+                    theme={theme}
+                    schemas={schemas}
+                    activeDatabase={activeDatabase}
+                    editorRefOut={editorRef}
+                  />
+                </div>
 
-            {/* Divisor Redimensionável Vertical */}
-            <div
-              onMouseDown={(e) => {
-                e.preventDefault();
-                isResizingEditor.current = true;
-                document.body.style.cursor = 'row-resize';
-                document.body.style.userSelect = 'none';
-              }}
-              className="h-1.5 hover:h-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-row-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
-              title="Arraste para redimensionar o Console"
-            />
+                {/* Divisor Redimensionável Vertical */}
+                <div
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    isResizingEditor.current = true;
+                    document.body.style.cursor = 'row-resize';
+                    document.body.style.userSelect = 'none';
+                  }}
+                  className="h-1.5 hover:h-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-row-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
+                  title="Arraste para redimensionar o Console"
+                />
 
-            {/* Console de Resultados, Grade de Dados e Revisão (Parte Inferior) */}
-            <div style={{ height: `${100 - editorHeightPercent}%` }} className="min-h-[120px] flex flex-col">
-              <ConsoleResults
-                results={results}
-                isExecuting={isExecuting}
-                zoomLevel={zoomLevels.console}
-                onZoomIn={() =>
-                  setZoomLevels(p => ({ ...p, console: Math.min(180, p.console + 10) }))
-                }
-                onZoomOut={() =>
-                  setZoomLevels(p => ({ ...p, console: Math.max(70, p.console - 10) }))
-                }
-                onZoomReset={() =>
-                  setZoomLevels(p => ({ ...p, console: 100 }))
-                }
-                review={sqlReview}
-                onApplyReviewSuggestion={handleApplyReviewSuggestion}
-                activeConsoleTab={activeConsoleTab}
-                onSelectConsoleTab={setActiveConsoleTab}
-              />
-            </div>
+                {/* Console de Resultados */}
+                <div style={{ height: `${100 - editorHeightPercent}%` }} className="min-h-[120px] flex flex-col">
+                  <ConsoleResults
+                    results={results}
+                    isExecuting={isExecuting}
+                    zoomLevel={zoomLevels.console}
+                    onZoomIn={() =>
+                      setZoomLevels(p => ({ ...p, console: Math.min(180, p.console + 10) }))
+                    }
+                    onZoomOut={() =>
+                      setZoomLevels(p => ({ ...p, console: Math.max(70, p.console - 10) }))
+                    }
+                    onZoomReset={() =>
+                      setZoomLevels(p => ({ ...p, console: 100 }))
+                    }
+                    review={sqlReview}
+                    onApplyReviewSuggestion={handleApplyReviewSuggestion}
+                    activeConsoleTab={activeConsoleTab}
+                    onSelectConsoleTab={setActiveConsoleTab}
+                  />
+                </div>
+              </>
+            ) : visiblePanels.scripts && !visiblePanels.info ? (
+              /* Apenas Editor Visível (Ocupa 100%) */
+              <div className="h-full w-full flex flex-col">
+                <EditorWorkspace
+                  tabs={tabs}
+                  activeTabId={activeTabId}
+                  onSelectTab={setActiveTabId}
+                  onCloseTab={handleCloseTab}
+                  onNewBlankTab={handleNewBlankTab}
+                  onOpenSolution={handleOpenSolution}
+                  solutions={solutions}
+                  onUpdateContent={handleUpdateTabContent}
+                  onRunQuery={handleRunQuery}
+                  onRunSnippet={handleRunSnippet}
+                  onReviewSnippet={handleReviewSnippet}
+                  zoomLevel={zoomLevels.editor}
+                  onZoomIn={() =>
+                    setZoomLevels(p => ({ ...p, editor: Math.min(180, p.editor + 10) }))
+                  }
+                  onZoomOut={() =>
+                    setZoomLevels(p => ({ ...p, editor: Math.max(70, p.editor - 10) }))
+                  }
+                  onZoomReset={() =>
+                    setZoomLevels(p => ({ ...p, editor: 100 }))
+                  }
+                  theme={theme}
+                  schemas={schemas}
+                  activeDatabase={activeDatabase}
+                  editorRefOut={editorRef}
+                />
+              </div>
+            ) : !visiblePanels.scripts && visiblePanels.info ? (
+              /* Apenas Console Visível (Ocupa 100%) */
+              <div className="h-full w-full flex flex-col">
+                <ConsoleResults
+                  results={results}
+                  isExecuting={isExecuting}
+                  zoomLevel={zoomLevels.console}
+                  onZoomIn={() =>
+                    setZoomLevels(p => ({ ...p, console: Math.min(180, p.console + 10) }))
+                  }
+                  onZoomOut={() =>
+                    setZoomLevels(p => ({ ...p, console: Math.max(70, p.console - 10) }))
+                  }
+                  onZoomReset={() =>
+                    setZoomLevels(p => ({ ...p, console: 100 }))
+                  }
+                  review={sqlReview}
+                  onApplyReviewSuggestion={handleApplyReviewSuggestion}
+                  activeConsoleTab={activeConsoleTab}
+                  onSelectConsoleTab={setActiveConsoleTab}
+                />
+              </div>
+            ) : (
+              /* Ambos ocultos */
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
+                <span className="material-symbols-outlined text-[48px] text-[var(--text-secondary)] opacity-40 mb-3">
+                  visibility_off
+                </span>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+                  Painéis de Scripts e Informações Ocultos
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] max-w-sm mb-4">
+                  Você ocultou os painéis centrais do workspace. Use o menu Hamburguer &gt; Visualização ou os botões abaixo para reexibi-los.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTogglePanel('scripts')}
+                    className="px-3 py-1.5 text-xs font-semibold bg-[#FF6B00] hover:bg-[#FF8533] text-white rounded cursor-pointer transition-all shadow-sm"
+                  >
+                    Exibir Scripts
+                  </button>
+                  <button
+                    onClick={() => handleTogglePanel('info')}
+                    className="px-3 py-1.5 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded cursor-pointer transition-colors"
+                  >
+                    Exibir Informações
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </main>
       )}
