@@ -120,6 +120,49 @@ const DEFAULT_SEEDS = [
   `USE ecommerce_db;`
 ];
 
+/**
+ * Infere o tipo SQL apropriado a partir de convenções de nomenclatura e valor de amostra.
+ */
+function inferSqlType(colName: string, val: any): string {
+  const lower = colName.toLowerCase();
+
+  // 1. Checagem por valor
+  if (val !== undefined && val !== null) {
+    if (typeof val === 'boolean') return 'BOOLEAN';
+    if (typeof val === 'number') {
+      return Number.isInteger(val) ? 'INT' : 'DECIMAL(10,2)';
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return 'DATE';
+      if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?/.test(trimmed)) return 'DATETIME';
+      if (/^\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) return 'TIME';
+      if (/^(true|false)$/i.test(trimmed)) return 'BOOLEAN';
+      if (/^-?\d+$/.test(trimmed) && trimmed.length <= 10) return 'INT';
+      if (/^-?\d+\.\d+$/.test(trimmed)) return 'DECIMAL(10,2)';
+    }
+  }
+
+  // 2. Checagem por nome de coluna convencional
+  if (lower === 'id' || lower.endsWith('_id') || lower.startsWith('id_') || lower.includes('ano') || lower.includes('idade') || lower.includes('quantidade') || lower.includes('duracao') || lower.includes('estoque')) {
+    return 'INT';
+  }
+  if (lower.includes('preco') || lower.includes('valor') || lower.includes('salario') || lower.includes('taxa') || lower.includes('mensalidade') || lower.includes('nota') || lower.includes('custo')) {
+    return 'DECIMAL(10,2)';
+  }
+  if (lower.includes('data') || lower.includes('_em') || lower.endsWith('_at') || lower.includes('nascimento') || lower.includes('cadastro')) {
+    return 'DATE';
+  }
+  if (lower.startsWith('is_') || lower.startsWith('tem_') || lower.startsWith('no_') || lower.includes('ativo') || lower.includes('disponivel')) {
+    return 'BOOLEAN';
+  }
+  if (lower.includes('email') || lower.includes('descricao') || lower.includes('endereco') || lower.includes('titulo') || lower.includes('nome')) {
+    return 'VARCHAR(150)';
+  }
+
+  return 'VARCHAR(100)';
+}
+
 class DatabaseEngine {
   private activeDatabase: string = '';
   private currentPreset: DatabasePreset = 'empty';
@@ -165,8 +208,16 @@ class DatabaseEngine {
 
             for (const [tableName, tableInfo] of Object.entries(item.tables)) {
               if (tableInfo.data && Array.isArray(tableInfo.data)) {
-                // Cria tabela
-                const colDefs = tableInfo.columns.map(c => `\`${c}\``).join(', ');
+                // Cria tabela preservando tipos reais
+                const colDefs = tableInfo.columns.map((c: any) => {
+                  if (typeof c === 'string') {
+                    const inferred = inferSqlType(c, tableInfo.data[0]?.[c]);
+                    const isPk = c.toLowerCase() === 'id' || c.toLowerCase().startsWith('id_');
+                    return `\`${c}\` ${inferred}${isPk ? ' PRIMARY KEY' : ''}`;
+                  }
+                  return `\`${c.name}\` ${c.type || 'VARCHAR(100)'}${c.isPrimary ? ' PRIMARY KEY' : ''}`;
+                }).join(', ');
+
                 alasql(`CREATE TABLE IF NOT EXISTS \`${tableName}\` (${colDefs});`);
                 // Limpa e reinsere
                 alasql(`DELETE FROM \`${tableName}\`;`);
@@ -469,11 +520,32 @@ class DatabaseEngine {
           if (tObj?.columns && tObj.columns.length > 0) {
             for (const col of tObj.columns) {
               const colName = col.columnid || col.name;
-              const isPk = col.pk === true || col.primary === true || colName.toLowerCase() === 'id';
+              const isPk = col.pk === true || col.primary === true || colName.toLowerCase() === 'id' || colName.toLowerCase().startsWith('id_');
               const fkObj = col.foreignkey || (tObj.xcolumns && tObj.xcolumns[colName]?.foreignkey);
+
+              // Detecta tipo formal registrado no AlaSQL
+              let rawType = col.dbtypeid || col.type || '';
+              if (rawType && col.dbsize && col.dbprecision !== undefined) {
+                rawType += `(${col.dbsize},${col.dbprecision})`;
+              } else if (rawType && col.dbsize) {
+                rawType += `(${col.dbsize})`;
+              }
+
+              // Se não houver tipo declarado ou for genérico VARCHAR sem tamanho, infere pelos dados/nome
+              let finalType = rawType;
+              if (!finalType || finalType === 'VARCHAR') {
+                const sampleVal = data.length > 0 && data[0] ? data[0][colName] : undefined;
+                const inferred = inferSqlType(colName, sampleVal);
+                if (inferred && inferred !== 'VARCHAR(100)') {
+                  finalType = inferred;
+                } else if (!finalType) {
+                  finalType = 'VARCHAR(100)';
+                }
+              }
+
               columns.push({
                 name: colName,
-                type: col.dbtypeid || 'VARCHAR',
+                type: finalType,
                 isPrimary: isPk,
                 isForeignKey: !!fkObj,
                 foreignKeyRef: fkObj ? {
@@ -486,11 +558,11 @@ class DatabaseEngine {
             const firstRow = data[0] as Record<string, any>;
             for (const key of Object.keys(firstRow)) {
               const val = firstRow[key];
-              const inferredType = typeof val === 'number' ? 'INT' : 'VARCHAR';
+              const inferredType = inferSqlType(key, val);
               columns.push({
                 name: key,
                 type: inferredType,
-                isPrimary: key.toLowerCase() === 'id'
+                isPrimary: key.toLowerCase() === 'id' || key.toLowerCase().startsWith('id_')
               });
             }
           }
@@ -528,13 +600,38 @@ class DatabaseEngine {
         const dbObj = alasql.databases[dbName];
         if (!dbObj) continue;
 
-        const tablesSnapshot: Record<string, { columns: string[]; data: any[] }> = {};
+        const tablesSnapshot: Record<string, { columns: Array<{ name: string; type: string; isPrimary?: boolean }>; data: any[] }> = {};
         for (const tableName of Object.keys(dbObj.tables || {})) {
           const t = dbObj.tables[tableName] as any;
-          const cols = (t.columns || []).map((c: any) => c.columnid || c.name);
           const data = t.data || [];
+
+          let colDefsToSave: Array<{ name: string; type: string; isPrimary?: boolean }> = [];
+          if (t.columns && t.columns.length > 0) {
+            colDefsToSave = t.columns.map((c: any) => {
+              const colName = c.columnid || c.name;
+              let tName = c.dbtypeid || c.type || '';
+              if (tName && c.dbsize && c.dbprecision !== undefined) {
+                tName += `(${c.dbsize},${c.dbprecision})`;
+              } else if (tName && c.dbsize) {
+                tName += `(${c.dbsize})`;
+              }
+              if (!tName || tName === 'VARCHAR') {
+                const sampleVal = data.length > 0 && data[0] ? data[0][colName] : undefined;
+                tName = inferSqlType(colName, sampleVal);
+              }
+              const isPk = c.pk === true || c.primary === true || colName.toLowerCase() === 'id' || colName.toLowerCase().startsWith('id_');
+              return { name: colName, type: tName, isPrimary: isPk };
+            });
+          } else if (data.length > 0 && data[0]) {
+            colDefsToSave = Object.keys(data[0] as object).map(k => {
+              const tName = inferSqlType(k, data[0][k]);
+              const isPk = k.toLowerCase() === 'id' || k.toLowerCase().startsWith('id_');
+              return { name: k, type: tName, isPrimary: isPk };
+            });
+          }
+
           tablesSnapshot[tableName] = {
-            columns: cols.length > 0 ? cols : (data.length > 0 && data[0] ? Object.keys(data[0] as object) : []),
+            columns: colDefsToSave,
             data: JSON.parse(JSON.stringify(data))
           };
         }

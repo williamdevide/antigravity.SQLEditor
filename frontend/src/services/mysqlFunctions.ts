@@ -177,4 +177,113 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   };
   engineFn.CONCAT_WS = concatWsFn;
   engineFn.concat_ws = concatWsFn;
+
+  // 9. Funções de Data e Hora Compatíveis (SQLite/MySQL): strftime, julianday, datetime, date, time
+  function parseDateParam(val: any): Date {
+    if (val === undefined || val === null || val === 'now' || val === 'CURRENT_TIMESTAMP') {
+      return new Date();
+    }
+    if (val instanceof Date) return val;
+    if (typeof val === 'number') return new Date(val);
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.toLowerCase() === 'now') return new Date();
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  }
+
+  function applyDateModifiers(date: Date, modifiers: any[]): Date {
+    const result = new Date(date.getTime());
+    for (const mod of modifiers) {
+      if (typeof mod !== 'string') continue;
+      const m = mod.trim().toLowerCase();
+      const match = m.match(/^([+-]?\d+)\s+(day|days|month|months|year|years|hour|hours|minute|minutes|second|seconds)$/);
+      if (match) {
+        const amount = parseInt(match[1], 10);
+        const unit = match[2];
+        if (unit.startsWith('day')) result.setDate(result.getDate() + amount);
+        else if (unit.startsWith('month')) result.setMonth(result.getMonth() + amount);
+        else if (unit.startsWith('year')) result.setFullYear(result.getFullYear() + amount);
+        else if (unit.startsWith('hour')) result.setHours(result.getHours() + amount);
+        else if (unit.startsWith('minute')) result.setMinutes(result.getMinutes() + amount);
+        else if (unit.startsWith('second')) result.setSeconds(result.getSeconds() + amount);
+      } else if (m === 'start of month') {
+        result.setDate(1);
+        result.setHours(0, 0, 0, 0);
+      } else if (m === 'start of year') {
+        result.setMonth(0, 1);
+        result.setHours(0, 0, 0, 0);
+      } else if (m === 'start of day') {
+        result.setHours(0, 0, 0, 0);
+      }
+    }
+    return result;
+  }
+
+  const strftimeCustom = (format: string, dateVal?: any, ...modifiers: any[]): string => {
+    if (!format) return '';
+    let d = parseDateParam(dateVal);
+    if (modifiers.length > 0) {
+      d = applyDateModifiers(d, modifiers);
+    }
+    const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+
+    return format.replace(/%[a-zA-Z%]/g, (match) => {
+      switch (match) {
+        case '%Y': return String(d.getFullYear());
+        case '%m': return pad(d.getMonth() + 1);
+        case '%d': return pad(d.getDate());
+        case '%H': return pad(d.getHours());
+        case '%M': return pad(d.getMinutes());
+        case '%S': return pad(d.getSeconds());
+        case '%w': return String(d.getDay());
+        case '%W': {
+          const firstDay = new Date(d.getFullYear(), 0, 1);
+          const pastDays = (d.getTime() - firstDay.getTime()) / 86400000;
+          return pad(Math.ceil((pastDays + firstDay.getDay() + 1) / 7));
+        }
+        case '%j': {
+          const firstDay = new Date(d.getFullYear(), 0, 1);
+          return pad(Math.floor((d.getTime() - firstDay.getTime()) / 86400000) + 1, 3);
+        }
+        case '%J': return String((d.getTime() / 86400000) + 2440587.5);
+        case '%s': return String(Math.floor(d.getTime() / 1000));
+        case '%%': return '%';
+        default: return match;
+      }
+    });
+  };
+
+  const juliandayCustom = (dateVal?: any, ...modifiers: any[]): number => {
+    let d = parseDateParam(dateVal);
+    if (modifiers.length > 0) {
+      d = applyDateModifiers(d, modifiers);
+    }
+    return (d.getTime() / 86400000) + 2440587.5;
+  };
+
+  const datetimeCustom = (dateVal?: any, ...modifiers: any[]): string => {
+    return strftimeCustom('%Y-%m-%d %H:%M:%S', dateVal, ...modifiers);
+  };
+
+  const dateCustom = (dateVal?: any, ...modifiers: any[]): string => {
+    return strftimeCustom('%Y-%m-%d', dateVal, ...modifiers);
+  };
+
+  const timeCustom = (dateVal?: any, ...modifiers: any[]): string => {
+    return strftimeCustom('%H:%M:%S', dateVal, ...modifiers);
+  };
+
+  engineFn.STRFTIME = strftimeCustom;
+  engineFn.strftime = strftimeCustom;
+  engineFn.JULIANDAY = juliandayCustom;
+  engineFn.julianday = juliandayCustom;
+  engineFn.DATETIME = datetimeCustom;
+  engineFn.datetime = datetimeCustom;
+  engineFn.DATE = dateCustom;
+  engineFn.date = dateCustom;
+  engineFn.TIME = timeCustom;
+  engineFn.time = timeCustom;
 }

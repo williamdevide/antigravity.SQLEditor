@@ -1,9 +1,15 @@
 import Dexie, { type Table } from 'dexie';
 import type { TabItem, QueryHistoryItem, ZoomLevels, ThemeMode } from '../types';
 
+export interface StoredColumnInfo {
+  name: string;
+  type: string;
+  isPrimary?: boolean;
+}
+
 export interface StoredDatabaseState {
   dbName: string;
-  tables: Record<string, { columns: string[]; data: any[] }>;
+  tables: Record<string, { columns: Array<string | StoredColumnInfo>; data: any[] }>;
   updatedAt: string;
 }
 

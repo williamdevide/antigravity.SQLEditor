@@ -98,6 +98,14 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  const handleShowAllPanels = useCallback(() => {
+    const all = { sidebar: true, scripts: true, info: true };
+    setVisiblePanels(all);
+    try {
+      localStorage.setItem('sqleditor_visible_panels', JSON.stringify(all));
+    } catch (_) {}
+  }, []);
+
   // Carrega e restaura estado persistente ao inicializar
   useEffect(() => {
     const initApp = async () => {
@@ -715,30 +723,62 @@ export const App: React.FC = () => {
                 />
               </div>
             ) : (
-              /* Ambos ocultos */
+              /* Scripts e Informações Ocultos (ou Todos os Painéis Ocultos) */
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
-                <span className="material-symbols-outlined text-[48px] text-[var(--text-secondary)] opacity-40 mb-3">
+                <span className="material-symbols-outlined text-[48px] text-[var(--accent-yellow)] opacity-60 mb-3 animate-pulse">
                   visibility_off
                 </span>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-                  Painéis de Scripts e Informações Ocultos
+                <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
+                  {!visiblePanels.sidebar
+                    ? 'Todos os Painéis do Workspace Estão Ocultos'
+                    : 'Painéis de Scripts e Informações Ocultos'}
                 </h3>
-                <p className="text-xs text-[var(--text-secondary)] max-w-sm mb-4">
-                  Você ocultou os painéis centrais do workspace. Use o menu Hamburguer &gt; Visualização ou os botões abaixo para reexibi-los.
+                <p className="text-xs text-[var(--text-secondary)] max-w-md mb-6 leading-relaxed">
+                  {!visiblePanels.sidebar
+                    ? 'O Schema Explorer (Barra Lateral), o Editor de Scripts e o Console de Informações foram ocultados. Você pode reexibi-los através do Menu Hambúrguer > Visualização ou usando os botões abaixo:'
+                    : 'Você ocultou os painéis centrais de scripts e resultados do workspace. Reexiba-os abaixo ou através do Menu Hambúrguer > Visualização:'}
                 </p>
-                <div className="flex items-center gap-2">
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
                   <button
-                    onClick={() => handleTogglePanel('scripts')}
-                    className="px-3 py-1.5 text-xs font-semibold bg-[#FF6B00] hover:bg-[#FF8533] text-white rounded cursor-pointer transition-all shadow-sm"
+                    onClick={handleShowAllPanels}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#FF6B00] hover:bg-[#FF8533] text-white rounded-lg cursor-pointer transition-all shadow-[0_0_15px_rgba(255,107,0,0.3)] hover:scale-105 active:scale-95"
+                    type="button"
                   >
-                    Exibir Scripts
+                    <span className="material-symbols-outlined text-[16px]">visibility</span>
+                    <span>Reexibir Todos os Painéis</span>
                   </button>
-                  <button
-                    onClick={() => handleTogglePanel('info')}
-                    className="px-3 py-1.5 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded cursor-pointer transition-colors"
-                  >
-                    Exibir Informações
-                  </button>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!visiblePanels.sidebar && (
+                      <button
+                        onClick={() => handleTogglePanel('sidebar')}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                        type="button"
+                      >
+                        <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">account_tree</span>
+                        <span>Exibir Schema Explorer</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleTogglePanel('scripts')}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">code</span>
+                      <span>Exibir Scripts</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleTogglePanel('info')}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-[var(--status-success)]">terminal</span>
+                      <span>Exibir Informações</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

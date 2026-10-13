@@ -425,5 +425,42 @@ além disso precisamos do banco que aparece sempre como dbo? ou poderia haver um
 5. **Validação de Build:**
    - Compilação realizada com `npm run build` com sucesso absoluto (TypeScript 0 erros, Vite 0 erros).
 
+## Prompt 19
+`/agente-orquestrador /grill-me /goal quando se desliga todos os paineis você criou uma pagina informando que scripts e informações estão ocultos, mas faltou falar que o Schema Explorer tambem esta oculto e um botão para reexibi-lo.
+no sobre acrescente tambem o link para o meu linkedin (https://www.linkedin.com/in/williamdevide).
+por algum motivo no schema explorer, todos os campos de todas as tabelas de todos os bancos carregados estão aparecendo como VARCHAR. corrija.
+ao executar alguns scripts apareceu os seguintes erros:
+alasql.fn.strftime is not a function
+alasql.fn.julianday is not a function
+alasql.fn.datetime is not a function
+corrija.`
+
+### Ações Executadas:
+1. **Aprimoramento da Tela de Painéis Ocultos (`App.tsx`):**
+   - Atualizada a tela de fallback do Workspace quando painéis estão ocultos.
+   - Quando todos os painéis estiverem desligados (`sidebar`, `scripts` e `info`), o título agora indica claramente: **"Todos os Painéis do Workspace Estão Ocultos"**, com descrição explicativa citando o Schema Explorer (Barra Lateral), o Editor de Scripts e o Console de Informações.
+   - Adicionado botão principal de ação rápida **"Reexibir Todos os Painéis"** (com destaque laranja e animação de clique), além de botões individuais contextuais para **"Exibir Schema Explorer"** (com ícone de árvore/banco), **"Exibir Scripts"** e **"Exibir Informações"**.
+2. **Inclusão do Link do LinkedIn no Sobre (`AboutView.tsx`):**
+   - Adicionado badge/botão oficial e responsivo para o perfil do LinkedIn do Professor William Devidé (`https://www.linkedin.com/in/williamdevide`) no card do autor em [AboutView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/AboutView.tsx), com logotipo vetorial oficial do LinkedIn e link seguro (`target="_blank" rel="noopener noreferrer"`).
+3. **Correção Definitiva dos Tipos de Coluna no Schema Explorer (`dbEngine.ts` e `storage.ts`):**
+   - **Diagnóstico da Causa Raiz:** O método `persistAllDatabases()` salvava apenas nomes de colunas como strings no IndexedDB (`columns: string[]`). Ao reiniciar ou restaurar os bancos, o AlaSQL recriava as tabelas sem especificar os tipos de dados (`CREATE TABLE tbl (col1, col2)`), fazendo com que todas as colunas ficassem com tipo `undefined` e caíssem no fallback `'VARCHAR'`.
+   - **Solução Implementada:**
+     - Expandida a tipagem em [storage.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/services/storage.ts) com `StoredColumnInfo` (`{ name, type, isPrimary }`).
+     - Criada função heurística inteligente `inferSqlType(colName, sampleValue)` para inferir com precisão tipos de dados SQL (`INT`, `DECIMAL(10,2)`, `DATE`, `DATETIME`, `BOOLEAN`, `VARCHAR(...)`) tanto por formato do valor quanto por convenção de nomenclatura.
+     - Atualizado `persistAllDatabases()` para salvar as definições ricas de cada coluna (`name`, `type`, `isPrimary`).
+     - Atualizado `initialize()` para recriar as tabelas no AlaSQL com seus tipos explícitos preservados.
+     - Atualizado `getSchemaTree()` para exibir com fidelidade `INT`, `VARCHAR(100)`, `DECIMAL(3,1)`, `DATE`, `BOOLEAN`, etc., sem mais converter tudo para `VARCHAR`.
+4. **Implementação de Funções de Data e Hora Compatíveis (`mysqlFunctions.ts`):**
+   - Implementadas e registradas no motor AlaSQL (`engineFn` em maiúsculas e minúsculas):
+     - `strftime(format, timestring, ...modifiers)`: suporte completo a especificadores (`%Y`, `%m`, `%d`, `%H`, `%M`, `%S`, `%w`, `%W`, `%j`, `%J`, `%s`), modificadores de tempo (`+1 day`, `-1 month`, `start of month`, etc.) e `'now'`.
+     - `julianday(timestring, ...modifiers)`: cálculo do dia juliano astronômico.
+     - `datetime(timestring, ...modifiers)`: formatação no padrão `YYYY-MM-DD HH:MM:SS`.
+     - `date(timestring, ...modifiers)`: formatação no padrão `YYYY-MM-DD`.
+     - `time(timestring, ...modifiers)`: formatação no padrão `HH:MM:SS`.
+   - Testadas queries SQL de exemplo com sucesso (eliminando os erros `alasql.fn.strftime is not a function`, `alasql.fn.julianday is not a function` e `alasql.fn.datetime is not a function`).
+5. **Validação de Build e Versionamento:**
+   - Executado `npm run build` no frontend com sucesso absoluto (**0 erros** de TypeScript e Vite).
+
+
 
 
