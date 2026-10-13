@@ -1,0 +1,30 @@
+# Dependências
+node_modules/
+*/node_modules/
+
+# Variáveis de ambiente e Segredos (CRÍTICO)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Builds e Distribuição
+dist/
+build/
+*/dist/
+*/build/
+
+# Temporários e Logs
+.tmp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.system_generated/
+scratch/
+
+# IDE e Sistema Operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

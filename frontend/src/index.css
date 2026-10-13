@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+:root {
+  /* Fontes */
+  --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 'JetBrains Mono', 'Fira Code', 'Monaco', Consolas, monospace;
+
+  /* Paleta Dark Mode (Padrão) */
+  --bg-primary: #0F1117;
+  --bg-secondary: #161922;
+  --bg-surface: #1E222D;
+  --bg-hover: #2A2F3D;
+  --border-color: #2E3445;
+
+  /* Acentos Neon */
+  --accent-orange: #FF6B00;
+  --accent-orange-hover: #FF8533;
+  --glow-orange: rgba(255, 107, 0, 0.35);
+
+  --accent-yellow: #FFE600;
+  --glow-yellow: rgba(255, 230, 0, 0.30);
+
+  /* Status */
+  --status-success: #00E676;
+  --glow-success: rgba(0, 230, 118, 0.25);
+  --status-error: #FF3366;
+  --status-warning: #FF9900;
+
+  /* Textos */
+  --text-primary: #F0F4F8;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+}
+
+html.light {
+  --bg-primary: #F4F6F9;
+  --bg-secondary: #FFFFFF;
+  --bg-surface: #E9ECEF;
+  --bg-hover: #DEE2E6;
+  --border-color: #CFD4DA;
+
+  /* No modo claro: amarelo substituído por azul e verde-claro por verde-escuro */
+  --accent-yellow: #1D4ED8;
+  --glow-yellow: rgba(29, 78, 216, 0.25);
+
+  --status-success: #15803D;
+  --glow-success: rgba(21, 128, 61, 0.20);
+
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6B7280;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom Scrollbar for editor and table */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-orange);
+}
+
+/* Material Symbols sizing helper */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 20;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+/* Neon glow animations */
+@keyframes pulse-glow {
+  0% { opacity: 0.6; box-shadow: 0 0 4px var(--status-success); }
+  50% { opacity: 1; box-shadow: 0 0 10px var(--status-success); }
+  100% { opacity: 0.6; box-shadow: 0 0 4px var(--status-success); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Monaco Editor Context Menu e Widgets Flutuantes */
+.context-view.monaco-menu-container {
+  z-index: 99999 !important;
+}
+
+.monaco-editor .overflowingContentWidgets {
+  z-index: 99999 !important;
+}
+
+/* Caixa de Localizar e Substituir / Alterar Todas as Ocorrências do Monaco */
+.monaco-editor .find-widget.visible {
+  top: 36px !important;
+  right: 28px !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 99999 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 6px !important;
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  height: auto !important;
+  min-height: 34px !important;
+  overflow: visible !important;
+}
+
+/* Quando o modo de Substituição (Replace) está ativo / expandido */
+.monaco-editor .find-widget.visible.replaceToggled {
+  height: auto !important;
+  min-height: 68px !important;
+  overflow: visible !important;
+}
+
+/* Quando o usuário fecha o widget (pelo 'X' ou Escape) */
+.monaco-editor .find-widget:not(.visible),
+.monaco-editor .find-widget.hiddenEditor {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  top: -9999px !important;
+  height: 0 !important;
+  min-height: 0 !important;
+}
+
+/* Garante que todos os campos de entrada (Find e Replace) permitam digitação e seleção quando visível */
+.monaco-editor .find-widget.visible input,
+.monaco-editor .find-widget.visible textarea,
+.monaco-editor .find-widget.visible .monaco-inputbox,
+.monaco-editor .find-widget.visible .monaco-findInput {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text !important;
+}
+
+/* Garante exibição do campo de substituição (Replace) na altura total quando replaceToggled estiver ativo */
+.monaco-editor .find-widget.visible.replaceToggled .replace-part {
+  display: flex !important;
+  visibility: visible !important;
+  height: auto !important;
+  min-height: 30px !important;
+  opacity: 1 !important;
+}
+
+/* Quando o usuário recolhe/fecha apenas a parte de substituição (Replace) */
+.monaco-editor .find-widget:not(.replaceToggled) .replace-part {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.monaco-editor .rename-box {
+  z-index: 99999 !important;
+}
+

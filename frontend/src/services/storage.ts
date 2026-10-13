@@ -1,0 +1,35 @@
+import Dexie, { type Table } from 'dexie';
+import type { TabItem, QueryHistoryItem, ZoomLevels, ThemeMode } from '../types';
+
+export interface StoredDatabaseState {
+  dbName: string;
+  tables: Record<string, { columns: string[]; data: any[] }>;
+  updatedAt: string;
+}
+
+export interface StoredWorkspace {
+  id: string;
+  tabs: TabItem[];
+  activeTabId: string;
+  zoomLevels: ZoomLevels;
+  theme: ThemeMode;
+  activeDatabase: string;
+  sidebarWidth?: number;
+}
+
+class SQLEditorDatabase extends Dexie {
+  databasesState!: Table<StoredDatabaseState, string>;
+  workspace!: Table<StoredWorkspace, string>;
+  history!: Table<QueryHistoryItem, string>;
+
+  constructor() {
+    super('SQLEditorStorage');
+    this.version(1).stores({
+      databasesState: 'dbName, updatedAt',
+      workspace: 'id',
+      history: 'id, timestamp, status'
+    });
+  }
+}
+
+export const dbStorage = new SQLEditorDatabase();
