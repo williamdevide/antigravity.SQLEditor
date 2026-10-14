@@ -541,6 +541,40 @@ corrija.`
 5. **Validação de Build e Versionamento:**
    - Executado `npm run build` com sucesso absoluto (**0 erros** de compilação em TypeScript e Vite).
 
+---
+
+## 📌 Prompt 23
+**Data:** 13/10/2026 - 21:00  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal na área de informações renomei a aba Grade de Dados para Retorno e crie uma aba antes chamada Dados, (nela sempre exibe o select * from da tabela selecionada com LIMIT 30) para o aluno entender os campos daquela tabela
+
+### 🎯 Ações Executadas:
+1. **Reestruturação e Renomeação das Abas da Área de Informações (`ConsoleResults.tsx`):**
+   - **Aba "Dados" (Nova):** Criada como a primeira aba do painel de informações com ícone `dataset`. Exibe a estrutura de campos e as 30 primeiras linhas da tabela selecionada via `SELECT * FROM \`db\`.\`tabela\` LIMIT 30`.
+   - **Aba "Retorno" (Renomeada):** A antiga "Grade de Dados" foi renomeada para "Retorno", mantendo sua função essencial de exibir o resultado imediato da execução dos scripts SQL do editor.
+   - **Sequência de Abas Padronizada:** 1. `Dados` • 2. `Retorno` • 3. `Log de Execução` • 4. `Revisão SQL`.
+2. **Implementação do Motor de Inspeção de Tabelas (`dbEngine.ts`):**
+   - Desenvolvido o método `getTablePreviewData(dbName, tableName, limit = 30)` no `DatabaseEngine`.
+   - Executa a consulta com isolamento de contexto no dialeto AlaSQL e com `LIMIT 30`.
+   - Implementado fallback inteligente para extrair os nomes e tipos das colunas diretamente da estrutura da tabela, mesmo quando a tabela não contém nenhuma linha inserida, permitindo que o aluno sempre visualize a anatomia e os campos da tabela.
+3. **Seleção Interativa de Tabelas no Schema Explorer (`Sidebar.tsx`):**
+   - Ao clicar ou dar duplo clique em qualquer tabela da árvore do Schema Explorer, a tabela é registrada como `selectedTable`.
+   - Aplicado destaque visual na tabela selecionada com borda, gradiente temático âmbar/laranja (`#FF8533`) e badge identificador `DADOS`.
+4. **Experiência do Usuário e Ferramentas na Aba Dados (`ConsoleResults.tsx`):**
+   - Seletor rápido de tabela no cabeçalho da aba, permitindo alternar de tabela tanto pelo menu quanto clicando na barra lateral.
+   - Badge temático com `LIMIT 30` e contador de registros `Mostrando X de Y registros (Z colunas)`.
+   - Botão de recarregamento instantâneo de dados (`refresh`).
+   - Campo de busca e filtro em tempo real para encontrar registros pelo valor de qualquer coluna.
+   - Cabeçalhos clicáveis com ordenação ascendente/descendente (Sort).
+   - Numeração de linhas (1 a 30) e suporte a exportação direta para arquivo `.csv`.
+5. **Sincronização em Tempo Real no Ciclo de Vida do Workspace (`App.tsx`):**
+   - Auto-seleção inteligente: quando os bancos são carregados (exemplos ou aula), a primeira tabela do banco ativo é automaticamente pré-selecionada.
+   - Sincronização pós-execução: qualquer comando DML/DDL executado pelo aluno atualiza automaticamente o preview da tabela ativa na aba Dados.
+6. **Validação de Qualidade e Compilação:**
+   - Validado com `npm run lint` (0 erros).
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
+
+
 
 
 

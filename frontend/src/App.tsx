@@ -24,6 +24,8 @@ import type {
   ContextMenuTarget,
   SqlReview,
   DatabasePreset,
+  ConsoleTab,
+  TablePreviewData,
 } from './types';
 
 const INITIAL_TABS: TabItem[] = [
@@ -107,7 +109,15 @@ export const App: React.FC = () => {
 
   // Aba de Revisão e Aba Ativa no Console
   const [sqlReview, setSqlReview] = useState<SqlReview | null>(null);
-  const [activeConsoleTab, setActiveConsoleTab] = useState<'grid' | 'log' | 'review'>('grid');
+  const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>('data');
+
+  // Tabela selecionada para visualização de Dados (LIMIT 30)
+  const [selectedTable, setSelectedTable] = useState<{ dbName: string; tableName: string } | null>(null);
+  const [tablePreviewData, setTablePreviewData] = useState<TablePreviewData | null>(null);
+  const selectedTableRef = useRef<{ dbName: string; tableName: string } | null>(null);
+  useEffect(() => {
+    selectedTableRef.current = selectedTable;
+  }, [selectedTable]);
 
   // Referência do Monaco Editor
   const editorRef = useRef<any>(null);
@@ -207,12 +217,87 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [persistWorkspace]);
 
+  // Seleção e carregamento de dados da tabela (LIMIT 30)
+  const handleSelectTable = useCallback(async (dbName: string, tableName: string, switchToDataTab: boolean = true) => {
+    setSelectedTable({ dbName, tableName });
+    if (switchToDataTab) {
+      setActiveConsoleTab('data');
+    }
+    setTablePreviewData(prev => ({
+      dbName,
+      tableName,
+      columns: prev?.tableName === tableName && prev?.dbName === dbName ? prev.columns : [],
+      rows: prev?.tableName === tableName && prev?.dbName === dbName ? prev.rows : [],
+      totalRows: prev?.tableName === tableName && prev?.dbName === dbName ? prev.totalRows : 0,
+      isLoading: true,
+    }));
+    try {
+      const preview = await dbEngine.getTablePreviewData(dbName, tableName, 30);
+      setTablePreviewData({
+        dbName,
+        tableName,
+        columns: preview.columns,
+        rows: preview.rows,
+        totalRows: preview.totalRows,
+        isLoading: false,
+      });
+    } catch (err) {
+      console.warn('Erro ao carregar preview da tabela:', err);
+      setTablePreviewData({
+        dbName,
+        tableName,
+        columns: [],
+        rows: [],
+        totalRows: 0,
+        isLoading: false,
+      });
+    }
+  }, []);
+
+  const handleRefreshTablePreview = useCallback(async () => {
+    if (selectedTableRef.current) {
+      const { dbName, tableName } = selectedTableRef.current;
+      await handleSelectTable(dbName, tableName, false);
+    }
+  }, [handleSelectTable]);
+
   // Recarregar schemas
   const refreshSchemas = useCallback(async () => {
     const tree = await dbEngine.getSchemaTree();
     setSchemas(tree);
     setActiveDatabase(dbEngine.getActiveDatabase());
+
+    // Se há tabela selecionada, atualiza seus dados na aba Dados
+    if (selectedTableRef.current) {
+      const { dbName, tableName } = selectedTableRef.current;
+      const dbFound = tree.find(d => d.name.toLowerCase() === dbName.toLowerCase());
+      const tableFound = dbFound?.tables.find(t => t.name.toLowerCase() === tableName.toLowerCase());
+      if (tableFound) {
+        try {
+          const preview = await dbEngine.getTablePreviewData(dbName, tableName, 30);
+          setTablePreviewData({
+            dbName,
+            tableName,
+            columns: preview.columns,
+            rows: preview.rows,
+            totalRows: preview.totalRows,
+            isLoading: false,
+          });
+        } catch (_) {}
+      }
+    }
   }, []);
+
+  // Seleção automática da primeira tabela disponível caso nenhuma esteja selecionada
+  useEffect(() => {
+    if (!selectedTable && schemas.length > 0) {
+      const activeDbObj = schemas.find(d => d.name === activeDatabase && d.tables.length > 0);
+      const targetDb = activeDbObj || schemas.find(d => d.tables.length > 0);
+      if (targetDb && targetDb.tables.length > 0) {
+        handleSelectTable(targetDb.name, targetDb.tables[0].name, false);
+      }
+    }
+  }, [schemas, activeDatabase, selectedTable, handleSelectTable]);
 
   // Executar query completa
   const handleRunQuery = useCallback(async () => {
@@ -622,6 +707,8 @@ export const App: React.FC = () => {
                   onTableDoubleClick={(db, tbl) =>
                     handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
                   }
+                  selectedTable={selectedTable}
+                  onSelectTable={(db, tbl) => handleSelectTable(db, tbl, true)}
                 />
               </div>
 
@@ -705,6 +792,10 @@ export const App: React.FC = () => {
                     onApplyReviewSuggestion={handleApplyReviewSuggestion}
                     activeConsoleTab={activeConsoleTab}
                     onSelectConsoleTab={setActiveConsoleTab}
+                    tablePreviewData={tablePreviewData}
+                    onRefreshTablePreview={handleRefreshTablePreview}
+                    schemas={schemas}
+                    onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
                   />
                 </div>
               </>
@@ -759,6 +850,10 @@ export const App: React.FC = () => {
                   onApplyReviewSuggestion={handleApplyReviewSuggestion}
                   activeConsoleTab={activeConsoleTab}
                   onSelectConsoleTab={setActiveConsoleTab}
+                  tablePreviewData={tablePreviewData}
+                  onRefreshTablePreview={handleRefreshTablePreview}
+                  schemas={schemas}
+                  onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
                 />
               </div>
             ) : (

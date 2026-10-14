@@ -14,6 +14,8 @@ interface SidebarProps {
   onZoomReset: () => void;
   onContextMenu: (target: ContextMenuTarget) => void;
   onTableDoubleClick: (dbName: string, tableName: string) => void;
+  selectedTable?: { dbName: string; tableName: string } | null;
+  onSelectTable?: (dbName: string, tableName: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,6 +30,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onZoomReset,
   onContextMenu,
   onTableDoubleClick,
+  selectedTable,
+  onSelectTable,
 }) => {
   const [filterText, setFilterText] = useState('');
   const [collapsedDbs, setCollapsedDbs] = useState<Record<string, boolean>>({});
@@ -282,12 +286,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         const tableKey = `${db.name}.${table.name}`;
                         const isTableExpanded = expandedTables[tableKey];
 
+                        const isTableSelected = selectedTable?.dbName === db.name && selectedTable?.tableName === table.name;
+
                         return (
                           <div key={table.name} className="flex flex-col">
                             {/* Nó da Tabela */}
                             <div
-                              onClick={() => toggleTable(tableKey)}
-                              onDoubleClick={() => onTableDoubleClick(db.name, table.name)}
+                              onClick={() => {
+                                toggleTable(tableKey);
+                                onSelectTable?.(db.name, table.name);
+                              }}
+                              onDoubleClick={() => {
+                                onSelectTable?.(db.name, table.name);
+                                onTableDoubleClick(db.name, table.name);
+                              }}
                               onContextMenu={(e) => {
                                 e.preventDefault();
                                 onContextMenu({
@@ -299,24 +311,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   y: e.clientY,
                                 });
                               }}
-                              className="group flex items-center justify-between px-2 py-1 rounded hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
-                              title={`Tabela: ${table.name} • Duplo clique para SELECT • Clique direito para ações`}
+                              className={`group flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-all border ${
+                                isTableSelected
+                                  ? 'bg-[#FF8533]/15 border-[#FF8533]/50 text-[#FF8533] font-semibold shadow-[0_0_8px_rgba(255,133,51,0.2)]'
+                                  : 'border-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                              }`}
+                              title={`Tabela: ${table.name} • Clique para visualizar Dados • Duplo clique para SELECT`}
                             >
                               <div className="flex items-center gap-1.5 truncate">
                                 <span className="material-symbols-outlined text-[12px] text-[var(--text-muted)]">
                                   {isTableExpanded ? 'expand_more' : 'chevron_right'}
                                 </span>
-                                <span className="material-symbols-outlined text-[14px] text-[#FF8533]">
+                                <span className={`material-symbols-outlined text-[14px] ${isTableSelected ? 'text-[#FF8533]' : 'text-[#FF8533]/80'}`}>
                                   {table.isView ? 'visibility' : 'table_chart'}
                                 </span>
-                                <span className="text-xs truncate font-medium group-hover:text-[var(--text-primary)]">
+                                <span className={`text-xs truncate font-medium ${isTableSelected ? 'text-[#FF8533]' : 'group-hover:text-[var(--text-primary)]'}`}>
                                   {table.name}
                                 </span>
                               </div>
 
-                              <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-primary)] px-1 py-0.2 rounded shrink-0">
-                                {table.columns.length} cols • {table.rowCount}
-                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {isTableSelected && (
+                                  <span className="text-[9px] font-mono font-bold bg-[#FF8533] text-black px-1 rounded uppercase tracking-wider">
+                                    DADOS
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-primary)] px-1 py-0.2 rounded">
+                                  {table.columns.length} cols • {table.rowCount}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Colunas da Tabela (Quando expandido) */}

@@ -768,6 +768,80 @@ class DatabaseEngine {
     return sqlDump;
   }
 
+  public async getTablePreviewData(
+    dbName: string,
+    tableName: string,
+    limit: number = 30
+  ): Promise<{ columns: string[]; rows: Record<string, any>[]; totalRows: number }> {
+    await this.initialize();
+    try {
+      if (!dbName || !tableName || !alasql.databases[dbName]) {
+        return { columns: [], rows: [], totalRows: 0 };
+      }
+
+      const prevDb = this.activeDatabase;
+      try {
+        alasql(`USE \`${dbName}\`;`);
+      } catch (_) {}
+
+      let rows: Record<string, any>[] = [];
+      let columns: string[] = [];
+      let totalRows = 0;
+
+      const dbObj = alasql.databases[dbName];
+      const tableObj = dbObj?.tables?.[tableName];
+
+      // Busca dados via query SQL com LIMIT
+      try {
+        const queryRes = alasql(`SELECT * FROM \`${tableName}\` LIMIT ${limit};`);
+        if (Array.isArray(queryRes)) {
+          rows = queryRes;
+          if (rows.length > 0 && typeof rows[0] === 'object') {
+            columns = Object.keys(rows[0]);
+          }
+        }
+      } catch (sqlErr) {
+        // Fallback para ler direto dos dados do objeto da tabela caso SELECT falhe
+        if (tableObj && Array.isArray((tableObj as any).data)) {
+          const allData = (tableObj as any).data;
+          rows = allData.slice(0, limit);
+          if (rows.length > 0 && typeof rows[0] === 'object') {
+            columns = Object.keys(rows[0]);
+          }
+        }
+      }
+
+      // Se a tabela estiver sem linhas, obtém a lista de colunas a partir das definições de colunas
+      if (columns.length === 0 && tableObj) {
+        const tableCols = (tableObj as any)?.columns;
+        if (Array.isArray(tableCols) && tableCols.length > 0) {
+          columns = tableCols.map((c: any) => c.name || c.columnid).filter(Boolean);
+        } else if ((tableObj as any).data && (tableObj as any).data.length > 0) {
+          columns = Object.keys((tableObj as any).data[0]);
+        }
+      }
+
+      // Total real de linhas na tabela
+      if (tableObj && Array.isArray((tableObj as any).data)) {
+        totalRows = (tableObj as any).data.length;
+      } else {
+        totalRows = rows.length;
+      }
+
+      // Restaura banco ativo anterior se diferente
+      if (prevDb && prevDb !== dbName && alasql.databases[prevDb]) {
+        try {
+          alasql(`USE \`${prevDb}\`;`);
+        } catch (_) {}
+      }
+
+      return { columns, rows, totalRows };
+    } catch (err) {
+      console.warn(`Erro ao carregar preview da tabela ${dbName}.${tableName}:`, err);
+      return { columns: [], rows: [], totalRows: 0 };
+    }
+  }
+
   public async exportJSON(): Promise<string> {
     const records = await dbStorage.databasesState.toArray();
     return JSON.stringify(records, null, 2);

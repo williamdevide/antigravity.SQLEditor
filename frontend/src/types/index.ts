@@ -78,4 +78,15 @@ export interface SqlReview {
   timestamp: string;
 }
 
+export type ConsoleTab = 'data' | 'grid' | 'log' | 'review';
+
+export interface TablePreviewData {
+  dbName: string;
+  tableName: string;
+  columns: string[];
+  rows: Record<string, any>[];
+  totalRows: number;
+  isLoading?: boolean;
+}
+
 

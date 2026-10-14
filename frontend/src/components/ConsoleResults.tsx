@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ZoomControl } from './ZoomControl';
-import type { QueryResult, SqlReview } from '../types';
+import type { QueryResult, SqlReview, ConsoleTab, TablePreviewData, DatabaseSchema } from '../types';
 
 interface ConsoleResultsProps {
   results: QueryResult[];
@@ -11,8 +11,12 @@ interface ConsoleResultsProps {
   onZoomReset: () => void;
   review: SqlReview | null;
   onApplyReviewSuggestion: (suggestedSql: string) => void;
-  activeConsoleTab?: 'grid' | 'log' | 'review';
-  onSelectConsoleTab?: (tab: 'grid' | 'log' | 'review') => void;
+  activeConsoleTab?: ConsoleTab;
+  onSelectConsoleTab?: (tab: ConsoleTab) => void;
+  tablePreviewData?: TablePreviewData | null;
+  onRefreshTablePreview?: () => void;
+  schemas?: DatabaseSchema[];
+  onSelectPreviewTable?: (dbName: string, tableName: string) => void;
 }
 
 export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
@@ -24,13 +28,25 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
   onZoomReset,
   review,
   onApplyReviewSuggestion,
-  activeConsoleTab = 'grid',
+  activeConsoleTab = 'data',
   onSelectConsoleTab,
+  tablePreviewData,
+  onRefreshTablePreview,
+  schemas = [],
+  onSelectPreviewTable,
 }) => {
-  const [internalTab, setInternalTab] = useState<'grid' | 'log' | 'review'>('grid');
+  const [internalTab, setInternalTab] = useState<ConsoleTab>('data');
+  
+  // Ordenação e busca da aba Retorno (Query Results)
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Ordenação e busca da aba Dados (Table Preview)
+  const [dataSortCol, setDataSortCol] = useState<string | null>(null);
+  const [dataSortAsc, setDataSortAsc] = useState<boolean>(true);
+  const [dataSearchTerm, setDataSearchTerm] = useState<string>('');
+
   const [copiedLogIndex, setCopiedLogIndex] = useState<number | null>(null);
 
   const handleCopyLog = (res: QueryResult, index: number) => {
@@ -47,7 +63,7 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
   const currentTab = onSelectConsoleTab ? activeConsoleTab : internalTab;
   const setTab = onSelectConsoleTab || setInternalTab;
 
-  // Pega o último resultado relevante com dados
+  // Pega o último resultado relevante com dados para a aba Retorno
   const latestResult = results[results.length - 1];
   const selectResult = results.slice().reverse().find(r => r.columns.length > 0 && r.rows.length > 0) || latestResult;
 
@@ -60,6 +76,16 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
     }
   };
 
+  const handleDataHeaderClick = (col: string) => {
+    if (dataSortCol === col) {
+      setDataSortAsc(!dataSortAsc);
+    } else {
+      setDataSortCol(col);
+      setDataSortAsc(true);
+    }
+  };
+
+  // Linhas filtradas e ordenadas da aba Retorno
   const sortedAndFilteredRows = useMemo(() => {
     if (!selectResult || !selectResult.rows) return [];
 
@@ -96,6 +122,43 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
     return rows;
   }, [selectResult, sortCol, sortAsc, searchTerm]);
 
+  // Linhas filtradas e ordenadas da aba Dados (Preview da Tabela)
+  const sortedAndFilteredDataRows = useMemo(() => {
+    if (!tablePreviewData || !tablePreviewData.rows) return [];
+
+    let rows = [...tablePreviewData.rows];
+
+    if (dataSearchTerm.trim()) {
+      const term = dataSearchTerm.toLowerCase();
+      rows = rows.filter(row =>
+        Object.values(row).some(val =>
+          String(val).toLowerCase().includes(term)
+        )
+      );
+    }
+
+    if (dataSortCol) {
+      rows.sort((a, b) => {
+        const valA = a[dataSortCol];
+        const valB = b[dataSortCol];
+
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return dataSortAsc ? valA - valB : valB - valA;
+        }
+
+        return dataSortAsc
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      });
+    }
+
+    return rows;
+  }, [tablePreviewData, dataSortCol, dataSortAsc, dataSearchTerm]);
+
   const exportToCSV = () => {
     if (!selectResult || sortedAndFilteredRows.length === 0) return;
 
@@ -112,7 +175,29 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
     const csvContent = `data:text/csv;charset=utf-8,${encodeURIComponent(headers + '\n' + rows)}`;
     const link = document.createElement('a');
     link.setAttribute('href', csvContent);
-    link.setAttribute('download', `query_result_${Date.now()}.csv`);
+    link.setAttribute('download', `retorno_query_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportDataToCSV = () => {
+    if (!tablePreviewData || sortedAndFilteredDataRows.length === 0) return;
+
+    const headers = tablePreviewData.columns.join(',');
+    const rows = sortedAndFilteredDataRows.map(r =>
+      tablePreviewData.columns.map(col => {
+        const val = r[col];
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string' && val.includes(',')) return `"${val}"`;
+        return val;
+      }).join(',')
+    ).join('\n');
+
+    const csvContent = `data:text/csv;charset=utf-8,${encodeURIComponent(headers + '\n' + rows)}`;
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', `${tablePreviewData.tableName}_dados_limit30_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -120,24 +205,56 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
 
   const zoomScale = zoomLevel / 100;
 
+  // Lista plana de todas as tabelas para o seletor rápido
+  const allAvailableTables = useMemo(() => {
+    const list: { dbName: string; tableName: string }[] = [];
+    schemas.forEach(db => {
+      db.tables.forEach(t => {
+        list.push({ dbName: db.name, tableName: t.name });
+      });
+    });
+    return list;
+  }, [schemas]);
+
   return (
     <div
       className="h-full flex flex-col bg-[var(--bg-secondary)] text-[var(--text-primary)] border-t border-[var(--border-color)] select-none transition-colors"
     >
       {/* Topo do Console: Abas, Status e Zoom */}
       <div className="h-9 px-3 bg-[var(--bg-surface)] flex items-center justify-between border-b border-[var(--border-color)] shrink-0">
-        {/* Abas */}
-        <div className="flex items-center gap-1">
+        {/* Abas: 1. Dados (Nova) • 2. Retorno (Renomeada) • 3. Log • 4. Revisão */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          {/* Aba 1: Dados da Tabela Selecionada (LIMIT 30) */}
+          <button
+            onClick={() => setTab('data')}
+            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+              currentTab === 'data'
+                ? 'border-[#FF8533] text-[#FF8533] bg-[var(--bg-secondary)]'
+                : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Visualizar campos e primeiros 30 registros da tabela selecionada"
+          >
+            <span className="material-symbols-outlined text-[14px]">dataset</span>
+            <span>Dados</span>
+            {tablePreviewData?.tableName && (
+              <span className="text-[10px] bg-[#FF8533]/15 text-[#FF8533] border border-[#FF8533]/30 px-1.5 py-0.2 rounded font-mono font-bold truncate max-w-[120px]">
+                {tablePreviewData.tableName}
+              </span>
+            )}
+          </button>
+
+          {/* Aba 2: Retorno da Consulta SQL (Renomeada) */}
           <button
             onClick={() => setTab('grid')}
-            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               currentTab === 'grid'
                 ? 'border-[var(--accent-yellow)] text-[var(--accent-yellow)] bg-[var(--bg-secondary)]'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
             }`}
+            title="Grade de retorno da execução dos scripts SQL"
           >
             <span className="material-symbols-outlined text-[14px]">table_chart</span>
-            <span>Grade de Dados</span>
+            <span>Retorno</span>
             {selectResult && selectResult.rows.length > 0 && (
               <span className="text-[10px] bg-[var(--bg-primary)] text-[var(--status-success)] px-1 rounded font-mono font-bold">
                 {selectResult.rows.length}
@@ -145,9 +262,10 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
             )}
           </button>
 
+          {/* Aba 3: Log de Execução */}
           <button
             onClick={() => setTab('log')}
-            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               currentTab === 'log'
                 ? 'border-[var(--accent-yellow)] text-[var(--accent-yellow)] bg-[var(--bg-secondary)]'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -160,10 +278,10 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
             )}
           </button>
 
-          {/* Nova Aba: Revisão SQL */}
+          {/* Aba 4: Revisão SQL */}
           <button
             onClick={() => setTab('review')}
-            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-semibold cursor-pointer border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
               currentTab === 'review'
                 ? 'border-[var(--accent-yellow)] text-[var(--accent-yellow)] bg-[var(--bg-secondary)]'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -180,7 +298,7 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
         </div>
 
         {/* Status Badge & Controles de Zoom */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Status Badge */}
           {isExecuting ? (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#FF6B00]/15 border border-[#FF6B00]/40 text-[#FF6B00] text-[11px] font-mono font-medium">
@@ -206,8 +324,20 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
           {currentTab === 'grid' && selectResult && selectResult.rows.length > 0 && (
             <button
               onClick={exportToCSV}
-              title="Exportar resultado para CSV"
+              title="Exportar retorno para CSV"
               className="flex items-center gap-1 px-2 py-0.5 bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[#FFE600] border border-[var(--border-color)] rounded text-[11px] font-mono transition-colors"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[13px]">download</span>
+              <span className="hidden sm:inline">CSV</span>
+            </button>
+          )}
+
+          {currentTab === 'data' && tablePreviewData && tablePreviewData.rows.length > 0 && (
+            <button
+              onClick={exportDataToCSV}
+              title="Exportar dados da tabela para CSV"
+              className="flex items-center gap-1 px-2 py-0.5 bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[#FF8533] border border-[var(--border-color)] rounded text-[11px] font-mono transition-colors"
               type="button"
             >
               <span className="material-symbols-outlined text-[13px]">download</span>
@@ -224,9 +354,176 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
         </div>
       </div>
 
-      {/* Conteúdo: Grade de Dados, Log ou Revisão */}
+      {/* Conteúdo: 1. Dados (LIMIT 30) | 2. Retorno | 3. Log | 4. Revisão */}
       <div className="flex-1 overflow-hidden relative">
-        {currentTab === 'grid' ? (
+        {currentTab === 'data' ? (
+          /* View 1: Dados da Tabela Selecionada (SELECT * FROM tbl LIMIT 30) */
+          <div className="h-full flex flex-col bg-[var(--bg-secondary)]">
+            {/* Barra de Ferramentas da Aba Dados */}
+            <div className="px-3 py-1.5 bg-[var(--bg-surface)] border-b border-[var(--border-color)] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[#FF8533]">table_view</span>
+                
+                {/* Seletor rápido de tabela */}
+                {allAvailableTables.length > 0 ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[var(--text-secondary)] text-[11px]">Tabela:</span>
+                    <select
+                      value={tablePreviewData ? `${tablePreviewData.dbName}.${tablePreviewData.tableName}` : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        const [db, tbl] = val.split('.');
+                        onSelectPreviewTable?.(db, tbl);
+                      }}
+                      className="px-2 py-0.5 bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded text-xs font-mono font-medium focus:border-[#FF8533] focus:outline-none cursor-pointer"
+                    >
+                      {allAvailableTables.map(item => (
+                        <option key={`${item.dbName}.${item.tableName}`} value={`${item.dbName}.${item.tableName}`}>
+                          {item.dbName}.{item.tableName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold text-[var(--text-primary)] font-mono">
+                    {tablePreviewData ? `${tablePreviewData.dbName}.${tablePreviewData.tableName}` : 'Nenhuma tabela selecionada'}
+                  </span>
+                )}
+
+                {/* Badge de LIMIT 30 */}
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FF8533]/15 text-[#FF8533] border border-[#FF8533]/30 tracking-wider">
+                  LIMIT 30
+                </span>
+
+                {/* Botão de Atualizar dados */}
+                {onRefreshTablePreview && (
+                  <button
+                    onClick={onRefreshTablePreview}
+                    className="flex items-center gap-1 px-1.5 py-0.5 bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] border border-[var(--border-color)] rounded text-[11px] font-mono transition-colors cursor-pointer"
+                    title="Recarregar dados da tabela"
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">refresh</span>
+                  </button>
+                )}
+
+                {tablePreviewData && (
+                  <span className="text-[11px] text-[var(--text-secondary)] font-mono hidden md:inline">
+                    Mostrando <strong className="text-[#00E676]">{sortedAndFilteredDataRows.length}</strong> de {tablePreviewData.totalRows} registros ({tablePreviewData.columns.length} colunas)
+                  </span>
+                )}
+              </div>
+
+              {/* Filtro / Busca na Aba Dados */}
+              {tablePreviewData && tablePreviewData.rows.length > 0 && (
+                <div className="flex items-center bg-[var(--bg-primary)] px-2 py-0.5 rounded border border-[var(--border-color)]">
+                  <span className="material-symbols-outlined text-[13px] text-[var(--text-muted)] mr-1">search</span>
+                  <input
+                    type="text"
+                    value={dataSearchTerm}
+                    onChange={(e) => setDataSearchTerm(e.target.value)}
+                    placeholder="Filtrar dados da tabela..."
+                    className="bg-transparent text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none w-36 font-mono"
+                  />
+                  {dataSearchTerm && (
+                    <button onClick={() => setDataSearchTerm('')} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">×</button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Grade de Dados da Tabela com Zoom */}
+            <div
+              className="flex-1 overflow-auto"
+              style={{ zoom: zoomScale }}
+            >
+              {!tablePreviewData || !tablePreviewData.tableName ? (
+                <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] gap-2 p-6 text-center">
+                  <span className="material-symbols-outlined text-[36px] text-[#FF8533] opacity-60">dataset</span>
+                  <p className="text-xs font-mono font-medium text-[var(--text-primary)]">
+                    Nenhuma tabela selecionada.
+                  </p>
+                  <p className="text-[11px] max-w-md leading-relaxed text-[var(--text-secondary)]">
+                    Clique em qualquer tabela no <strong>Schema Explorer</strong> à esquerda para visualizar sua estrutura de campos e seus primeiros 30 registros.
+                  </p>
+                </div>
+              ) : tablePreviewData.columns.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] gap-2 p-6 text-center">
+                  <span className="material-symbols-outlined text-[36px] opacity-40">table_rows</span>
+                  <p className="text-xs font-mono">Tabela sem colunas definidas.</p>
+                </div>
+              ) : (
+                <table className="w-full border-collapse font-mono text-left text-xs">
+                  <thead className="bg-[var(--bg-surface)] sticky top-0 z-10 border-b-2 border-[var(--border-color)] shadow-sm">
+                    <tr>
+                      <th className="px-3 py-2 text-[var(--text-muted)] font-semibold w-12 text-center border-r border-[var(--border-color)]">
+                        #
+                      </th>
+                      {tablePreviewData.columns.map((col) => (
+                        <th
+                          key={col}
+                          onClick={() => handleDataHeaderClick(col)}
+                          className="px-3 py-2 text-[#FF8533] font-semibold hover:bg-[var(--bg-hover)] cursor-pointer transition-colors border-r border-[var(--border-color)] truncate"
+                          title={`Clique para ordenar pela coluna ${col}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>{col}</span>
+                            {dataSortCol === col && (
+                              <span className="material-symbols-outlined text-[13px] text-[var(--accent-yellow)]">
+                                {dataSortAsc ? 'arrow_upward' : 'arrow_downward'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-color)]">
+                    {sortedAndFilteredDataRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={tablePreviewData.columns.length + 1}
+                          className="text-center py-8 text-[var(--text-muted)] italic"
+                        >
+                          {tablePreviewData.totalRows === 0
+                            ? 'Tabela vazia (0 registros). A estrutura de campos está pronta para receber dados.'
+                            : 'Nenhum registro corresponde ao filtro de busca.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedAndFilteredDataRows.map((row, idx) => (
+                        <tr
+                          key={idx}
+                          className="hover:bg-[var(--bg-hover)] transition-colors odd:bg-[var(--bg-secondary)] even:bg-[var(--bg-surface)]/40"
+                        >
+                          <td className="px-3 py-1.5 text-center text-[var(--text-muted)] text-[11px] border-r border-[var(--border-color)] font-semibold">
+                            {idx + 1}
+                          </td>
+                          {tablePreviewData.columns.map((col) => {
+                            const val = row[col];
+                            const isNull = val === null || val === undefined;
+                            return (
+                              <td
+                                key={col}
+                                className={`px-3 py-1.5 border-r border-[var(--border-color)] truncate max-w-[280px] ${
+                                  isNull ? 'text-[var(--text-muted)] italic' : 'text-[var(--text-primary)]'
+                                }`}
+                              >
+                                {isNull ? 'NULL' : String(val)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        ) : currentTab === 'grid' ? (
+          /* View 2: Retorno da Consulta SQL (Antiga Grade de Dados) */
           <div className="h-full flex flex-col">
             {/* Barra de Filtro da Grade */}
             {selectResult && selectResult.rows.length > 0 && (
@@ -260,8 +557,8 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
               {!selectResult || selectResult.columns.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] gap-2 p-6 text-center">
                   <span className="material-symbols-outlined text-[36px] opacity-40">table_rows</span>
-                  <p className="text-xs font-mono">Execute uma consulta SQL para visualizar os dados na grade.</p>
-                  <p className="text-[11px]">Dica: Dê um duplo clique numa tabela no Schema Explorer à esquerda para gerar o SELECT.</p>
+                  <p className="text-xs font-mono">Execute uma consulta SQL no editor para visualizar o retorno aqui.</p>
+                  <p className="text-[11px]">Dica: Dê um duplo clique numa tabela no Schema Explorer ou selecione um script e pressione Ctrl+Enter.</p>
                 </div>
               ) : (
                 <table className="w-full border-collapse font-mono text-left text-xs">
