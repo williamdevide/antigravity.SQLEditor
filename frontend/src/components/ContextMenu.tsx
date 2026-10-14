@@ -97,6 +97,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         </button>
 
         <button
+          id="btn-load-class-dbs"
           onClick={() => {
             onSelectPreset?.('class');
             onClose();

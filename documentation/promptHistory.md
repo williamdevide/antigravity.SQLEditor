@@ -574,10 +574,39 @@ corrija.`
    - Validado com `npm run lint` (0 erros).
    - Executado `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
 
+---
 
+## 📌 Prompt 24
+**Data:** 14/10/2026 - 08:13  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal algumas tabelas dos bancos de dados carregados no Modo Aula estão carregando vazias e outras com conteudo quando rodo a partir do vercel (talvez tempo de carregamento) faça o carregamento ocorrer de forma assincrona para cada banco e exiba uma porcentagem de conclusão de cada banco
 
+### 🎯 Diagnóstico de Causa Raiz e Solução Definitiva:
+1. **Identificação da Causa Raiz das Tabelas Vazias:**
+   - Ao analisar a execução em produção (Vercel e navegadores), identificamos que o arquivo de funções MySQL personalizadas (`mysqlFunctions.ts`) registrava funções como `engineFn.DATE = dateCustom` e `globalScope.DATE = dateCustom`.
+   - O AlaSQL possui um gerador de código interno (`yy.Insert.compile`) que inspeciona o tipo de dados da coluna SQL: quando o tipo é `DATE`, `DATETIME` ou `TIME`, se existir uma entrada em `alasql.fn[col.dbtypeid]`, o compilador do AlaSQL presume que se trata de uma classe personalizada e tenta instanciá-la com `new DATE(valor)`.
+   - Como `dateCustom` era uma arrow function (não construtora), a execução do `new DATE(...)` disparava `TypeError: DATE is not a constructor`. Isso fazia com que todos os `INSERT` em tabelas com colunas `DATE` (como os 500 registros de `tb_funcionarios_rh` do `db_rh`) falhassem silenciosamente na compilação, deixando a tabela com 0 registros (vazia).
+   - **Correção:** Registradas as funções de data em `alasql.stdfn` (biblioteca padrão do AlaSQL onde chamadas como `DATE(...)` em consultas SQL são resolvidas sem conflitar com os tipos de colunas em comandos `INSERT`) e removida a poluição em `alasql.fn.DATE` e no escopo global. Adicionalmente, tornadas as funções construtoras com `new.target` defensivo.
 
+2. **Carregamento Assíncrono com Chunking por Banco de Dados (`scriptsLoader.ts` & `dbEngine.ts`):**
+   - **Agrupamento Dinâmico:** Implementada a função `getClassroomDatabases()` no `scriptsLoader.ts`, que analisa todos os arquivos `.sql` de `data/bds/` e agrupa seus statements por banco de dados (`db_streamflix`, `db_pizzaria_express`, `db_escolaidiomas`, `db_rh`).
+   - **Processamento em Chunks:** `DatabaseEngine.loadPreset('class', onProgress)` e `resetDatabase(onProgress)` agora executam os scripts de forma sequencial com lotes de 20 statements (`BATCH_SIZE = 20`) intercalados por `await new Promise(r => setTimeout(r, 0))`. Isso cede o ciclo de eventos do navegador, mantendo a interface a 60fps sem congelar mesmo em scripts extensos como a escola de idiomas (+1000 statements).
+   - **Persistência Imediata:** Cada banco de dados é salvo no IndexedDB (`persistDatabase(dbName)`) logo após concluir seu lote, garantindo que o progresso não seja perdido.
 
+3. **Exibição Visual de Progresso e Porcentagem por Banco (`Sidebar.tsx` & `App.tsx`):**
+   - **Banner Global:** Exibido no topo do Explorador de Esquema enquanto há carregamento ativo: `Carregando BDs Aula (X/4) • Y%` com barra de progresso linear contínua.
+   - **Barras Individuais por Banco:** Cada banco exibe na árvore do Schema Explorer uma barra de progresso com a porcentagem calculada em tempo real (`0%` a `100%`), acompanhada do status do statement/tabela sendo inserida no momento (ex: `Inserindo tb_alunos... 45%`).
+   - **Indicador de Conclusão:** Ao finalizar 100%, o card exibe um badge verde `✓ 100%`, fornecendo clareza imediata para o aluno de que o banco está pronto para uso.
+   - **Atualização Dinâmica do Schema Tree:** Conforme cada banco conclui, o estado é atualizado em tempo real no `App.tsx` chamando `getSchemaTree()`, permitindo que os bancos e tabelas apareçam na barra lateral imediatamente.
 
+4. **Tratamento de Compatibilidade no AlaSQL para `CREATE DATABASE`:**
+   - Detectado que o comando `CREATE DATABASE IF NOT EXISTS` do AlaSQL lança erro se o banco já existir. Adicionada verificação prévia com `if (!alasql.databases[dbName])` no `initialize`, `loadPreset` e `createDatabase`, eliminando avisos desnecessários no console.
 
+5. **Validação e Verificação Completa:**
+   - Executada simulação automatizada confirmando que todos os 4 bancos de dados de aula carregam **100% das linhas sem nenhum erro**:
+     - `db_streamflix`: 100 filmes, 100 assinantes.
+     - `db_pizzaria_express`: 100 produtos, 100 pedidos.
+     - `db_escolaidiomas`: 100 responsáveis, 30 cursos, 20 turmas, 200 alunos, 400 aulas, 300 pagamentos.
+     - `db_rh`: 500 funcionários (corrigido!).
+   - Compilação do frontend validada com `npm run build` (**0 erros** de TypeScript e Vite).
 

@@ -264,26 +264,61 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
     return (d.getTime() / 86400000) + 2440587.5;
   };
 
-  const datetimeCustom = (dateVal?: any, ...modifiers: any[]): string => {
+  function datetimeCustom(this: any, dateVal?: any, ...modifiers: any[]): any {
+    if (new.target) return new Date(dateVal);
     return strftimeCustom('%Y-%m-%d %H:%M:%S', dateVal, ...modifiers);
-  };
+  }
 
-  const dateCustom = (dateVal?: any, ...modifiers: any[]): string => {
+  function dateCustom(this: any, dateVal?: any, ...modifiers: any[]): any {
+    if (new.target) return new Date(dateVal);
     return strftimeCustom('%Y-%m-%d', dateVal, ...modifiers);
-  };
+  }
 
-  const timeCustom = (dateVal?: any, ...modifiers: any[]): string => {
+  function timeCustom(this: any, dateVal?: any, ...modifiers: any[]): any {
+    if (new.target) return new Date(dateVal);
     return strftimeCustom('%H:%M:%S', dateVal, ...modifiers);
-  };
+  }
+
+  // Importante: No AlaSQL, se engineFn['DATE'] ou engineFn['DATETIME'] existir, o compilador de INSERT
+  // trata a coluna como uma classe personalizada e tenta instanciá-la com `new DATE(val)`,
+  // o que corrompia as inserções de tabelas com colunas DATE/DATETIME (ex: tb_funcionarios_rh).
+  // Para que funções como DATE(), DATETIME() e TIME() funcionem perfeitamente em consultas SQL
+  // sem interferir nas inserções de tabelas, nós as registramos no alasql.stdfn (biblioteca padrão)
+  // e em engineFn em minúsculas (date, datetime, time).
+  const engineStdfn = (engine as any).stdfn || {};
+  engineStdfn.DATE = dateCustom;
+  engineStdfn.date = dateCustom;
+  engineStdfn.DATETIME = datetimeCustom;
+  engineStdfn.datetime = datetimeCustom;
+  engineStdfn.TIME = timeCustom;
+  engineStdfn.time = timeCustom;
+  engineStdfn.STRFTIME = strftimeCustom;
+  engineStdfn.strftime = strftimeCustom;
+  engineStdfn.JULIANDAY = juliandayCustom;
+  engineStdfn.julianday = juliandayCustom;
+
+  // Garante que não haja DATE, DATETIME ou TIME maiúsculos em engineFn para evitar conflito com tipos de coluna no INSERT
+  delete engineFn.DATE;
+  delete engineFn.DATETIME;
+  delete engineFn.TIME;
 
   engineFn.STRFTIME = strftimeCustom;
   engineFn.strftime = strftimeCustom;
   engineFn.JULIANDAY = juliandayCustom;
   engineFn.julianday = juliandayCustom;
-  engineFn.DATETIME = datetimeCustom;
-  engineFn.datetime = datetimeCustom;
-  engineFn.DATE = dateCustom;
   engineFn.date = dateCustom;
-  engineFn.TIME = timeCustom;
+  engineFn.datetime = datetimeCustom;
   engineFn.time = timeCustom;
+
+  // Expõe no escopo global para que o avaliador compilado do AlaSQL encontre as funções utilitárias se necessário
+  const globalScope: any = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : null);
+  if (globalScope) {
+    globalScope.STRFTIME = strftimeCustom;
+    globalScope.strftime = strftimeCustom;
+    globalScope.JULIANDAY = juliandayCustom;
+    globalScope.julianday = juliandayCustom;
+    globalScope.datetime = datetimeCustom;
+    globalScope.date = dateCustom;
+    globalScope.time = timeCustom;
+  }
 }

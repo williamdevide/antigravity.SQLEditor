@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ZoomControl } from './ZoomControl';
 import type { DatabaseSchema, ContextMenuTarget } from '../types';
+import type { DatabaseLoadProgress } from '../services/dbEngine';
 
 interface SidebarProps {
   schemas: DatabaseSchema[];
@@ -16,6 +17,8 @@ interface SidebarProps {
   onTableDoubleClick: (dbName: string, tableName: string) => void;
   selectedTable?: { dbName: string; tableName: string } | null;
   onSelectTable?: (dbName: string, tableName: string) => void;
+  loadingProgress?: Record<string, DatabaseLoadProgress> | null;
+  isClassLoading?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,6 +35,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTableDoubleClick,
   selectedTable,
   onSelectTable,
+  loadingProgress,
+  isClassLoading,
 }) => {
   const [filterText, setFilterText] = useState('');
   const [collapsedDbs, setCollapsedDbs] = useState<Record<string, boolean>>({});
@@ -77,6 +82,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const zoomScale = zoomLevel / 100;
 
+  // Estatísticas de carregamento assíncrono dos bancos
+  const progressList = loadingProgress ? Object.values(loadingProgress) : [];
+  const totalProgressDbs = progressList.length;
+  const completedProgressDbs = progressList.filter(p => p.status === 'completed').length;
+  const isAllProgressCompleted = totalProgressDbs > 0 && completedProgressDbs === totalProgressDbs;
+  const overallPercentage = totalProgressDbs > 0
+    ? Math.round(progressList.reduce((acc, p) => acc + p.percentage, 0) / totalProgressDbs)
+    : 0;
+
+  // Mescla schemas atuais com os bancos listados no loadingProgress para visualização instantânea
+  const displayDbs = useMemo(() => {
+    if (!loadingProgress || Object.keys(loadingProgress).length === 0) {
+      return filteredSchemas;
+    }
+    const existingMap = new Map(filteredSchemas.map(d => [d.name.toLowerCase(), d]));
+    const result: DatabaseSchema[] = [...filteredSchemas];
+
+    for (const [dbName] of Object.entries(loadingProgress)) {
+      if (!existingMap.has(dbName.toLowerCase())) {
+        result.push({
+          name: dbName,
+          tables: [],
+          isActive: dbName === activeDatabase,
+        });
+      }
+    }
+    return result;
+  }, [filteredSchemas, loadingProgress, activeDatabase]);
+
   return (
     <aside
       className="w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] flex flex-col h-full select-none transition-colors"
@@ -119,7 +153,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="material-symbols-outlined text-[13px]">refresh</span>
           </button>
           <button
+            id="btn-schema-options"
             onClick={(e) => {
+              e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
               onContextMenu({
                 type: 'schema_explorer',
@@ -127,6 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 y: rect.bottom + 4,
               });
             }}
+            onMouseDown={(e) => e.stopPropagation()}
             title="Opções de Banco de Dados (Carregar vazio, Exemplos, BDs Aula)"
             className="w-5 h-5 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors"
             type="button"
@@ -159,6 +196,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Banner de Progresso Geral do Carregamento dos Bancos */}
+      {loadingProgress && (!isAllProgressCompleted || isClassLoading) && (
+        <div className="mx-2 my-1.5 p-2 rounded-lg bg-[var(--bg-surface)] border border-[#FF6B00]/40 shadow-sm shrink-0">
+          <div className="flex items-center justify-between text-[11px] mb-1 font-semibold font-mono">
+            <span className="flex items-center gap-1.5 text-[var(--accent-yellow)] truncate">
+              <span className="material-symbols-outlined text-[14px] text-[#FF6B00] animate-spin shrink-0">sync</span>
+              <span className="font-sans truncate">Carregando BDs Aula ({completedProgressDbs}/{totalProgressDbs})</span>
+            </span>
+            <span className="text-[#FF8533] font-bold shrink-0">{overallPercentage}%</span>
+          </div>
+          <div className="w-full bg-[var(--bg-primary)] h-1.5 rounded-full overflow-hidden border border-[var(--border-color)]">
+            <div
+              className="bg-gradient-to-r from-[#FF6B00] via-[var(--accent-yellow)] to-[var(--status-success)] h-full transition-all duration-300 ease-out"
+              style={{ width: `${overallPercentage}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Formulário Inline de Criar Banco (quando ativo) */}
       {isCreatingDb && (
@@ -199,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className="flex-1 overflow-y-auto p-2 space-y-1.5 font-mono"
         style={{ zoom: zoomScale }}
       >
-        {schemas.length === 0 ? (
+        {displayDbs.length === 0 ? (
           <div className="text-center py-10 px-4 flex flex-col items-center gap-2 text-[var(--text-muted)] text-xs font-sans">
             <span className="material-symbols-outlined text-3xl text-[var(--accent-yellow)]/60">
               database
@@ -209,14 +265,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               Clique com o botão direito sobre <strong className="text-[var(--accent-yellow)]">SCHEMA EXPLORER</strong> para carregar bancos de exemplo ou da aula.
             </p>
           </div>
-        ) : filteredSchemas.length === 0 ? (
+        ) : filteredSchemas.length === 0 && (!loadingProgress || Object.keys(loadingProgress).length === 0) ? (
           <div className="text-center py-8 text-[var(--text-muted)] text-xs font-sans">
             Nenhum banco ou tabela encontrado para o filtro.
           </div>
         ) : (
-          filteredSchemas.map((db) => {
+          displayDbs.map((db) => {
             const isCollapsed = collapsedDbs[db.name];
             const isActive = db.name === activeDatabase;
+            const prog = loadingProgress ? loadingProgress[db.name] : undefined;
+            const isDbLoading = prog && prog.status === 'loading';
+            const isDbPending = prog && prog.status === 'pending';
+            const isDbCompleted = prog && prog.status === 'completed';
 
             return (
               <div
@@ -263,7 +323,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {isActive ? (
+                    {isDbLoading ? (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-[#FF6B00]/20 text-[#FF8533] border border-[#FF6B00]/40 font-sans font-bold animate-pulse">
+                        {prog.percentage}%
+                      </span>
+                    ) : isDbPending ? (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-[var(--bg-primary)] text-[var(--text-muted)] border border-[var(--border-color)] font-sans">
+                        FILA
+                      </span>
+                    ) : isDbCompleted && isClassLoading ? (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-[var(--status-success)]/20 text-[var(--status-success)] border border-[var(--status-success)]/40 font-sans font-bold flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[10px]">check</span> 100%
+                      </span>
+                    ) : isActive ? (
                       <span className="px-1.5 py-0.2 rounded text-[9px] bg-[var(--status-success)]/20 text-[var(--status-success)] border border-[var(--status-success)]/40 font-sans font-bold">
                         ATIVO
                       </span>
@@ -273,6 +345,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
                 </div>
+
+                {/* Barra de Progresso Compacta Específica do Banco */}
+                {prog && (isDbLoading || isDbPending || (isClassLoading && isDbCompleted)) && (
+                  <div className="px-2.5 py-1.5 bg-[var(--bg-primary)]/80 border-t border-[var(--border-color)]/40 text-[10px] space-y-1">
+                    <div className="flex items-center justify-between font-mono">
+                      <span className="flex items-center gap-1.5 text-[var(--text-secondary)] truncate">
+                        {isDbLoading ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B00] animate-ping shrink-0" />
+                            <span className="text-[var(--accent-yellow)] truncate font-sans font-medium">
+                              {prog.currentTable ? `Inserindo ${prog.currentTable}...` : 'Processando queries...'}
+                            </span>
+                          </>
+                        ) : isDbPending ? (
+                          <span className="text-[var(--text-muted)] italic font-sans">Aguardando na fila...</span>
+                        ) : (
+                          <span className="text-[var(--status-success)] flex items-center gap-1 font-sans font-semibold">
+                            <span className="material-symbols-outlined text-[12px]">check_circle</span>
+                            Concluído com sucesso!
+                          </span>
+                        )}
+                      </span>
+                      <span className={`font-bold font-mono ${isDbCompleted ? 'text-[var(--status-success)]' : 'text-[#FF8533]'}`}>
+                        {prog.percentage}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-[var(--bg-secondary)] h-1 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-200 ${
+                          isDbCompleted
+                            ? 'bg-[var(--status-success)]'
+                            : isDbLoading
+                            ? 'bg-gradient-to-r from-[#FF6B00] to-[var(--accent-yellow)]'
+                            : 'bg-[var(--text-muted)]/30'
+                        }`}
+                        style={{ width: `${prog.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Lista de Tabelas do Banco */}
                 {!isCollapsed && (

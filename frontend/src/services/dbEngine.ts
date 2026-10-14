@@ -1,9 +1,26 @@
 import alasql from 'alasql';
 import { dbStorage } from './storage';
-import { getClassroomDbScripts } from './scriptsLoader';
+import { getClassroomDatabases, splitSqlStatements } from './scriptsLoader';
 import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
 import { registerMySQLFunctions } from './mysqlFunctions';
+
+export interface DatabaseLoadProgress {
+  dbName: string;
+  status: 'pending' | 'loading' | 'completed' | 'error';
+  currentStatement: number;
+  totalStatements: number;
+  percentage: number;
+  currentTable?: string;
+  errorMessage?: string;
+}
+
+export type OnLoadProgressCallback = (
+  progressMap: Record<string, DatabaseLoadProgress>,
+  completedCount: number,
+  totalCount: number,
+  overallPercentage: number
+) => void;
 
 // Desabilita avisos de console desnecessários do alasql e registra dialeto MySQL
 alasql.options.autocommit = true;
@@ -203,8 +220,10 @@ class DatabaseEngine {
         // Restaura bancos salvos no IndexedDB para o motor AlaSQL
         for (const item of storedDbs) {
           try {
-            alasql(`CREATE DATABASE IF NOT EXISTS ${item.dbName};`);
-            alasql(`USE ${item.dbName};`);
+            if (!alasql.databases[item.dbName]) {
+              alasql(`CREATE DATABASE \`${item.dbName}\`;`);
+            }
+            alasql(`USE \`${item.dbName}\`;`);
 
             for (const [tableName, tableInfo] of Object.entries(item.tables)) {
               if (tableInfo.data && Array.isArray(tableInfo.data)) {
@@ -222,7 +241,13 @@ class DatabaseEngine {
                 // Limpa e reinsere
                 alasql(`DELETE FROM \`${tableName}\`;`);
                 if (tableInfo.data.length > 0) {
-                  alasql.tables[tableName].data = JSON.parse(JSON.stringify(tableInfo.data));
+                  const clonedData = JSON.parse(JSON.stringify(tableInfo.data));
+                  if (alasql.databases[item.dbName]?.tables?.[tableName]) {
+                    alasql.databases[item.dbName].tables[tableName].data = clonedData;
+                  }
+                  if (alasql.tables && alasql.tables[tableName]) {
+                    alasql.tables[tableName].data = clonedData;
+                  }
                 }
               }
             }
@@ -258,7 +283,7 @@ class DatabaseEngine {
     }
   }
 
-  public async loadPreset(preset: DatabasePreset): Promise<void> {
+  public async loadPreset(preset: DatabasePreset, onProgress?: OnLoadProgressCallback): Promise<void> {
     this.currentPreset = preset;
     try {
       localStorage.setItem('sqleditor_db_preset', preset);
@@ -297,38 +322,110 @@ class DatabaseEngine {
     }
 
     if (preset === 'class') {
-      const classScripts = getClassroomDbScripts();
-      let firstDbDetected = '';
+      const classDbs = getClassroomDatabases();
+      const progressMap: Record<string, DatabaseLoadProgress> = {};
 
-      for (const scriptItem of classScripts) {
-        const statements = this.splitSqlStatements(scriptItem.content);
-        for (const stmt of statements) {
+      for (const group of classDbs) {
+        progressMap[group.dbName] = {
+          dbName: group.dbName,
+          status: 'pending',
+          currentStatement: 0,
+          totalStatements: group.statements.length,
+          percentage: 0,
+        };
+      }
+
+      onProgress?.({ ...progressMap }, 0, classDbs.length, 0);
+
+      const BATCH_SIZE = 20;
+
+      for (let gIndex = 0; gIndex < classDbs.length; gIndex++) {
+        const group = classDbs[gIndex];
+        progressMap[group.dbName].status = 'loading';
+
+        const initialCompleted = Object.values(progressMap).filter(p => p.status === 'completed').length;
+        const initialSumPct = Object.values(progressMap).reduce((acc, p) => acc + p.percentage, 0);
+        onProgress?.({ ...progressMap }, initialCompleted, classDbs.length, Math.round(initialSumPct / classDbs.length));
+
+        // Cria e seleciona banco no AlaSQL com verificação prévia
+        try {
+          if (!alasql.databases[group.dbName]) {
+            alasql(`CREATE DATABASE \`${group.dbName}\`;`);
+          }
+          alasql(`USE \`${group.dbName}\`;`);
+          this.activeDatabase = group.dbName;
+        } catch (e) {
+          console.warn(`Aviso ao criar/usar banco ${group.dbName}:`, e);
+        }
+
+        // Executa statements em blocos assíncronos (chunks)
+        for (let i = 0; i < group.statements.length; i++) {
+          const stmt = group.statements[i];
           if (!stmt.trim()) continue;
+
+          // Detecta CREATE DATABASE para não lançar erro se já existir no AlaSQL
+          const createDbMatch = stmt.match(/^CREATE\s+DATABASE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i);
+          if (createDbMatch) {
+            const dbN = createDbMatch[1];
+            if (!alasql.databases[dbN]) {
+              try { alasql(`CREATE DATABASE \`${dbN}\`;`); } catch (_) {}
+            }
+            continue;
+          }
+
+          // Detecta nome da tabela para feedback visual do progresso
+          const tableMatch = stmt.match(/(?:INSERT\s+INTO|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i);
+          if (tableMatch) {
+            progressMap[group.dbName].currentTable = tableMatch[1];
+          }
+
           try {
-            const createDbMatch = stmt.match(/^\s*CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"]?[\w-]+[`'"]?)/i);
-            const useMatch = stmt.match(/^\s*USE\s+([`'"]?[\w-]+[`'"]?)/i);
-
-            if (createDbMatch && !firstDbDetected) {
-              firstDbDetected = createDbMatch[1].replace(/[`'"]/g, '');
-            }
-            if (useMatch && !firstDbDetected) {
-              firstDbDetected = useMatch[1].replace(/[`'"]/g, '');
-            }
-
             alasql(stmt);
-          } catch (e) {
-            console.warn(`Aviso ao carregar script de aula (${scriptItem.fileName}):`, e);
+          } catch (e: any) {
+            console.warn(`Aviso no banco ${group.dbName} (stmt ${i}):`, e);
+          }
+
+          // Atualiza progresso e cede controle para a interface do navegador
+          if (i % BATCH_SIZE === 0 || i === group.statements.length - 1) {
+            const dbPct = Math.round(((i + 1) / group.statements.length) * 100);
+            progressMap[group.dbName].currentStatement = i + 1;
+            progressMap[group.dbName].percentage = dbPct;
+
+            const completedDbs = Object.values(progressMap).filter(p => p.status === 'completed').length;
+            const sumPercentages = Object.values(progressMap).reduce((acc, p) => acc + p.percentage, 0);
+            const overallPct = Math.round(sumPercentages / classDbs.length);
+
+            onProgress?.({ ...progressMap }, completedDbs, classDbs.length, overallPct);
+
+            // Yield para liberar o loop de eventos e permitir renderização a 60fps
+            await new Promise(resolve => setTimeout(resolve, 0));
           }
         }
+
+        // Ao concluir o banco, persiste-o imediatamente no IndexedDB
+        await this.persistDatabase(group.dbName);
+
+        progressMap[group.dbName].status = 'completed';
+        progressMap[group.dbName].percentage = 100;
+        delete progressMap[group.dbName].currentTable;
+
+        const completedDbs = Object.values(progressMap).filter(p => p.status === 'completed').length;
+        const sumPercentages = Object.values(progressMap).reduce((acc, p) => acc + p.percentage, 0);
+        const overallPct = Math.round(sumPercentages / classDbs.length);
+
+        onProgress?.({ ...progressMap }, completedDbs, classDbs.length, overallPct);
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
 
-      const availableDbs = Object.keys(alasql.databases).filter(d => d !== 'alasql');
-      this.activeDatabase = firstDbDetected || availableDbs[0] || '';
-      if (this.activeDatabase) {
+      // Define o primeiro banco como ativo
+      const firstDb = classDbs[0]?.dbName || '';
+      this.activeDatabase = firstDb;
+      if (firstDb) {
         try {
-          alasql(`USE \`${this.activeDatabase}\`;`);
+          alasql(`USE \`${firstDb}\`;`);
         } catch (_) {}
       }
+
       await this.persistAllDatabases();
       return;
     }
@@ -352,7 +449,9 @@ class DatabaseEngine {
     const cleanName = dbName.trim().replace(/[`'";]/g, '');
     if (!cleanName) return;
     try {
-      alasql(`CREATE DATABASE IF NOT EXISTS \`${cleanName}\`;`);
+      if (!alasql.databases[cleanName]) {
+        alasql(`CREATE DATABASE \`${cleanName}\`;`);
+      }
       alasql(`USE \`${cleanName}\`;`);
       this.activeDatabase = cleanName;
       await this.persistAllDatabases();
@@ -588,6 +687,58 @@ class DatabaseEngine {
     return tree;
   }
 
+  public async persistDatabase(dbName: string): Promise<void> {
+    try {
+      if (this.hideSystemDatabases && dbName.toLowerCase() === 'dbo') return;
+      const dbObj = alasql.databases[dbName];
+      if (!dbObj) return;
+
+      const tablesSnapshot: Record<string, { columns: Array<{ name: string; type: string; isPrimary?: boolean }>; data: any[] }> = {};
+      for (const tableName of Object.keys(dbObj.tables || {})) {
+        const t = dbObj.tables[tableName] as any;
+        const data = t.data || [];
+
+        let colDefsToSave: Array<{ name: string; type: string; isPrimary?: boolean }> = [];
+        if (t.columns && t.columns.length > 0) {
+          colDefsToSave = t.columns.map((c: any) => {
+            const colName = c.columnid || c.name;
+            let tName = c.dbtypeid || c.type || '';
+            if (tName && c.dbsize && c.dbprecision !== undefined) {
+              tName += `(${c.dbsize},${c.dbprecision})`;
+            } else if (tName && c.dbsize) {
+              tName += `(${c.dbsize})`;
+            }
+            if (!tName || tName === 'VARCHAR') {
+              const sampleVal = data.length > 0 && data[0] ? data[0][colName] : undefined;
+              tName = inferSqlType(colName, sampleVal);
+            }
+            const isPk = c.pk === true || c.primary === true || colName.toLowerCase() === 'id' || colName.toLowerCase().startsWith('id_');
+            return { name: colName, type: tName, isPrimary: isPk };
+          });
+        } else if (data.length > 0 && data[0]) {
+          colDefsToSave = Object.keys(data[0] as object).map(k => {
+            const tName = inferSqlType(k, data[0][k]);
+            const isPk = k.toLowerCase() === 'id' || k.toLowerCase().startsWith('id_');
+            return { name: k, type: tName, isPrimary: isPk };
+          });
+        }
+
+        tablesSnapshot[tableName] = {
+          columns: colDefsToSave,
+          data: JSON.parse(JSON.stringify(data))
+        };
+      }
+
+      await dbStorage.databasesState.put({
+        dbName,
+        tables: tablesSnapshot,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error(`Erro ao persistir banco ${dbName} no IndexedDB:`, err);
+    }
+  }
+
   public async persistAllDatabases(): Promise<void> {
     try {
       const dbs = Object.keys(alasql.databases).filter(d => {
@@ -597,58 +748,15 @@ class DatabaseEngine {
       });
 
       for (const dbName of dbs) {
-        const dbObj = alasql.databases[dbName];
-        if (!dbObj) continue;
-
-        const tablesSnapshot: Record<string, { columns: Array<{ name: string; type: string; isPrimary?: boolean }>; data: any[] }> = {};
-        for (const tableName of Object.keys(dbObj.tables || {})) {
-          const t = dbObj.tables[tableName] as any;
-          const data = t.data || [];
-
-          let colDefsToSave: Array<{ name: string; type: string; isPrimary?: boolean }> = [];
-          if (t.columns && t.columns.length > 0) {
-            colDefsToSave = t.columns.map((c: any) => {
-              const colName = c.columnid || c.name;
-              let tName = c.dbtypeid || c.type || '';
-              if (tName && c.dbsize && c.dbprecision !== undefined) {
-                tName += `(${c.dbsize},${c.dbprecision})`;
-              } else if (tName && c.dbsize) {
-                tName += `(${c.dbsize})`;
-              }
-              if (!tName || tName === 'VARCHAR') {
-                const sampleVal = data.length > 0 && data[0] ? data[0][colName] : undefined;
-                tName = inferSqlType(colName, sampleVal);
-              }
-              const isPk = c.pk === true || c.primary === true || colName.toLowerCase() === 'id' || colName.toLowerCase().startsWith('id_');
-              return { name: colName, type: tName, isPrimary: isPk };
-            });
-          } else if (data.length > 0 && data[0]) {
-            colDefsToSave = Object.keys(data[0] as object).map(k => {
-              const tName = inferSqlType(k, data[0][k]);
-              const isPk = k.toLowerCase() === 'id' || k.toLowerCase().startsWith('id_');
-              return { name: k, type: tName, isPrimary: isPk };
-            });
-          }
-
-          tablesSnapshot[tableName] = {
-            columns: colDefsToSave,
-            data: JSON.parse(JSON.stringify(data))
-          };
-        }
-
-        await dbStorage.databasesState.put({
-          dbName,
-          tables: tablesSnapshot,
-          updatedAt: new Date().toISOString()
-        });
+        await this.persistDatabase(dbName);
       }
     } catch (err) {
-      console.error('Erro ao persistir bancos no IndexedDB:', err);
+      console.error('Erro ao persistir todos os bancos no IndexedDB:', err);
     }
   }
 
-  public async resetDatabase(): Promise<void> {
-    await this.loadPreset(this.currentPreset);
+  public async resetDatabase(onProgress?: OnLoadProgressCallback): Promise<void> {
+    await this.loadPreset(this.currentPreset, onProgress);
   }
 
   public async exportSQL(): Promise<string> {
@@ -883,39 +991,7 @@ class DatabaseEngine {
   }
 
   private splitSqlStatements(sql: string): string[] {
-    const statements: string[] = [];
-    let current = '';
-    let inSingleQuote = false;
-    let inDoubleQuote = false;
-    let inBacktick = false;
-
-    for (let i = 0; i < sql.length; i++) {
-      const char = sql[i];
-      const prev = i > 0 ? sql[i - 1] : '';
-
-      if (char === "'" && prev !== '\\' && !inDoubleQuote && !inBacktick) {
-        inSingleQuote = !inSingleQuote;
-      } else if (char === '"' && prev !== '\\' && !inSingleQuote && !inBacktick) {
-        inDoubleQuote = !inDoubleQuote;
-      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
-        inBacktick = !inBacktick;
-      }
-
-      if (char === ';' && !inSingleQuote && !inDoubleQuote && !inBacktick) {
-        if (current.trim()) {
-          statements.push(current.trim());
-        }
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-
-    if (current.trim()) {
-      statements.push(current.trim());
-    }
-
-    return statements;
+    return splitSqlStatements(sql);
   }
 }
 

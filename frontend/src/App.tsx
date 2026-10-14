@@ -9,7 +9,7 @@ import { ERDiagramView } from './components/ERDiagramView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
 import { ContextMenu } from './components/ContextMenu';
-import { dbEngine } from './services/dbEngine';
+import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
 import { dbStorage } from './services/storage';
 import { reviewSqlQuery } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
@@ -103,6 +103,10 @@ export const App: React.FC = () => {
     console: 100,
   });
   const [contextMenuTarget, setContextMenuTarget] = useState<ContextMenuTarget | null>(null);
+
+  // Progresso de Carregamento Assíncrono dos Bancos da Aula
+  const [loadingProgress, setLoadingProgress] = useState<Record<string, DatabaseLoadProgress> | null>(null);
+  const [isClassLoading, setIsClassLoading] = useState<boolean>(false);
 
   // Soluções de aula disponíveis
   const solutions = useMemo(() => getAvailableSolutions(), []);
@@ -455,7 +459,19 @@ export const App: React.FC = () => {
   // Carregar Preset do Schema Explorer (Vazio, Exemplos, BDs Aula)
   const handleLoadPreset = useCallback(async (preset: DatabasePreset) => {
     setIsExecuting(true);
-    await dbEngine.loadPreset(preset);
+    if (preset === 'class') {
+      setIsClassLoading(true);
+    }
+
+    await dbEngine.loadPreset(preset, (progressMap, completedCount) => {
+      setLoadingProgress({ ...progressMap });
+      if (completedCount > 0) {
+        dbEngine.getSchemaTree().then(tree => {
+          setSchemas(tree);
+        });
+      }
+    });
+
     setCurrentPreset(preset);
     await refreshSchemas();
     const newActiveDb = dbEngine.getActiveDatabase();
@@ -468,11 +484,12 @@ export const App: React.FC = () => {
     setResults([
       {
         statement: `LOAD PRESET: ${preset.toUpperCase()};`,
-        columns: ['Status', 'Ambiente Ativo', 'Banco de Dados'],
+        columns: ['Status', 'Ambiente Ativo', 'Banco de Dados', 'Modo'],
         rows: [{
           Status: 'Ambiente carregado com sucesso!',
           'Ambiente Ativo': presetLabel,
-          'Banco de Dados': newActiveDb || '(nenhum banco ativo)'
+          'Banco de Dados': newActiveDb || '(nenhum banco ativo)',
+          'Modo': 'Carregamento Assíncrono com Progresso (100%)'
         }],
         executionTimeMs: 15,
         status: 'success',
@@ -482,6 +499,12 @@ export const App: React.FC = () => {
     ]);
     setActiveConsoleTab('grid');
     setIsExecuting(false);
+
+    // Mantém as barras em 100% por 1.8 segundos para confirmação visual
+    setTimeout(() => {
+      setLoadingProgress(null);
+      setIsClassLoading(false);
+    }, 1800);
   }, [refreshSchemas]);
 
   // Criar Novo Banco de Dados (pelo botão na Sidebar)
@@ -523,7 +546,15 @@ export const App: React.FC = () => {
 
     if (confirm(`Deseja restaurar o banco de dados para o estado original da opção selecionada (${presetLabel})? Todas as alterações locais serão substituídas.`)) {
       setIsExecuting(true);
-      await dbEngine.resetDatabase();
+      if (preset === 'class') {
+        setIsClassLoading(true);
+      }
+      await dbEngine.resetDatabase((progressMap, completedCount) => {
+        setLoadingProgress({ ...progressMap });
+        if (completedCount > 0) {
+          dbEngine.getSchemaTree().then(tree => setSchemas(tree));
+        }
+      });
       await refreshSchemas();
       const newActiveDb = dbEngine.getActiveDatabase();
       setActiveDatabase(newActiveDb);
@@ -545,6 +576,11 @@ export const App: React.FC = () => {
       ]);
       setActiveConsoleTab('grid');
       setIsExecuting(false);
+
+      setTimeout(() => {
+        setLoadingProgress(null);
+        setIsClassLoading(false);
+      }, 1800);
     }
   }, [refreshSchemas]);
 
@@ -709,6 +745,8 @@ export const App: React.FC = () => {
                   }
                   selectedTable={selectedTable}
                   onSelectTable={(db, tbl) => handleSelectTable(db, tbl, true)}
+                  loadingProgress={loadingProgress}
+                  isClassLoading={isClassLoading}
                 />
               </div>
 
