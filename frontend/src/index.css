@@ -51,6 +51,116 @@ html.light {
   --text-muted: #6B7280;
 }
 
+/* Tema Bege Conforto (Sépia Creme - Descanso Visual para não cansar a vista) */
+html.beige {
+  --bg-primary: #F5EFEB;
+  --bg-secondary: #FAF6F1;
+  --bg-surface: #EDE4DC;
+  --bg-hover: #E2D7CC;
+  --border-color: #D4C5B6;
+
+  --accent-orange: #C2410C;
+  --accent-orange-hover: #EA580C;
+  --glow-orange: rgba(194, 65, 12, 0.25);
+
+  --accent-yellow: #B45309;
+  --glow-yellow: rgba(180, 83, 9, 0.25);
+
+  --status-success: #15803D;
+  --glow-success: rgba(21, 128, 61, 0.20);
+  --status-error: #DC2626;
+  --status-warning: #D97706;
+
+  --text-primary: #2C2420;
+  --text-secondary: #5F524C;
+  --text-muted: #8C7D75;
+}
+
+/* Tema Grafite Titânio (Slate Charcoal - Um pouco mais claro e suave que o dark) */
+html.graphite {
+  --bg-primary: #1E232B;
+  --bg-secondary: #262C36;
+  --bg-surface: #2F3642;
+  --bg-hover: #3B4352;
+  --border-color: #465062;
+
+  --accent-orange: #FF7A1A;
+  --accent-orange-hover: #FF944D;
+  --glow-orange: rgba(255, 122, 26, 0.30);
+
+  --accent-yellow: #FFD000;
+  --glow-yellow: rgba(255, 208, 0, 0.25);
+
+  --status-success: #00E676;
+  --glow-success: rgba(0, 230, 118, 0.25);
+  --status-error: #FF3366;
+  --status-warning: #FFA726;
+
+  --text-primary: #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+}
+
+/* 🎨 TEMAS DE CORES DAS LETRAS & ACENTOS (Font Themes) */
+/* 1. Âmbar Solar (Padrão Antigravity) */
+html[data-font-theme="solar"] {
+  /* Mantém as variáveis padrão definidas no tema base */
+}
+
+/* 2. Ciano Cibernético (Cyber Neon) */
+html[data-font-theme="cyber"] {
+  --accent-yellow: #00E5FF;
+  --glow-yellow: rgba(0, 229, 255, 0.35);
+  --accent-orange: #00B0FF;
+  --accent-orange-hover: #40C4FF;
+  --glow-orange: rgba(0, 176, 255, 0.30);
+  --status-success: #00E676;
+}
+html.light[data-font-theme="cyber"],
+html.beige[data-font-theme="cyber"] {
+  --accent-yellow: #0284C7;
+  --glow-yellow: rgba(2, 132, 199, 0.25);
+  --accent-orange: #0369A1;
+  --accent-orange-hover: #0284C7;
+  --status-success: #0D9488;
+}
+
+/* 3. Esmeralda Matrix (Terminal Hacker) */
+html[data-font-theme="matrix"] {
+  --accent-yellow: #00FF66;
+  --glow-yellow: rgba(0, 255, 102, 0.35);
+  --accent-orange: #00E676;
+  --accent-orange-hover: #69F0AE;
+  --glow-orange: rgba(0, 230, 118, 0.30);
+  --status-success: #76FF03;
+}
+html.light[data-font-theme="matrix"],
+html.beige[data-font-theme="matrix"] {
+  --accent-yellow: #15803D;
+  --glow-yellow: rgba(21, 128, 61, 0.25);
+  --accent-orange: #166534;
+  --accent-orange-hover: #15803D;
+  --status-success: #047857;
+}
+
+/* 4. Púrpura Synthwave (Orquídea & Violeta) */
+html[data-font-theme="synthwave"] {
+  --accent-yellow: #F43F5E;
+  --glow-yellow: rgba(244, 63, 94, 0.35);
+  --accent-orange: #A855F7;
+  --accent-orange-hover: #C084FC;
+  --glow-orange: rgba(168, 85, 247, 0.30);
+  --status-success: #38BDF8;
+}
+html.light[data-font-theme="synthwave"],
+html.beige[data-font-theme="synthwave"] {
+  --accent-yellow: #BE185D;
+  --glow-yellow: rgba(190, 24, 93, 0.25);
+  --accent-orange: #7E22CE;
+  --accent-orange-hover: #9333EA;
+  --status-success: #0284C7;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -183,3 +293,19 @@ body {
   z-index: 99999 !important;
 }
 
+/* Ocultação de opções desnecessárias no menu suspenso do Monaco Editor */
+.monaco-menu .action-item:has(.action-label[aria-label*="Change All Occurrences" i]),
+.monaco-menu .action-item:has(.action-label[aria-label*="Command Palette" i]),
+.monaco-menu .action-item:has(.action-label[aria-label*="Cut" i]),
+.monaco-menu .action-item:has(.action-label[aria-label*="Copy" i]),
+.monaco-menu .action-item:has(.action-label[aria-label*="Paste" i]) {
+  display: none !important;
+}
+
+.monaco-menu .action-item[aria-label*="Change All Occurrences" i],
+.monaco-menu .action-item[aria-label*="Command Palette" i],
+.monaco-menu .action-item[aria-label*="Cut" i],
+.monaco-menu .action-item[aria-label*="Copy" i],
+.monaco-menu .action-item[aria-label*="Paste" i] {
+  display: none !important;
+}

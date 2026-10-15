@@ -79,9 +79,14 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
               <span className="material-symbols-outlined text-[24px]">info</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-                Sobre o SQLEditor
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+                  Sobre o SQLEditor
+                </h1>
+                <span className="px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30">
+                  v3.1.13
+                </span>
+              </div>
               <p className="text-xs text-[var(--text-secondary)]">
                 Portal de Aprendizagem e Simulação SQL com Inteligência Artificial
               </p>

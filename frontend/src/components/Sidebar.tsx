@@ -8,7 +8,7 @@ interface SidebarProps {
   activeDatabase: string;
   onSelectDatabase: (dbName: string) => void;
   onCreateDatabase: (dbName: string) => void;
-  onRefreshSchemas: () => void;
+  onRefreshSchemas: () => Promise<void> | void;
   zoomLevel: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -43,6 +43,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
   const [isCreatingDb, setIsCreatingDb] = useState(false);
   const [newDbName, setNewDbName] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
+
+  const handleRefreshClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshSuccess(false);
+    try {
+      await onRefreshSchemas();
+      setRefreshSuccess(true);
+      setTimeout(() => setRefreshSuccess(false), 2500);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
+  };
 
   const toggleDb = (dbName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -145,12 +161,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onReset={onZoomReset}
           />
           <button
-            onClick={onRefreshSchemas}
-            title="Recarregar Metadados dos Bancos"
-            className="w-5 h-5 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors"
+            onClick={handleRefreshClick}
+            disabled={isRefreshing}
+            title={isRefreshing ? "Recarregando metadados..." : "Recarregar Metadados dos Bancos"}
+            className={`w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-all cursor-pointer ${
+              isRefreshing ? 'text-[var(--accent-yellow)]' : refreshSuccess ? 'text-[var(--status-success)]' : ''
+            }`}
             type="button"
           >
-            <span className="material-symbols-outlined text-[13px]">refresh</span>
+            <span className={`material-symbols-outlined text-[14px] ${isRefreshing ? 'animate-spin' : ''}`}>
+              {refreshSuccess ? 'check_circle' : 'refresh'}
+            </span>
           </button>
           <button
             id="btn-schema-options"
@@ -172,6 +193,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Notificação Temporária de Metadados Recarregados */}
+      {refreshSuccess && (
+        <div className="px-3 py-1.5 bg-[var(--status-success)]/15 border-b border-[var(--status-success)]/30 text-[var(--status-success)] text-[11px] font-mono flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+          <span className="material-symbols-outlined text-[14px]">check</span>
+          <span className="truncate">Metadados recarregados com sucesso!</span>
+        </div>
+      )}
 
       {/* Busca / Filtro */}
       <div className="p-2 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] shrink-0">

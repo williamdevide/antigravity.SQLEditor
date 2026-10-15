@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { TabItem, QueryHistoryItem, ZoomLevels, ThemeMode } from '../types';
+import type { TabItem, QueryHistoryItem, ZoomLevels, ThemeMode, FontTheme } from '../types';
 
 export interface StoredColumnInfo {
   name: string;
@@ -19,6 +19,7 @@ export interface StoredWorkspace {
   activeTabId: string;
   zoomLevels: ZoomLevels;
   theme: ThemeMode;
+  fontTheme?: FontTheme;
   activeDatabase: string;
   sidebarWidth?: number;
 }

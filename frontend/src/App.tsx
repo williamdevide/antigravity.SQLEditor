@@ -6,8 +6,10 @@ import { EditorWorkspace } from './components/EditorWorkspace';
 import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
+import { ERModelView } from './components/ERModelView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
+import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
 import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
 import { dbStorage } from './services/storage';
@@ -21,6 +23,7 @@ import type {
   DatabaseSchema,
   ZoomLevels,
   ThemeMode,
+  FontTheme,
   ContextMenuTarget,
   SqlReview,
   DatabasePreset,
@@ -32,7 +35,7 @@ const INITIAL_TABS: TabItem[] = [
   {
     id: 'tab-1',
     title: 'script_1.sql',
-    content: `-- Bem-vindo ao SQLEditor! (Google Antigravity - SENAI Edition)
+    content: `-- Bem-vindo ao SQLEditor! (Google Antigravity Professional Edition)
 -- O motor AlaSQL e IndexedDB opera 100% no seu navegador.
 --
 -- 📌 Para carregar bancos de dados:
@@ -51,18 +54,19 @@ const INITIAL_TABS: TabItem[] = [
 export const App: React.FC = () => {
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
-      // 1. Tenta recuperar do hash da URL (#about, #settings, #er-diagram, #history, #workspace)
-      const hash = window.location.hash.replace(/^#\/?/, '') as ActiveView;
-      if (['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(hash)) {
-        return hash;
+      // 1. Tenta recuperar do hash da URL (#landing, #editor, #workspace, #about, #settings, #er-diagram, #er-model, #history)
+      const raw = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (raw === 'editor' || raw === 'workspace') return 'workspace';
+      if (['landing', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(raw)) {
+        return raw as ActiveView;
       }
       // 2. Tenta recuperar do localStorage salvo
       const saved = localStorage.getItem('sqleditor_active_view') as ActiveView;
-      if (saved && ['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(saved)) {
+      if (saved && ['landing', 'workspace', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(saved)) {
         return saved;
       }
     } catch (_) {}
-    return 'workspace';
+    return 'landing'; // Por padrão, exibe a landing page moderna nos moldes do drawdb.app
   });
 
   const setActiveView = useCallback((view: ActiveView) => {
@@ -70,6 +74,8 @@ export const App: React.FC = () => {
     try {
       localStorage.setItem('sqleditor_active_view', view);
       if (view === 'workspace') {
+        window.location.hash = '#editor';
+      } else if (view === 'landing') {
         history.replaceState(null, '', window.location.pathname + window.location.search);
       } else {
         window.location.hash = `#${view}`;
@@ -80,10 +86,17 @@ export const App: React.FC = () => {
   // Ouve navegação por botões Voltar/Avançar do navegador
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = (window.location.hash.replace(/^#\/?/, '') || 'workspace') as ActiveView;
-      if (['workspace', 'history', 'er-diagram', 'settings', 'about'].includes(hash)) {
-        setActiveViewState(hash);
-        try { localStorage.setItem('sqleditor_active_view', hash); } catch (_) {}
+      const raw = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+      if (raw === 'editor' || raw === 'workspace') {
+        setActiveViewState('workspace');
+        try { localStorage.setItem('sqleditor_active_view', 'workspace'); } catch (_) {}
+        return;
+      }
+      if (['landing', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(raw)) {
+        setActiveViewState(raw as ActiveView);
+        try { localStorage.setItem('sqleditor_active_view', raw); } catch (_) {}
+      } else if (!raw) {
+        setActiveViewState('landing');
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -96,7 +109,20 @@ export const App: React.FC = () => {
   const [activeTabId, setActiveTabId] = useState<string>('tab-1');
   const [results, setResults] = useState<QueryResult[]>([]);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    try {
+      const saved = localStorage.getItem('sqleditor_theme') as ThemeMode;
+      if (['dark', 'light', 'beige', 'graphite'].includes(saved)) return saved;
+    } catch (_) {}
+    return 'dark';
+  });
+  const [fontTheme, setFontTheme] = useState<FontTheme>(() => {
+    try {
+      const saved = localStorage.getItem('sqleditor_font_theme') as FontTheme;
+      if (['solar', 'cyber', 'matrix', 'synthwave'].includes(saved)) return saved;
+    } catch (_) {}
+    return 'solar';
+  });
   const [zoomLevels, setZoomLevels] = useState<ZoomLevels>({
     sidebar: 100,
     editor: 100,
@@ -183,6 +209,10 @@ export const App: React.FC = () => {
             setTheme(savedWs.theme);
             document.documentElement.className = savedWs.theme;
           }
+          if (savedWs.fontTheme) {
+            setFontTheme(savedWs.fontTheme);
+            document.documentElement.setAttribute('data-font-theme', savedWs.fontTheme);
+          }
           if (savedWs.activeDatabase) {
             setActiveDatabase(savedWs.activeDatabase);
             dbEngine.setActiveDatabase(savedWs.activeDatabase);
@@ -199,6 +229,12 @@ export const App: React.FC = () => {
     initApp();
   }, []);
 
+  // Sincroniza classes e atributos no elemento raiz HTML
+  useEffect(() => {
+    document.documentElement.className = theme;
+    document.documentElement.setAttribute('data-font-theme', fontTheme);
+  }, [theme, fontTheme]);
+
   // Salva estado do workspace automaticamente no IndexedDB
   const persistWorkspace = useCallback(async () => {
     try {
@@ -208,11 +244,12 @@ export const App: React.FC = () => {
         activeTabId,
         zoomLevels,
         theme,
+        fontTheme,
         activeDatabase,
         sidebarWidth,
       });
     } catch (_) {}
-  }, [tabs, activeTabId, zoomLevels, theme, activeDatabase, sidebarWidth]);
+  }, [tabs, activeTabId, zoomLevels, theme, fontTheme, activeDatabase, sidebarWidth]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -268,8 +305,11 @@ export const App: React.FC = () => {
   // Recarregar schemas
   const refreshSchemas = useCallback(async () => {
     const tree = await dbEngine.getSchemaTree();
-    setSchemas(tree);
-    setActiveDatabase(dbEngine.getActiveDatabase());
+    setSchemas([...tree]);
+    const currentActive = dbEngine.getActiveDatabase();
+    if (currentActive) {
+      setActiveDatabase(currentActive);
+    }
 
     // Se há tabela selecionada, atualiza seus dados na aba Dados
     if (selectedTableRef.current) {
@@ -429,7 +469,7 @@ export const App: React.FC = () => {
     if (activeView !== 'workspace') {
       setActiveView('workspace');
     }
-  }, [tabs.length, activeDatabase, activeView]);
+  }, [tabs.length, activeDatabase, activeView, setActiveView]);
 
   // Criar Aba em Branco (via dropdown ou botão + na barra de abas)
   const handleNewBlankTab = useCallback(() => {
@@ -584,18 +624,101 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas]);
 
-  // Alternar Tema
-  const handleToggleTheme = useCallback(() => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      document.documentElement.className = next;
+  // Gerenciamento de Temas (Interface e Cores das Letras)
+  const handleThemeChange = useCallback((newTheme: ThemeMode) => {
+    setTheme(newTheme);
+    document.documentElement.className = newTheme;
+    try {
+      localStorage.setItem('sqleditor_theme', newTheme);
+    } catch (_) {}
+  }, []);
+
+  const handleFontThemeChange = useCallback((newFontTheme: FontTheme) => {
+    setFontTheme(newFontTheme);
+    document.documentElement.setAttribute('data-font-theme', newFontTheme);
+    try {
+      localStorage.setItem('sqleditor_font_theme', newFontTheme);
+    } catch (_) {}
+  }, []);
+
+  // Alternar Cores das Letras (Cicla: Âmbar Solar -> Ciano Cibernético -> Esmeralda Matrix -> Púrpura Synthwave)
+  const handleToggleFontTheme = useCallback(() => {
+    const cycle: FontTheme[] = ['solar', 'cyber', 'matrix', 'synthwave'];
+    setFontTheme(prev => {
+      const next = cycle[(cycle.indexOf(prev) + 1) % cycle.length];
+      document.documentElement.setAttribute('data-font-theme', next);
+      try {
+        localStorage.setItem('sqleditor_font_theme', next);
+      } catch (_) {}
       return next;
     });
   }, []);
 
+  // Alternar Tema (Cicla ordenadamente: Dark -> Light -> Bege -> Grafite -> Dark)
+  const handleToggleTheme = useCallback(() => {
+    const cycle: ThemeMode[] = ['dark', 'light', 'beige', 'graphite'];
+    setTheme(prev => {
+      const next = cycle[(cycle.indexOf(prev) + 1) % cycle.length];
+      document.documentElement.className = next;
+      try {
+        localStorage.setItem('sqleditor_theme', next);
+      } catch (_) {}
+      return next;
+    });
+  }, []);
+
+  // Renomear Aba de Script
+  const handleRenameTab = useCallback((tabId: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    setTabs(prev =>
+      prev.map(t => (t.id === tabId ? { ...t, title: trimmed } : t))
+    );
+  }, []);
+
+  // Exportar Script da Aba Ativa (.sql)
+  const handleExportScript = useCallback(() => {
+    const currentTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+    if (!currentTab) return;
+    const content = editorRef.current ? editorRef.current.getValue() : currentTab.content;
+    const rawTitle = currentTab.title || 'script';
+    const filename = rawTitle.endsWith('.sql') ? rawTitle : `${rawTitle}.sql`;
+
+    const blob = new Blob([content || ''], { type: 'text/sql;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [tabs, activeTabId]);
+
   // Atalhos Globais de Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Exportar Script .sql (Ctrl + S / Cmd + S)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleExportScript();
+        return;
+      }
+
+      // Alternar Cores do Tema (Alt + T)
+      if (e.altKey && (e.key === 't' || e.key === 'T')) {
+        e.preventDefault();
+        handleToggleTheme();
+        return;
+      }
+
+      // Alternar Cores das Letras (Alt + L)
+      if (e.altKey && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        handleToggleFontTheme();
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         handleRunQuery();
@@ -633,7 +756,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleRunQuery, handleNewTab, handleRunSnippet, handleReviewSnippet]);
+  }, [handleRunQuery, handleNewTab, handleRunSnippet, handleReviewSnippet, handleToggleTheme, handleToggleFontTheme, handleExportScript]);
 
   // Redimensionamento de Painéis (Mouse Listeners)
   useEffect(() => {
@@ -673,10 +796,22 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors">
-      {/* 1. Header Superior */}
-      <Header
-        activeView={activeView}
-        onViewChange={setActiveView}
+      {/* 1. Página Inicial / Landing Page nos moldes do DrawDB */}
+      {activeView === 'landing' ? (
+        <div className="flex-1 w-full h-full overflow-y-auto">
+          <LandingPageView
+            onOpenEditor={() => setActiveView('workspace')}
+            onOpenView={(view) => setActiveView(view)}
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Header Superior para o Editor e Ferramentas */}
+          <Header
+            activeView={activeView}
+            onViewChange={setActiveView}
         visiblePanels={visiblePanels}
         onTogglePanel={handleTogglePanel}
         onRunQuery={handleRunQuery}
@@ -687,7 +822,10 @@ export const App: React.FC = () => {
         onCloseAllTabs={handleCloseAllTabs}
         onResetDb={handleResetDb}
         theme={theme}
+        onThemeChange={handleThemeChange}
         onToggleTheme={handleToggleTheme}
+        fontTheme={fontTheme}
+        onFontThemeChange={handleFontThemeChange}
         isExecuting={isExecuting}
         activeDatabase={activeDatabase || '(nenhum)'}
       />
@@ -701,6 +839,22 @@ export const App: React.FC = () => {
         <ERDiagramView
           schemas={schemas}
           activeDatabase={activeDatabase}
+          onSelectDatabase={(db) => {
+            dbEngine.setActiveDatabase(db);
+            setActiveDatabase(db);
+          }}
+          onSelectTableForQuery={(db, tbl) =>
+            handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+          }
+        />
+      ) : activeView === 'er-model' ? (
+        <ERModelView
+          schemas={schemas}
+          activeDatabase={activeDatabase}
+          onSelectDatabase={(db) => {
+            dbEngine.setActiveDatabase(db);
+            setActiveDatabase(db);
+          }}
           onSelectTableForQuery={(db, tbl) =>
             handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
           }
@@ -710,6 +864,10 @@ export const App: React.FC = () => {
           onResetDb={handleResetDb}
           onRefreshSchemas={refreshSchemas}
           onImportSqlSuccess={(sql) => handleNewTab(sql, 'importado.sql')}
+          theme={theme}
+          onThemeChange={handleThemeChange}
+          fontTheme={fontTheme}
+          onFontThemeChange={handleFontThemeChange}
         />
       ) : activeView === 'about' ? (
         <AboutView onBackToWorkspace={() => setActiveView('workspace')} />
@@ -793,6 +951,11 @@ export const App: React.FC = () => {
                       setZoomLevels(p => ({ ...p, editor: 100 }))
                     }
                     theme={theme}
+                    fontTheme={fontTheme}
+                    onRenameTab={handleRenameTab}
+                    onExportScript={handleExportScript}
+                    onToggleTheme={handleToggleTheme}
+                    onToggleFontTheme={handleToggleFontTheme}
                     schemas={schemas}
                     activeDatabase={activeDatabase}
                     editorRefOut={editorRef}
@@ -864,6 +1027,11 @@ export const App: React.FC = () => {
                     setZoomLevels(p => ({ ...p, editor: 100 }))
                   }
                   theme={theme}
+                  fontTheme={fontTheme}
+                  onRenameTab={handleRenameTab}
+                  onExportScript={handleExportScript}
+                  onToggleTheme={handleToggleTheme}
+                  onToggleFontTheme={handleToggleFontTheme}
                   schemas={schemas}
                   activeDatabase={activeDatabase}
                   editorRefOut={editorRef}
@@ -958,6 +1126,8 @@ export const App: React.FC = () => {
             )}
           </section>
         </main>
+      )}
+        </>
       )}
 
       {/* Menu de Contexto Flutuante */}

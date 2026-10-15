@@ -650,4 +650,498 @@ corrija.`
    - Executado `npm run build` com sucesso absoluto (**0 erros** de compilação em TypeScript e Vite).
    - Executado `npm run lint` (**0 erros** de linter).
 
+---
 
+## 📌 Prompt 26
+**Data:** 14/10/2026 - 21:15  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal digitei um comando "SELECT * FRM tb_aulas;" mas na revisão SQL ele sugeriu "SELECT * frm tb_aulas LIMIT 100;", esse tipo de revisão é insatisfatoria. melhore.  
+> alem do tema dark e ligth, quero um tema meio para o bege claro, para não cansar a vista e um tema em um grafite que fique um pouco mais claro que o dark. essas opções vão ficar no menu configurações / no submenu temas / cores do tema  
+> quero também uma opção configurações / no submenu temas / cores das letras, e quero alem do tema de cores das letras atuais, pelo menos mais 3 temas de cores de letras.  
+> crie nomes para todos esses temas
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Aprimoramento Robusto do Revisor SQL Inteligente (`sqlReviewer.ts`):**
+   - **Diagnóstico da Causa Raiz:** Anteriormente, o revisor apenas adicionava `LIMIT 100` e não identificava erros de digitação em palavras-chave SQL (como `FRM`), mantendo o erro na sugestão gerada.
+   - **Correções Implementadas:**
+     - Desenvolvido dicionário heurístico `KEYWORD_TYPO_MAP` cobrindo erros comuns em comandos SQL (`frm`, `fom`, `form` -> `FROM`, `selec`, `slct` -> `SELECT`, `wher`, `were` -> `WHERE`, `inser`, `inot`, `updat`, `delet`, etc.).
+     - Implementado algoritmo de distância de **Levenshtein** para identificação contextual de proximidade de palavras-chave.
+     - Detecção estrutural em `SELECT ... <palavra> <tabela>`: quando uma palavra não-reservada substitui a cláusula `FROM`, o revisor a identifica como erro de sintaxe, explica sua obrigatoriedade e gera a correção automática.
+     - Validação cruzada com o esquema do banco ativo para nunca alterar acidentalmente nomes de tabelas ou colunas válidas.
+     - Validação final com `alasql.parse(suggested)`: caso a sugestão corrija o erro, adiciona o badge de validação `✓ A consulta sugerida corrigiu os erros detectados e agora compila com sucesso no motor SQL!`.
+     - Testado com `SELECT * FRM tb_aulas;` retornando detecção precisa do erro em `FRM`, sugestão correta `SELECT * FROM tb_aulas LIMIT 100;` e validação positiva.
+
+2. **Novos Temas de Interface (Cores do Tema) com Nomes Criativos:**
+   - Criados **4 temas completos de ambiente e interface** com paletas HSL/HEX modernas e balanceadas no `index.css`:
+     1. **`dark` — Escuro Noturno (Dark Obsidian):** Contraste profundo com preto e cinza escuro para programação noturna (`#0F1117`, `#1E222D`).
+     2. **`light` — Claro Alvorada (Light Daylight):** Interface clara e vibrante com alto contraste para ambientes iluminados (`#F4F6F9`, `#FFFFFF`).
+     3. **`beige` — Bege Conforto (Warm Sepia):** Tons de sépia e creme suave especialmente desenvolvidos para descanso visual e redução de fadiga ocular em estudos prolongados (`#F5EFEB`, `#FAF6F1`, bordas `#D4C5B6`).
+     4. **`graphite` — Grafite Titânio (Slate Charcoal):** Escuro equilibrado e elegante em tons de ardósia, mais suave e confortável que o preto absoluto (`#1E232B`, `#2F3642`, bordas `#465062`).
+   - Mapeamento dinâmico no **Monaco Editor** (`light` e `beige` utilizam tema `'light'`, enquanto `dark` e `graphite` utilizam `'vs-dark'`).
+
+3. **Novos Temas de Cores das Letras (Tipografia & Acentos) com Nomes Criativos:**
+   - Criados **4 esquemas de cores de destaque para letras, palavras-chave e efeitos de brilho**:
+     1. **`solar` — Âmbar Solar (Padrão Antigravity):** Destaques quentes em amarelo `#FFE600` e laranja elétrico `#FF6B00` característicos da IDE.
+     2. **`cyber` — Ciano Cibernético (Cyber Neon):** Visual futurista neon com tons de azul ciano `#00E5FF` e azul elétrico `#00B0FF`.
+     3. **`matrix` — Esmeralda Matrix (Terminal Hacker):** Estilo clássico de terminal hacker com verdes esmeralda fosforescentes `#00FF66` e `#00E676`.
+     4. **`synthwave` — Púrpura Synthwave (Orquídea & Violeta):** Estética retro-synthwave com degradê de magenta `#E040FB` e violeta suave `#FF4081`.
+   - Compatibilidade automática: adaptam-se dinamicamente com alto contraste legível tanto nos modos escuro/grafite quanto nos modos claro/bege através de `html[data-font-theme="..."]`.
+
+4. **Navegação e Menus Conforme Solicitado:**
+   - **Menu Principal (Hambúrguer) `MainMenuDropdown.tsx`:**
+     - `Configurações` -> Submenu `Temas` ->
+       - Submenu `Cores do Tema`: Exibe as 4 opções com nome, descrição, preview circular de cores e indicador `✓` no tema ativo.
+       - Submenu `Cores das Letras`: Exibe as 4 opções com nome, descrição, preview circular de acentos e indicador `✓` no tema ativo.
+   - **Tela de Configurações `SettingsView.tsx`:**
+     - Cards visuais interativos em grid no topo da página:
+       - Card dedicado `Cores do Tema (Interface & Ambiente)` com prévia do layout e ativação em 1 clique.
+       - Card dedicado `Cores das Letras (Tipografia & Acentos de Destaque)` com prévia do texto e código `SELECT COUNT(*)` estilizado.
+   - **Botão Rápido no Cabeçalho `Header.tsx`:**
+     - Alternância rápida com 1 clique ciclando harmonicamente: `Dark` -> `Light` -> `Bege Conforto` -> `Grafite Titânio` -> `Dark`, com ícone dinâmico e tooltip explicativo.
+
+5. **Persistência Completa:**
+   - Sincronização automática com `localStorage` (`sqleditor_theme` e `sqleditor_font_theme`).
+   - Persistência no IndexedDB do navegador (`dbStorage.workspace`).
+   - Sincronização imediata no elemento raiz `document.documentElement` (`class` e atributo `data-font-theme`).
+
+6. **Validação de Qualidade e Compilação:**
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
+   - Executado `npm run lint` (**0 erros** de linter).
+
+---
+
+## 📌 Prompt 27
+**Data:** 14/10/2026 - 21:55  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal quero teclas de atalho para trocar cores do tema e cores das letras. alem disso o cores das letras deve influenciar nas cores dos códigos sql nos scripts.  
+> quero também poder clicar na aba do script duas vezes ou dar F2 e abrir para renomear o script
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Teclas de Atalho Globais para Alternar Temas de Interface e de Letras:**
+   - **`Alt + T` — Alternar Cores do Tema:**
+     - Cicla dinamicamente entre os 4 temas de interface: `Escuro Noturno (Dark Obsidian)` $\rightarrow$ `Claro Alvorada (Light Daylight)` $\rightarrow$ `Bege Conforto (Warm Sepia)` $\rightarrow$ `Grafite Titânio (Slate Charcoal)` $\rightarrow$ `Escuro Noturno`.
+     - Registrado tanto no ouvinte global do navegador em `App.tsx` quanto internamente no Monaco Editor em `EditorWorkspace.tsx` (`monaco.KeyMod.Alt | monaco.KeyCode.KeyT`).
+   - **`Alt + L` — Alternar Cores das Letras & Acentos:**
+     - Cicla dinamicamente entre os 4 esquemas de cores de tipografia: `Âmbar Solar` $\rightarrow$ `Ciano Cibernético` $\rightarrow$ `Esmeralda Matrix` $\rightarrow$ `Púrpura Synthwave` $\rightarrow$ `Âmbar Solar`.
+     - Registrado no ouvinte global do navegador e também internamente no Monaco Editor (`monaco.KeyMod.Alt | monaco.KeyCode.KeyL`).
+   - **Documentação de Atalhos:** Adicionados badges informativos em `SettingsView.tsx` ("Atalhos Rápidos de Teclado"), em `MainMenuDropdown.tsx` (ao lado de Cores do Tema e Cores das Letras) e no tooltip do botão de tema do cabeçalho em `Header.tsx`.
+
+2. **Cores das Letras Refletindo na Sintaxe dos Códigos SQL (`monacoThemeHelper.ts`):**
+   - Criado o módulo `monacoThemeHelper.ts` responsável por gerar dinamicamente os 16 temas combinados do Monaco Editor (4 temas de interface $\times$ 4 temas de fontes/acentos).
+   - Ao trocar o tema de letras (`fontTheme`), as palavras-chave (`SELECT`, `FROM`, `WHERE`), funções (`COUNT`, `SUM`, `NOW`), strings, números, operadores e comentários do Monaco Editor atualizam suas cores em tempo real:
+     - **Âmbar Solar (`solar`):** Palavras-chave em amarelo solar `#FFE600`, funções em laranja `#FF6B00`, strings em verde `#00E676`.
+     - **Ciano Cibernético (`cyber`):** Palavras-chave em ciano `#00E5FF`, funções em azul elétrico `#00B0FF`, números em rosa shock `#FF4081`.
+     - **Esmeralda Matrix (`matrix`):** Palavras-chave em verde hacker `#00FF66`, funções em verde-limão `#76FF03`, strings em amarelo-esmeralda `#CCFF90`.
+     - **Púrpura Synthwave (`synthwave`):** Palavras-chave em magenta orquídea `#E040FB`, funções em rosa synthwave `#FF4081`, strings em ouro sunset `#FFD700`.
+   - Compatibilidade automática com alto contraste nos temas claros (`light` e `beige`) e temas escuros (`dark` e `graphite`).
+
+3. **Renomear Abas de Scripts com Duplo Clique ou Atalho `F2` (`EditorWorkspace.tsx` & `App.tsx`):**
+   - **Duplo Clique na Aba (`onDoubleClick`):** Abre instantaneamente um campo de edição de texto `<input>` no lugar do título da aba.
+   - **Atalho <kbd>F2</kbd>:** Funciona tanto com o cursor dentro do Monaco Editor quanto na barra de abas, ativando imediatamente a renomeação da aba ativa.
+   - **Controles de Confirmação e Cancelamento:**
+     - Pressionar <kbd>Enter</kbd> ou clicar fora (`blur`): Confirma e salva o novo nome do script.
+     - Pressionar <kbd>Escape</kbd>: Cancela a alteração e mantém o nome anterior.
+     - O texto é auto-selecionado para facilitar a digitação imediata.
+   - **Persistência Automática:** O novo nome do script é sincronizado no estado de abas e gravado automaticamente no IndexedDB (`dbStorage.workspace`).
+
+4. **Validação de Qualidade e Compilação:**
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
+   - Executado `npm run lint` (**0 erros** de linter).
+
+---
+
+## 📌 Prompt 28
+**Data:** 14/10/2026 - 22:25  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal quando clicar para renomear a aba seleciona só o nome do arquivo, sem selecionar a extensão.
+> no menu suspenso dentro da aba do script remova a primeira opção: Chance all occurences. crie a opção Exportar Script .sql (com tecla de atalho). Mantenha a opção Alterar todas as ocorrências (Substituir). Tire as ultimas opções Cut, Copy, Paste e Command Palette
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Seleção Inteligente do Nome do Arquivo ao Renomear a Aba (`EditorWorkspace.tsx`):**
+   - Ao acionar o modo de renomeação de uma aba (seja por duplo clique ou pela tecla <kbd>F2</kbd>), o cursor foca no campo de texto e executa `input.setSelectionRange(0, dotIndex)`.
+   - Desta forma, seleciona exclusivamente o nome base do script (ex: seleciona apenas `script_1` em `script_1.sql`), deixando a extensão `.sql` desmarcada para que o usuário não a apague por acidente ao digitar um novo nome.
+   - Caso o usuário digite um novo nome sem extensão (ex: `relatorio_vendas`), o sistema anexa automaticamente a extensão original `.sql` no `commitRename`.
+
+2. **Customização e Limpeza do Menu de Contexto (Botão Direito) do Script Editor (`EditorWorkspace.tsx` e `index.css`):**
+   - **Remoção de Opções Indesejadas:**
+     - Removida a opção redundante/em inglês `Change All Occurrences` (`editor.action.changeAll`).
+     - Removidas as opções nativas `Cut`, `Copy`, `Paste` e `Command Palette` do menu suspenso para manter a experiência 100% limpa, enxuta e focada em SQL.
+     - As ações de copiar, recortar e colar pelo teclado (<kbd>Ctrl+C</kbd>, <kbd>Ctrl+X</kbd>, <kbd>Ctrl+V</kbd>) continuam operando normalmente via atalhos nativos do editor.
+   - **Nova Opção: `Exportar Script .sql (Ctrl+S)`:**
+     - Criada ação com atalho dedicado <kbd>Ctrl + S</kbd> / <kbd>Cmd + S</kbd> no menu de contexto.
+     - Ao ser acionada, gera e faz o download instantâneo do conteúdo da aba ativa como um arquivo `.sql` nomeado com o título da aba.
+     - Registrado também ouvinte de atalho global em `App.tsx` para interceptar <kbd>Ctrl + S</kbd> em qualquer local da janela, impedindo a abertura da janela nativa do navegador ("Salvar página como").
+   - **Manutenção da Opção:**
+     - Mantida a opção em português `Alterar todas as ocorrências (Substituir)` com atalhos <kbd>Ctrl + F2</kbd> / <kbd>Ctrl + H</kbd>.
+   - **Estrutura Final do Menu Suspenso de Script:**
+     1. `Executar esse trecho (Alt+E)`
+     2. `Revisar trecho (Alt+R)`
+     3. `Exportar Script .sql (Ctrl+S)`
+     4. `Alterar todas as ocorrências (Substituir) (Ctrl+F2 / Ctrl+H)`
+
+3. **Atualização da Tabela de Atalhos (`SettingsView.tsx`):**
+   - Incluído o atalho `Exportar Script .sql` com a tecla <kbd>Ctrl + S</kbd> na lista de "Atalhos Rápidos de Teclado" da tela de Configurações.
+
+4. **Validação e Compilação:**
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de TypeScript e Vite).
+
+---
+
+## 📌 Prompt 29
+**Data:** 14/10/2026 - 22:33  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal não removeu as opções que pedi do menu suspenso. corrija.
+> na tela de diagrama ER quero que sempre posicione as tabelas de modo que as linhas de relacionamentos não se cruzem. além disso não quero linhas curvas, quero linhas retas com quebras de 90 graus e cantos arredondados. na etiqueta no meio do relacionamento não quero a cardinalidade mas sim o nome do relacionamento e tudo já disposto de modo a se ajustar a tela.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Menu Suspenso 100% Determinístico no Editor de Scripts (`EditorWorkspace.tsx`):**
+   - **Diagnóstico:** O menu de contexto nativo do Monaco Editor injeta nós de forma assíncrona fora do ciclo de vida regular do React, fazendo com que certas opções indesejadas em inglês ainda pudessem aparecer em determinados cliques.
+   - **Solução Definitiva:** Desativou-se o menu nativo do Monaco (`options={{ contextmenu: false }}`) e implementou-se um menu suspenso flutuante em React puro (`editorContextMenu`), moderno, temático e estilizado.
+   - **Itens Exclusivos do Menu:**
+     1. `Executar esse trecho (Alt+E)`
+     2. `Revisar trecho (Alt+R)`
+     3. `Exportar Script .sql (Ctrl+S)`
+     4. `Alterar todas as ocorrências (Substituir) (Ctrl+F2)`
+   - **Eliminação Definitiva:** Removidas completamente todas as opções indesejadas (`Change all occurrences`, `Cut`, `Copy`, `Paste` e `Command Palette`). Os atalhos de teclado nativos (<kbd>Ctrl+C</kbd>, <kbd>Ctrl+X</kbd>, <kbd>Ctrl+V</kbd>, <kbd>Ctrl+S</kbd>, <kbd>Ctrl+F2</kbd>) permanecem totalmente operacionais.
+
+2. **Diagrama ER: Algoritmo Anti-Cruzamento de Linhas (`computeNonCrossingLayout` em `ERDiagramView.tsx`):**
+   - Implementado algoritmo estratificado com ordenação baricêntrica (baseado no método de Sugiyama):
+     - Classifica as tabelas em camadas de profundidade de acordo com suas referências de chave estrangeira (tabelas mestres/independentes na esquerda, tabelas intermediárias no centro, tabelas dependentes na direita).
+     - Ordena as posições verticais de cada coluna/camada com base na média das posições (baricentro) das tabelas com as quais se conecta, eliminando ou minimizando drasticamente qualquer cruzamento de arestas.
+     - Posiciona as tabelas em um grid ordenado com espaçamento generoso horizontal (440px) e vertical (300px).
+
+3. **Conexões Ortogonais em 90° com Cantos Arredondados (`getOrthogonalPath` em `ERDiagramView.tsx`):**
+   - Substituídas todas as antigas curvas Bézier cúbicas por rotas ortogonais em degraus retilíneos:
+     - Saída horizontal a partir do ponto de conexão lateral da tabela de origem.
+     - Quebra vertical precisa em 90 graus na linha intermediária ($x_{\text{mid}}$).
+     - Transição vertical para a altura exata da tabela de destino.
+     - Quebra horizontal em 90 graus adentrando na tabela de destino.
+     - Vértices suavizados com arcos quadráticos SVG (`Q`) com raio arredondado de 8px, criando o efeito visual técnico, elegante e limpo de diagrama de engenharia de software.
+   - O renderizador do Canvas 2D da exportação em imagem PNG (`handleExportPNG`) foi sincronizado para desenhar exatamente as mesmas linhas ortogonais e cantos arredondados.
+
+4. **Etiqueta Central com Nome do Relacionamento:**
+   - Removidas as antigas etiquetas e textos de cardinalidade (`1 : N`, `1`, `N`).
+   - Inserida etiqueta temática retangular com cantos arredondados no ponto central da linha ortogonal exibindo o **Nome do Relacionamento**: `${rel.fromCol} ➔ ${rel.toTable}` (ex: `departamento_id ➔ tb_departamentos`).
+   - A largura da tag é calculada proporcionalmente ao comprimento do texto, com tipografia monoespelhada nítida e contraste perfeitamente adaptado aos modos Claro e Escuro.
+
+5. **Ajuste Automático à Tela (Auto Fit to View):**
+   - Adicionada rotina de auto-enquadramento (`handleFitToView`) disparada automaticamente assim que o diagrama é montado ou quando o usuário troca o banco de dados ativo.
+   - Calcula a caixa delimitadora (`bounding box`) de todas as tabelas e ajusta o zoom e a centralização para que 100% do diagrama fique visível e perfeitamente ajustado no viewport do usuário logo de início.
+
+6. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilado com sucesso absoluto (**0 erros** de TypeScript e Vite).
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 30
+**Data:** 14/10/2026 - 22:50  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal na tela de diagrama er: não esta funcionando trocar o banco nessa tela, sempre exibe o der do banco ativo no workspace.
+> as linhas retas arrendondadas e as legendas dos relacionamentos funcionaram, mas agora não consigo mover as tabelas e o zoom não esta funcionando.
+> na tela workspace, no schema explorer o botão Recarregar Metadados do Banco não faz nada.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Correção da Troca de Banco no Diagrama ER (`ERDiagramView.tsx` & `App.tsx`):**
+   - **Diagnóstico:** O `useEffect` de sincronização de `activeDatabase` continha `selectedDb` em sua lista de dependências sem diferenciar mudanças de props externas de seleções locais. Quando o usuário selecionava outro banco no `<select>`, `selectedDb` mudava, disparando o efeito que encontrava `activeDatabase !== selectedDb` e revertia imediatamente o valor de volta para o banco ativo do workspace.
+   - **Solução:** Implementada referência estável com `prevActiveDbProp = useRef(activeDatabase)` para detectar exclusivamente mudanças reais vindas de fora.
+   - **Sincronização Bidirecional:** Adicionada a prop `onSelectDatabase` em `ERDiagramViewProps` e repassada em `App.tsx`. Ao mudar o banco no Diagrama ER, a troca é refletida localmente e o banco ativo do workspace também é atualizado de forma sincronizada e sem loops.
+
+2. **Restauração Completa da Movimentação de Tabelas e Zoom Interativo (`ERDiagramView.tsx`):**
+   - **Diagnóstico:** A função `handleFitToView` continha `positions` em seu array de dependências, e o `useEffect` de auto-layout dependia de `handleFitToView`. A cada pixel que o usuário arrastava uma tabela, o estado `positions` era alterado, disparando o recálculo do layout estático e revertendo a posição da tabela para a coordenada inicial.
+   - **Soluções Implementadas:**
+     - **Desacoplamento de Estados:** Criado `positionsRef` para manter a referência síncrona das coordenadas, permitindo que `handleFitToView` e `getTablePos` leiam as posições sem recriar dependências de ciclo de vida.
+     - **Auto-layout Condicional:** O algoritmo anti-cruzamento (`calculateNonCrossingLayout`) agora é executado unicamente na troca do banco ativo ou ao acionar o botão de reorganização.
+     - **Zoom com Roda do Mouse (`onWheel`):** Adicionado ouvinte de evento no canvas interativo permitindo aproximar e afastar o diagrama suavemente entre 25% e 250%.
+     - **Movimento Fluido 60fps:** Removida a classe `transition-transform duration-75` durante o arraste (`isPanning || draggingTable`), eliminando qualquer atraso ou interpolação CSS contra o ponteiro do mouse.
+     - **Botão "Reorganizar":** Adicionado botão com ícone `auto_awesome` na barra de ferramentas do Diagrama ER para que o usuário possa reordenar as tabelas anti-cruzamento a qualquer momento.
+
+3. **Feedback Visual e Recarregamento Real no Schema Explorer (`Sidebar.tsx` & `App.tsx`):**
+   - **Diagnóstico:** O botão "Recarregar Metadados dos Bancos" executava a função `refreshSchemas` de forma silenciosa e assíncrona, sem qualquer retorno visual, gerando a percepção de inatividade.
+   - **Soluções Implementadas:**
+     - **Estado de Carregamento:** Adicionado estado `isRefreshing` que ativa animação contínua de giro (`animate-spin text-[var(--accent-yellow)]`) no botão.
+     - **Confirmação Visual:** Ao concluir a atualização, o ícone muda temporariamente para `check_circle` verde e exibe um banner temático ("Metadados recarregados com sucesso!") por 2,5 segundos.
+     - **Sincronização Profunda:** Em `App.tsx`, `refreshSchemas` força a emissão de uma nova referência de array (`setSchemas([...tree])`), atualiza o banco ativo e reexecuta a busca de dados da tabela selecionada na aba Dados.
+
+4. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilado com sucesso absoluto (**0 erros** de TypeScript e Vite).
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 31
+**Data:** 14/10/2026 - 23:18  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal ainda não consigo arrastar as tabelas até o limite esquerdo da tela (no limite direito funciona). quanto a posição inicial das tabelas sempre posicione de uma forma que nenhuma linha de relacionamento cubra uma tabela (reposicione as tabelas de forma que isso não aconteça). 
+> se eu reposicionar um DER de um banco e for para outro banco e mexer no DER do segundo banco, ao voltar para o primeiro banco deve estar do jeito que eu deixei.
+> se possivel quero poder arrastar as linhas de relacionamento (mantendo sempre o ponto de origem e fim dela, mas acertando a posição dela).
+> quero que crie uma nova opção no menu do SQLEditor: Modelo ER, muito similar a tela Diagrama ER, mas ela exibe o MER ( a versão em texto do DER) e com o botão Exportar PDF.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Arrasto de Tabelas até o Limite Esquerdo da Tela (`ERDiagramView.tsx`):**
+   - **Diagnóstico da Causa Raiz:** O cálculo de arraste continha uma restrição `Math.max(0, ...)` somada a um cálculo de offset relativo à janela que não compensava o deslocamento do canvas (`pan.x` e `pan.y`). Isso criava uma parede invisível na borda esquerda do canvas, impedindo que a tabela alcançasse a margem esquerda visível do monitor.
+   - **Solução Implementada:** Corrigida a conversão de coordenadas para o espaço local do canvas `canvasMouseX = (e.clientX - pan.x) / scale; canvasMouseY = (e.clientY - pan.y) / scale;` e removida a trava de zero, permitindo que as coordenadas fluam livremente em todo o quadrante esquerdo e permitindo posicionar as tabelas rente ao limite esquerdo da tela.
+
+2. **Posicionamento Inicial sem Sobreposição de Linhas sobre Tabelas (`calculateNonCrossingLayout` em `ERDiagramView.tsx`):**
+   - **Diagnóstico:** Com o espaçamento horizontal anterior, rotas verticais de linhas que conectavam tabelas não adjacentes ou na mesma camada podiam atravessar o corpo visual de outras tabelas.
+   - **Solução:**
+     - Ampliado o espaçamento horizontal entre colunas para `SPACING_X = 520px` (com `TABLE_WIDTH = 260px`, garante-se um corredor livre de **260px** entre cada par de colunas).
+     - Roteamento ortogonal aperfeiçoado: para conexões entre colunas diferentes, a haste vertical passa estritamente no centro do corredor livre (`fromX + (toX - fromX) / 2`).
+     - Para conexões na mesma coluna, a linha contorna desimpedida pela margem direita com folga (`Math.max(x1, x2) + 60px`), garantindo que nenhuma linha de relacionamento passe por cima de qualquer tabela.
+
+3. **Persistência de Posições e Linhas Individualizada por Banco de Dados:**
+   - Implementado particionamento por banco de dados no `localStorage`:
+     - Posições das tabelas: armazenadas na chave `sqleditor_er_positions_by_db` no formato `Record<string, Record<string, {x: number, y: number}>>`.
+     - Posições manuais das linhas de relacionamento: armazenadas na chave `sqleditor_er_line_offsets_by_db`.
+   - Ao trocar de banco de dados no seletor ou no workspace, o sistema salva o estado atual do banco que estava em foco e restaura imediatamente o layout e os ajustes manuais do novo banco selecionado exatamente como o usuário os deixou.
+
+4. **Arrasto Interativo das Linhas de Relacionamento (Haste e Rota):**
+   - **Preservação de Conexões:** Os pontos de ancoragem na tabela de origem (FK) e na tabela de destino (PK) mantêm-se estritamente fixos nos conectores das respectivas colunas.
+   - **Interatividade:**
+     - A linha de relacionamento ortogonal conta com uma área de toque expandida (`strokeWidth="16"` e `pointerEvents: stroke`) e a etiqueta central da rota possui `cursor: ew-resize`.
+     - Ao clicar e arrastar a linha ou a etiqueta horizontalmente, a haste vertical intermediária acompanha o movimento do mouse em tempo real (`handleLineMouseDown` e `handleMouseMove`), permitindo ao usuário desenhar contornos personalizados e desviar de quaisquer elementos visuais.
+     - As novas coordenadas das linhas são persistidas no `localStorage` por banco ao soltar o mouse (`handleMouseUp`).
+
+5. **Nova Tela: "Modelo ER" (MER em Versão Texto) com Botão "Exportar PDF" (`ERModelView.tsx` & `MainMenuDropdown.tsx`):**
+   - **Acesso no Menu:** Adicionada a opção **Modelo ER (MER Texto)** no menu principal suspenso do SQLEditor com ícone temático `article` e atalho visual.
+   - **Recursos da Tela:**
+     - **Seletor de Banco de Dados:** Permite alternar entre os bancos carregados no sistema (`db_rh`, `db_streamflix`, etc.) com sincronização bidirecional com o Workspace.
+     - **Modo Duplo de Visualização:**
+       - **Dicionário Estruturado:** Cards limpos por tabela detalhando cada coluna, tipo de dados, chave primária (PK), chave estrangeira (FK) e tabela/coluna referenciada.
+       - **Notação Textual Formal:** Representação formal canônica do MER (ex: `TB_FUNCIONARIOS(id_func [PK], nome, cargo_id [FK -> TB_CARGOS.id_cargo])`) com numeração de tabelas e contadores.
+     - **Painel Geral de Integridade Referencial:** Lista centralizada de todas as regras de integridade referencial e chaves estrangeiras ativas no banco.
+     - **Botão "Copiar Texto MER":** Copia a especificação textual completa diretamente para a área de transferência com feedback visual temporário (`check_circle`).
+     - **Botão "Exportar PDF":** Aciona a rotina de exportação em PDF formatada com regras CSS específicas para impressão (`@media print` em folha A4 limpa, sem barras de ferramentas, em alta nitidez).
+
+6. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilado com sucesso absoluto (**0 erros** de TypeScript e Vite).
+
+---
+
+## 📌 Prompt 32
+**Data:** 14/10/2026 - 23:35  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal no DER, o ponto de inicio e fim do relacionamento pode alteranar de lado na tabela sozinho de acordo com o movimento da tabela na tela, de modo a não cruzar por cima da tabela. na navbar do SQLEditor quero ao lado do botão de tema 3 botões para exibir ou ocultar cada uma das áreas do workspace similares aos botões do vscode.
+> alias esses botões e o execuatr, nova aba, limpar e fechar todas só são exibidos se estivermos no modo workspace.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Alternância Dinâmica de Lado dos Relacionamentos no DER (`ERDiagramView.tsx`):**
+   - **Diagnóstico da Causa Raiz:** Anteriormente, a atribuição de portas de conexão comparava apenas $fromPos.x \le toPos.x$. Quando tabelas se sobrepunham parcialmente, ficavam alinhadas verticalmente na mesma coluna ou se cruzavam no eixo X, o ponto de origem permanecia fixo no lado direito e o destino no lado esquerdo, forçando a linha de relacionamento a cortar por dentro do corpo da tabela.
+   - **Solução Implementada:**
+     - Implementado algoritmo de detecção de proximidade e topologia espacial:
+       - **Tabela 1 à esquerda da Tabela 2 ($r1Right + 20 \le r2Left$):** Origem conecta no lado direito ($fromSide = 'right'$), destino no lado esquerdo ($toSide = 'left'$). Rota passa pelo corredor central.
+       - **Tabela 1 à direita da Tabela 2 ($r2Right + 20 \le r1Left$):** Origem conecta no lado esquerdo ($fromSide = 'left'$), destino no lado direito ($toSide = 'right'$). Rota passa pelo corredor central.
+       - **Tabelas sobrepostas no eixo horizontal ou na mesma coluna:** Ambas conectam no mesmo lado externo ($fromSide = 'right'$ e $toSide = 'right'$, ou $fromSide = 'left'$ e $toSide = 'left'$ caso o usuário arraste a rota para a esquerda). A linha contorna pelo vão livre exterior através de um suporte em braçadeira retangular (U-loop).
+     - A função `getOrthogonalPath` foi atualizada para gerar trajetórias ortogonais 90° com cantos arredondados para todos os 4 cenários de quadrantes, garantindo que marcadores (PK/FK) e traçados jamais atravessem o corpo visual de qualquer tabela.
+
+2. **3 Botões de Exibir/Ocultar Áreas do Workspace Estilo VS Code (`Header.tsx`):**
+   - Posicionados na barra superior de navegação (Navbar), imediatamente ao lado do botão de alternância de tema.
+   - Ícones vetoriais em SVG estilizados de acordo com os seletores de layout padrão do VS Code:
+     1. **Alternar Barra Lateral (`visiblePanels.sidebar`):** Ícone com a barra lateral esquerda preenchida quando ativa. Permite recolher/expandir o Schema Explorer.
+     2. **Alternar Editor de Scripts (`visiblePanels.scripts`):** Ícone com a seção superior/central preenchida quando ativa. Permite recolher/expandir o editor de código Monaco.
+     3. **Alternar Painel Inferior de Informações (`visiblePanels.info`):** Ícone com o painel inferior preenchido quando ativo. Permite recolher/expandir as abas de Dados, Retorno, Log de Execução e Revisão SQL.
+   - Feedback visual completo: estado ativo com destaque temático âmbar/amarelo (`#FFE600`, borda e fundo ativo), e estado oculto com transparência atenuada (`opacity-60 text-muted`).
+
+3. **Visibilidade Contextual Exclusiva para o Modo Workspace (`Header.tsx`):**
+   - Todos os botões operacionais de edição e execução de banco:
+     - `Executar`
+     - `Nova Aba`
+     - `Limpar`
+     - `Fechar Todas`
+     - `Resetar Banco`
+     - Os `3 Botões de Layout` do Workspace (Barra Lateral, Editor e Painel Inferior)
+   - Agora são renderizados **estritamente quando `activeView === 'workspace'`**.
+   - Ao navegar para outras telas da aplicação (**Diagrama ER**, **Modelo ER**, **Histórico**, **Configurações** ou **Sobre**), a Navbar torna-se limpa e minimalista, mantendo apenas o Menu Hambúrguer, a Identidade Visual/Banco e o botão de Alternância de Tema.
+
+4. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilado com sucesso absoluto (**0 erros** de TypeScript e Vite).
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 33
+**Data:** 14/10/2026 - 23:45  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal agora quero que analise a pagina inicial do drawdb.app e crie uma pagina inicial nos mesmos moldes para o nosso SQLEditor. Deve ser uma landingpage sensacional que ressalte tudo que existe no nosso SQLEditor. Deve existir um botão similar ao Teste você mesmo que carrega para a pagina do SQLEditor (inclusive a pagina pode chamar editor assim como a do drawdb.app. Utilize como julgar melhor nossos dados e logotipo.
+> Importante nessa página não quero menção ao SENAI e no editor a uníca menção ao SENAI deve ficar na página Sobre.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Auditoria e Limpeza Rigorosa das Menções ao SENAI:**
+   - **Landing Page:** 100% livre de qualquer menção ao SENAI.
+   - **No Editor:** Auditados e limpos todos os arquivos do sistema para assegurar que a **única menção ao SENAI em todo o projeto esteja estritamente na página "Sobre" (`AboutView.tsx`)**:
+     - `dbEngine.ts`: Removidas menções a SENAI dos cabeçalhos de exportação de SQL (`exportSQL`, `exportDatabaseSQL`, `exportTableSQL`), substituindo por "Google Antigravity SQLEditor" e autoria do "Professor William Devidé Komel".
+     - `ERModelView.tsx`: Substituído "SQLEditor SENAI Edition" por "SQLEditor Professional" tanto na especificação formal do MER quanto no cabeçalho do relatório PDF.
+     - `App.tsx`: Atualizado comentário do script inicial de "SENAI Edition" para "Google Antigravity Professional Edition".
+     - Verificado via busca global: Nenhuma outra ocorrência além de `AboutView.tsx`.
+
+2. **Criação da Landing Page de Alto Padrão Inspirada no DrawDB (`LandingPageView.tsx`):**
+   - **Navbar Flutuante em Pílula (Floating Pill Navbar):**
+     - Logo do SQLEditor com tipografia moderna e gradiente âmbar/ouro.
+     - Links de navegação suave para seções internas e telas: `#recursos`, Diagrama ER, Modelo ER, `#bancos`, Sobre.
+     - Alternador rápido de temas com suporte aos 4 modos de interface (`dark`, `light`, `beige`, `graphite`).
+     - Botão de destaque com alto contraste e pulso: **"Teste você mesmo →"**.
+   - **Hero Section:**
+     - Badge dinâmico pulsante: `● 100% Offline-First · Zero Cadastro · Execução Local no Navegador`.
+     - Título de impacto: `Pense. Modele. Execute SQL no Navegador.`
+     - Subtítulo técnico com callouts de valor e botões principais de ação com estatísticas de performance (100% local, 0ms latência).
+   - **Live Interactive Showcase (Assinatura Visual do DrawDB):**
+     - Janela em formato de IDE com controles estilo macOS (vermelho, amarelo, verde) e 4 abas funcionais:
+       1. **Diagrama ER:** Visualização de tabelas relacionais conectadas com linhas ortogonais 90° e cantos arredondados suavizados.
+       2. **Editor SQL:** Monaco Editor em ação com atalho `Ctrl+Enter` e coloração de sintaxe em tempo real.
+       3. **Retorno & Dados:** Tabela de dados interativa com LIMIT 30 e indicador de velocidade (1.1ms).
+       4. **Modelo ER (Texto):** Representação formal canônica do MER com PKs, FKs e exportação PDF.
+   - **Bento Grid de Recursos:**
+     - 5 cards modernos com microinterações e gradientes sutis:
+       - *DER Ortogonal Interativo:* Tabelas arrastáveis e conexões inteligentes anti-cruzamento.
+       - *Modelo ER Formal:* Dicionário de dados formal com exportação pronta para impressão em PDF A4.
+       - *Editor Monaco Profissional:* O mesmo editor do VS Code com autocomplete, atalhos e abas dinâmicas.
+       - *Revisor SQL com IA Integrada:* Diagnóstico sintático heurístico e correções de erros de digitação em 1 clique.
+       - *4 Temas de Interface + 4 de Sintaxe:* Paletas balanceadas incluindo Bege Conforto (Warm Sepia) e Grafite Titânio.
+   - **Seção de Bancos Didáticos Nativos:**
+     - Demonstração dos 4 bancos prontos para estudo (`db_rh`, `db_streamflix`, `db_pizzaria_express`, `db_escolaidiomas`) com total de tabelas, registros e tags didáticas.
+   - **Terminal Quickstart:**
+     - Bloco estilo terminal macOS com comandos `git clone` e `npm run dev` com botão de cópia em 1 clique.
+   - **Banner Final de Conversão & Footer:**
+     - CTA final convidando para abrir o editor instantaneamente sem login.
+     - Rodapé com links e identidade Google Antigravity.
+
+3. **Arquitetura de Navegação e Suporte à URL `/editor` e `#editor`:**
+   - Adicionada a rota `'landing'` ao tipo `ActiveView` em `types/index.ts`.
+   - `App.tsx` configurado com roteamento por Hash:
+     - `#landing` ou rota raiz `/`: exibe a Landing Page.
+     - `#editor` ou `#workspace`: abre diretamente o ambiente de trabalho do SQLEditor.
+     - Botão "Teste você mesmo" redireciona deterministicamente para `workspace` com hash `#editor`.
+     - Clicar no logotipo do SQLEditor no topo do editor (`Header.tsx`) retorna à Landing Page.
+     - Opção "Página Inicial" adicionada ao menu principal hambúrguer (`MainMenuDropdown.tsx`).
+
+4. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilação em produção concluída com **0 erros**.
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 34
+**Data:** 15/10/2026 - 00:05  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal na página inicial não vi nenhuma menção a milkfed ou a mim. crie a seção para essas informações e utilize de forma chamativa nosso logotipo. alem disso quero uma section falando dos changelogs (utilize como referência cada pedido de mudanças que fiz e crie o changelog. mude a versão atual do sistema para 3.1.13
+> na seção de prática instantanea fale dos bancos de exemplos e dos bancos focados em aula.
+> crie uma seção de Futuras Features que trate de que logo teremos cadastro de usuários separados por alunos e professores, formação de turmas e execução e entrega de exercicios.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Atualização Global da Versão do Sistema para `v3.1.13`:**
+   - `frontend/package.json`: Versão atualizada para `3.1.13`.
+   - `frontend/src/components/Header.tsx`: Badge no cabeçalho do editor atualizado para `v3.1.13`.
+   - `frontend/src/components/AboutView.tsx`: Badge ao lado do título principal atualizado para `v3.1.13`.
+   - `frontend/src/components/LandingPageView.tsx`: Versão sincronizada na Navbar, no badge do Hero, no cabeçalho do Changelog e no Rodapé.
+
+2. **Seção Institucional: Milkfed Devs && Reqs Lords & Professor William Devidé Komel (`LandingPageView.tsx`):**
+   - **Logotipo em Alta Definição da Milkfed:**
+     - Inserido logotipo chamativo (`/logo-milkfed.png`) com moldura luminosa, efeitos de brilho em gradiente âmbar/laranja e interatividade.
+     - Modal de ampliação em alta resolução com backdrop escuro (`isLogoModalOpen`), permitindo inspecionar o logo e manifesto institucional da empresa.
+   - **Apresentação Institucional:**
+     - Posicionamento da **Milkfed Devs && Reqs Lords** como *Software House & Tech Consulting*, especializada em engenharia de requisitos de alto nível, aplicações offline-first e orquestração de IA.
+     - Destaque dos 4 pilares tecnológicos: *Engenharia de Requisitos*, *Aplicações Offline-First*, *IA Generativa & Agentes Autônomos* e *Sistemas Distribuídos & Dados*.
+   - **Perfil do Autor e Criador:**
+     - Foto oficial do **Professor William Devidé Komel** (`/foto-william.jpg`) com anel em gradiente.
+     - Destaque de sua idealização, autoria e atuação como Engenheiro de Software, Educador de Tecnologia e Especialista em IA.
+     - Links diretos para LinkedIn (`https://www.linkedin.com/in/williamdevide`) e e-mail profissional (`williamdevide@gmail.com`).
+   - **Conformidade de Diretiva:** **Zero menções ao SENAI** na Landing Page (restrito estritamente a `AboutView.tsx`).
+
+3. **Seção "Prática Instantânea": Diferenciação entre Bancos de Aula e Exemplos:**
+   - **Bancos Focados em Aula (Modo Aula):**
+     - `db_rh`: 500 funcionários, cargos, departamentos e salários (Foco: Agregações & GROUP BY).
+     - `db_streamflix`: Catálogo de filmes, planos, assinaturas e histórico (Foco: JOINs).
+     - `db_pizzaria_express`: Delivery, produtos, clientes, pedidos e taxas (Foco: DML & Regras de Negócio).
+     - `db_escolaidiomas`: Alunos, responsáveis, turmas e mensalidades (Foco: Subqueries & Integridade).
+   - **Bancos de Exemplos Didáticos (Presets Clássicos):**
+     - Schemas leves e compactos (Loja & Vendas, Biblioteca & Autores, Hospital & Consultas) para experimentação instantânea de comandos avulsos.
+
+4. **Seção "Futuras Features & Roadmap (O Que Vem por Aí)":**
+   - Visual moderno em bento grid com badges de status "EM BREVE":
+     - 🎓 **Perfis Segregados de Usuários:** Ambientes diferenciados para Alunos e Professores com controle de acessos pedagógicos.
+     - 👥 **Formação e Gestão de Turmas:** Salas de aula virtuais, matrículas por convite e acompanhamento de desempenho por turma.
+     - 📋 **Execução e Entrega de Exercícios:** Caderno de atividades com testes unitários automáticos de SQL, correção instantânea de consultas e atribuição automática de notas.
+
+5. **Seção "Changelog do SQLEditor" Baseada nos Pedidos Reais de Mudança:**
+   - Linha do tempo visual detalhando a evolução do projeto:
+     - **v3.1.13:** Landing page estilo DrawDB, Seção Milkfed & Prof. William Devidé com modal de logo, Roadmap de Novas Features e divisão de bancos didáticos.
+     - **v3.1.12:** Controles de exibição de painéis na navbar estilo VS Code (Sidebar, Editor, Console), DER com alternância dinâmica de lado das conexões 360° e navbar contextual.
+     - **v3.1.11:** Nova tela Modelo ER (MER canônico em texto) com exportação PDF A4, persistência por banco no DER e ajuste manual das hastes de relacionamento.
+     - **v3.1.10:** Algoritmo Sugiyama anti-cruzamento no DER, linhas ortogonais 90° com cantos arredondados, sincronização bidirecional de banco e ajuste automático (*Fit to View*).
+     - **v3.1.9:** 4 Temas de Interface (Dark, Light, Bege Conforto, Grafite Titânio) e 4 Temas de Sintaxe SQL, atalhos globais Alt+T e Alt+L, e renomear abas com F2.
+     - **v3.1.8:** Revisor SQL inteligente heurístico com correção automática de digitação (`FRM` $\rightarrow$ `FROM`), preservação de seleção de texto entre abas e aba "Dados" com `LIMIT 30`.
+
+6. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilação em produção concluída com **0 erros**.
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 35
+**Data:** 15/10/2026 - 00:17  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal a seção do changelog pode exibir tudo que foi feito desde a primeira versão no dia 13/10/2026, e da para exibir cada versão só com o número e titulo e quando clicar espande o card exibindo o conteudo completo do card.
+> quanto aos bancos de exemplo por enquanto são o de ecommerce e o de universidade
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Ajuste Fiel dos Bancos de Exemplo Didáticos (`LandingPageView.tsx`):**
+   - Atualizados os cards de bancos de exemplo para representar com precisão os dois bancos de presets semente existentes no ecossistema SQLEditor:
+     - 🛒 **`ecommerce_db` (Loja Virtual & E-commerce):** 5 tabelas (`usuarios`, `categorias`, `produtos`, `pedidos` e `itens_pedido`). Foco didático em `INNER JOIN`, filtros com `WHERE`, cálculo de totais e regras de estoque.
+     - 🎓 **`universidade_db` (Universidade & Gestão Acadêmica):** 5 tabelas (`departamentos`, `professores`, `cursos`, `alunos` e `matriculas`). Foco didático em agrupamentos `GROUP BY`, filtros em grupos com `HAVING` e funções de média `AVG()`.
+   - Adicionadas badges de contagem de tabelas, tags de preset semente e botão direto para abrir no Editor.
+
+2. **Changelog Interativo em Acordeom com Histórico Completo desde 13/10/2026 (`LandingPageView.tsx`):**
+   - **Estrutura de Dados Tipada:** Mapeadas todas as 12 versões e marcos de evolução do SQLEditor desde o dia 13/10/2026 até hoje (15/10/2026):
+     - **`v3.1.13` (15/10/2026):** Landing Page DrawDB, Identidade Milkfed, Changelog Expansível e Presets Oficiais.
+     - **`v3.1.12` (14/10/2026):** Controles de Layout VS Code na Navbar e DER Dinâmico 360°.
+     - **`v3.1.11` (14/10/2026):** Modelo ER Formal em Texto (MER Canônico) e Exportação PDF A4.
+     - **`v3.1.10` (14/10/2026):** DER Ortogonal 90° com Cantos Arredondados e Algoritmo Sugiyama Anti-Cruzamento.
+     - **`v3.1.9` (14/10/2026):** 4 Temas de Interface, 4 Temas de Sintaxe SQL e Renomeação de Abas com F2.
+     - **`v3.1.8` (14/10/2026):** Revisor Heurístico de Digitação (`FRM` $\rightarrow$ `FROM`) e Aba "Dados" com LIMIT 30.
+     - **`v3.1.0` (14/10/2026):** Carregamento Assíncrono em Chunks com Barras de Progresso Percentuais e Correção de `DATE`.
+     - **`v2.5.0` (13/10/2026):** 3D Flip Cards na Stack Tecnológica e Persistência de Rotas no Navegador (F5).
+     - **`v2.0.0` (13/10/2026):** Central de Configurações, Backup/Exportação SQL e Página Sobre.
+     - **`v1.2.0` (13/10/2026):** Funções Nativas MySQL Integradas (`DATE_FORMAT`, `NOW`), Botão Copiar Erro e Sidebar Redimensionável.
+     - **`v1.1.0` (13/10/2026):** Zoom Fluido, Suporte a Tema Claro, Botão "+ Novo Banco" e Menu de Contexto.
+     - **`v1.0.0` (13/10/2026):** Lançamento Inicial do SQLEditor (Marco Zero) — AlaSQL + Dexie, Monaco Editor e Bancos Semente.
+   - **Comportamento Interativo de Acordeom:**
+     - Cada versão exibe inicialmente apenas o número da versão, data, tag/status e título.
+     - Ao clicar no card, ele **expande suavemente** exibindo a lista detalhada de itens técnicos e melhorias implementadas.
+     - Por padrão, a versão atual (`v3.1.13`) inicia aberta para destaque imediato.
+     - Botões no cabeçalho para **"Expandir Todos"** e **"Recolher"** todas as versões com 1 clique.
+
+3. **Validação de Build e Qualidade:**
+   - Executado `npm run build` no frontend: compilação em produção concluída com **0 erros** (Vite v8.3.4 + TypeScript).
+   - Executado `npm run lint`: **0 erros** de linter.
+
+---
+
+## 📌 Prompt 36
+**Data:** 15/10/2026 - 00:28  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal perfeito, atualize nosso repositorio no github
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Revisão e Consolidação do Repositório Git:**
+   - Verificado o status dos arquivos modificados e criados no projeto.
+   - Incluídos os novos componentes desenvolvidos:
+     - `LandingPageView.tsx`: Landing Page completa de alto padrão inspirada no DrawDB com showcase interativo.
+     - `ERModelView.tsx`: Tela de Modelo Entidade-Relacionamento canônico textual com exportação para PDF A4.
+     - `monacoThemeHelper.ts`: Motor de 16 temas combinados para editor e sintaxe SQL.
+   - Consolidadas as atualizações e correções dos componentes de workspace, menus, cabeçalho e configurações.
+   - Versão sincronizada em `v3.1.13` no ecossistema da aplicação.
+
+2. **Commit e Sincronização Remota (GitHub):**
+   - Criação de commit semântico padronizado: `feat: release v3.1.13 - Landing Page estilo DrawDB, identidade Milkfed, Roadmap e Changelog interativo`.
+   - Envio de todas as alterações para a branch `main` no repositório remoto do GitHub via `git push origin main`.

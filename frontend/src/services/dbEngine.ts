@@ -763,7 +763,7 @@ class DatabaseEngine {
     const tree = await this.getSchemaTree();
     let sqlDump = `-- ========================================================\n`;
     sqlDump += `-- SQLEditor Dump Export - ${new Date().toLocaleString('pt-BR')}\n`;
-    sqlDump += `-- Google Antigravity - SENAI Ourinhos Edition\n`;
+    sqlDump += `-- Google Antigravity SQLEditor\n`;
     sqlDump += `-- ========================================================\n\n`;
 
     for (const db of tree) {
@@ -803,7 +803,7 @@ class DatabaseEngine {
     let sqlDump = `-- ========================================================\n`;
     sqlDump += `-- SQLEditor Dump - Banco: ${dbName}\n`;
     sqlDump += `-- Data: ${new Date().toLocaleString('pt-BR')}\n`;
-    sqlDump += `-- Professor William Devidé Komel - SENAI Ourinhos\n`;
+    sqlDump += `-- Professor William Devidé Komel\n`;
     sqlDump += `-- ========================================================\n\n`;
 
     sqlDump += `CREATE DATABASE IF NOT EXISTS \`${dbName}\`;\n`;
@@ -845,7 +845,7 @@ class DatabaseEngine {
     let sqlDump = `-- ========================================================\n`;
     sqlDump += `-- SQLEditor Dump - Tabela: ${dbName}.${tableName}\n`;
     sqlDump += `-- Data: ${new Date().toLocaleString('pt-BR')}\n`;
-    sqlDump += `-- Professor William Devidé Komel - SENAI Ourinhos\n`;
+    sqlDump += `-- Professor William Devidé Komel\n`;
     sqlDump += `-- ========================================================\n\n`;
 
     sqlDump += `USE \`${dbName}\`;\n\n`;

@@ -4,6 +4,7 @@ import type { DatabaseSchema, TableSchema, ColumnSchema } from '../types';
 interface ERDiagramViewProps {
   schemas: DatabaseSchema[];
   activeDatabase: string;
+  onSelectDatabase?: (dbName: string) => void;
   onSelectTableForQuery: (dbName: string, tableName: string) => void;
 }
 
@@ -17,82 +18,334 @@ interface Relationship {
   fromCol: string;
   toTable: string;
   toCol: string;
-  cardinality: string; // Ex: '1:N'
+  cardinality: string;
 }
 
 const TABLE_WIDTH = 260;
 const HEADER_HEIGHT = 42;
 const ROW_HEIGHT = 28;
 
+const POSITIONS_STORAGE_KEY = 'sqleditor_er_positions_by_db';
+const LINE_OFFSETS_STORAGE_KEY = 'sqleditor_er_line_offsets_by_db';
+
+function getStoredPositionsByDb(): Record<string, Record<string, TablePosition>> {
+  try {
+    const raw = localStorage.getItem(POSITIONS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return {};
+}
+
+function getStoredLineOffsetsByDb(): Record<string, Record<string, number>> {
+  try {
+    const raw = localStorage.getItem(LINE_OFFSETS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return {};
+}
+
+// Gera traçado ortogonal de linhas retas com quebras de 90 graus, cantos arredondados e suporte a ajuste customizado de posição e alternância automática de lados
+function getOrthogonalPath(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  radius = 8,
+  customMidX?: number,
+  fromSide: 'left' | 'right' = 'right',
+  toSide: 'left' | 'right' = 'left'
+): { path: string; midX: number; midY: number } {
+  const dy = y2 - y1;
+  const signY = dy >= 0 ? 1 : -1;
+
+  // Caso 1: Ambas conectam pelo lado DIREITO (mesma coluna ou sobreposição horizontal)
+  if (fromSide === 'right' && toSide === 'right') {
+    const defaultLoopX = Math.max(x1, x2) + 50;
+    const midX = customMidX !== undefined ? customMidX : defaultLoopX;
+    const midY = (y1 + y2) / 2;
+    const r = Math.max(2, Math.min(radius, Math.abs(midX - x1) / 2, Math.abs(midX - x2) / 2, Math.abs(dy) / 2));
+
+    const path = [
+      `M ${x1} ${y1}`,
+      `L ${midX - r} ${y1}`,
+      `Q ${midX} ${y1}, ${midX} ${y1 + signY * r}`,
+      `L ${midX} ${y2 - signY * r}`,
+      `Q ${midX} ${y2}, ${midX - r} ${y2}`,
+      `L ${x2} ${y2}`,
+    ].join(' ');
+
+    return { path, midX, midY };
+  }
+
+  // Caso 2: Ambas conectam pelo lado ESQUERDO (mesma coluna ou contorno pela margem esquerda)
+  if (fromSide === 'left' && toSide === 'left') {
+    const defaultLoopX = Math.min(x1, x2) - 50;
+    const midX = customMidX !== undefined ? customMidX : defaultLoopX;
+    const midY = (y1 + y2) / 2;
+    const r = Math.max(2, Math.min(radius, Math.abs(x1 - midX) / 2, Math.abs(x2 - midX) / 2, Math.abs(dy) / 2));
+
+    const path = [
+      `M ${x1} ${y1}`,
+      `L ${midX + r} ${y1}`,
+      `Q ${midX} ${y1}, ${midX} ${y1 + signY * r}`,
+      `L ${midX} ${y2 - signY * r}`,
+      `Q ${midX} ${y2}, ${midX + r} ${y2}`,
+      `L ${x2} ${y2}`,
+    ].join(' ');
+
+    return { path, midX, midY };
+  }
+
+  // Caso 3: fromSide === 'right' && toSide === 'left' (Tabela de origem está à esquerda da tabela de destino)
+  if (fromSide === 'right' && toSide === 'left') {
+    if (Math.abs(dy) < 3) {
+      const defaultMid = (x1 + x2) / 2;
+      return {
+        path: `M ${x1} ${y1} L ${x2} ${y2}`,
+        midX: customMidX !== undefined ? customMidX : defaultMid,
+        midY: y1,
+      };
+    }
+
+    const defaultMidX = (x1 + x2) / 2;
+    const midX = customMidX !== undefined ? customMidX : defaultMidX;
+    const midY = (y1 + y2) / 2;
+    const r = Math.max(2, Math.min(radius, Math.abs(midX - x1) / 2, Math.abs(x2 - midX) / 2, Math.abs(dy) / 2));
+
+    const path = [
+      `M ${x1} ${y1}`,
+      `L ${midX - r} ${y1}`,
+      `Q ${midX} ${y1}, ${midX} ${y1 + signY * r}`,
+      `L ${midX} ${y2 - signY * r}`,
+      `Q ${midX} ${y2}, ${midX + r} ${y2}`,
+      `L ${x2} ${y2}`,
+    ].join(' ');
+
+    return { path, midX, midY };
+  }
+
+  // Caso 4: fromSide === 'left' && toSide === 'right' (Tabela de origem está à direita da tabela de destino)
+  if (Math.abs(dy) < 3) {
+    const defaultMid = (x1 + x2) / 2;
+    return {
+      path: `M ${x1} ${y1} L ${x2} ${y2}`,
+      midX: customMidX !== undefined ? customMidX : defaultMid,
+      midY: y1,
+    };
+  }
+
+  const defaultMidX = (x1 + x2) / 2;
+  const midX = customMidX !== undefined ? customMidX : defaultMidX;
+  const midY = (y1 + y2) / 2;
+  const r = Math.max(2, Math.min(radius, Math.abs(x1 - midX) / 2, Math.abs(midX - x2) / 2, Math.abs(dy) / 2));
+
+  const path = [
+    `M ${x1} ${y1}`,
+    `L ${midX + r} ${y1}`,
+    `Q ${midX} ${y1}, ${midX} ${y1 + signY * r}`,
+    `L ${midX} ${y2 - signY * r}`,
+    `Q ${midX} ${y2}, ${midX - r} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(' ');
+
+  return { path, midX, midY };
+}
+
 // Normalização inteligente de nomes de entidades relacionais (suporte completo a singulares, plurais e prefixos)
 function cleanEntityName(name: string): string {
   let s = name.toLowerCase().trim();
-  // Remove crases e aspas
   s = s.replace(/[`'"]/g, '');
-  // Remove prefixos de tabelas
   s = s.replace(/^(tb_|tbl_|tab_|t_)/, '');
-  // Remove prefixos de chaves
   s = s.replace(/^(id_|cod_|codigo_|cd_|fk_)/, '');
-  // Remove sufixos de chaves
   s = s.replace(/(_id|_fk|_cod|_codigo)$/, '');
   if (s.endsWith('id') && s.length > 2) {
     s = s.slice(0, -2);
   }
 
-  // Plurais em Português e Inglês:
-  // 1. -eis -> -el (responsaveis -> responsavel, papeis -> papel, niveis -> nivel, imoveis -> imovel)
-  if (s.endsWith('eis')) {
-    s = s.replace(/eis$/, 'el');
-  }
-  // 2. -oes -> -ao (secoes -> secao, permissoes -> permissao)
-  else if (s.endsWith('oes')) {
-    s = s.replace(/oes$/, 'ao');
-  }
-  // 3. -ais -> -al (filiais -> filial, canais -> canal)
-  else if (s.endsWith('ais')) {
-    s = s.replace(/ais$/, 'al');
-  }
-  // 4. -ois -> -ol
-  else if (s.endsWith('ois')) {
-    s = s.replace(/ois$/, 'ol');
-  }
-  // 5. -uis -> -ul
-  else if (s.endsWith('uis')) {
-    s = s.replace(/uis$/, 'ul');
-  }
-  // 6. -ns -> -m (itens -> item, armazens -> armazem)
-  else if (s.endsWith('ns')) {
-    s = s.replace(/ns$/, 'm');
-  }
-  // 7. -ores -> -or (professores -> professor, autores -> autor)
-  else if (s.endsWith('ores')) {
-    s = s.replace(/ores$/, 'or');
-  }
-  // 8. -res -> -r
-  else if (s.endsWith('res')) {
-    s = s.replace(/res$/, 'r');
-  }
-  // 9. -es -> "" (cidades -> cidade, etc.)
-  else if (s.endsWith('es') && s.length > 3) {
-    s = s.replace(/es$/, '');
-  }
-  // 10. -s -> "" (cursos -> curso, turmas -> turma, alunos -> aluno, pagamentos -> pagamento)
-  else if (s.endsWith('s') && s.length > 2) {
-    s = s.slice(0, -1);
-  }
+  if (s.endsWith('eis')) s = s.replace(/eis$/, 'el');
+  else if (s.endsWith('oes')) s = s.replace(/oes$/, 'ao');
+  else if (s.endsWith('ais')) s = s.replace(/ais$/, 'al');
+  else if (s.endsWith('ois')) s = s.replace(/ois$/, 'ol');
+  else if (s.endsWith('uis')) s = s.replace(/uis$/, 'ul');
+  else if (s.endsWith('ns')) s = s.replace(/ns$/, 'm');
+  else if (s.endsWith('ores')) s = s.replace(/ores$/, 'or');
+  else if (s.endsWith('res')) s = s.replace(/res$/, 'r');
+  else if (s.endsWith('es') && s.length > 3) s = s.replace(/es$/, '');
+  else if (s.endsWith('s') && s.length > 2) s = s.slice(0, -1);
+
   return s;
+}
+
+// Algoritmo puro de posicionamento estratificado anti-cruzamento e desobstruído (nenhuma linha passa por cima de tabelas)
+function calculateNonCrossingLayout(tables: TableSchema[], rels: Relationship[]): Record<string, TablePosition> {
+  const tableMap = new Map<string, TableSchema>();
+  tables.forEach(t => tableMap.set(t.name.toLowerCase(), t));
+
+  const parentsMap = new Map<string, Set<string>>();
+  const childrenMap = new Map<string, Set<string>>();
+
+  tables.forEach(t => {
+    parentsMap.set(t.name.toLowerCase(), new Set());
+    childrenMap.set(t.name.toLowerCase(), new Set());
+  });
+
+  rels.forEach(r => {
+    const from = r.fromTable.toLowerCase();
+    const to = r.toTable.toLowerCase();
+    if (parentsMap.has(from) && childrenMap.has(to) && from !== to) {
+      parentsMap.get(from)!.add(to);
+      childrenMap.get(to)!.add(from);
+    }
+  });
+
+  const layerMap = new Map<string, number>();
+  const getLayer = (name: string, visited = new Set<string>()): number => {
+    if (layerMap.has(name)) return layerMap.get(name)!;
+    if (visited.has(name)) return 0;
+    visited.add(name);
+
+    const parents = parentsMap.get(name);
+    if (!parents || parents.size === 0) {
+      layerMap.set(name, 0);
+      return 0;
+    }
+
+    let maxParentLayer = -1;
+    for (const p of parents) {
+      maxParentLayer = Math.max(maxParentLayer, getLayer(p, new Set(visited)));
+    }
+    const layer = maxParentLayer + 1;
+    layerMap.set(name, layer);
+    return layer;
+  };
+
+  tables.forEach(t => getLayer(t.name.toLowerCase()));
+
+  const layers: string[][] = [];
+  tables.forEach(t => {
+    const l = layerMap.get(t.name.toLowerCase()) || 0;
+    while (layers.length <= l) layers.push([]);
+    layers[l].push(t.name);
+  });
+
+  const newPositions: Record<string, TablePosition> = {};
+  // Corredor livre amplo entre colunas (520px de espaçamento, com 260px de tabela = 260px livres de corredor para as linhas ortogonais)
+  const SPACING_X = 520;
+  const START_X = 60;
+  const START_Y = 60;
+
+  layers[0]?.sort((a, b) => {
+    const countA = childrenMap.get(a.toLowerCase())?.size || 0;
+    const countB = childrenMap.get(b.toLowerCase())?.size || 0;
+    return countB - countA;
+  });
+
+  let currentY0 = START_Y;
+  layers[0]?.forEach(tName => {
+    const tbl = tableMap.get(tName.toLowerCase());
+    const h = HEADER_HEIGHT + (tbl ? tbl.columns.length * ROW_HEIGHT : 140);
+    newPositions[tName] = { x: START_X, y: currentY0 };
+    currentY0 += h + 80;
+  });
+
+  for (let l = 1; l < layers.length; l++) {
+    const currentLayer = layers[l];
+    const barycenters = new Map<string, number>();
+
+    currentLayer.forEach(tName => {
+      const parents = parentsMap.get(tName.toLowerCase());
+      if (parents && parents.size > 0) {
+        let sumY = 0;
+        let count = 0;
+        for (const p of parents) {
+          const pKey = Object.keys(newPositions).find(k => k.toLowerCase() === p);
+          if (pKey && newPositions[pKey]) {
+            sumY += newPositions[pKey].y;
+            count++;
+          }
+        }
+        barycenters.set(tName, count > 0 ? sumY / count : START_Y);
+      } else {
+        barycenters.set(tName, START_Y);
+      }
+    });
+
+    currentLayer.sort((a, b) => (barycenters.get(a) || 0) - (barycenters.get(b) || 0));
+
+    let currentY = START_Y;
+    const layerX = START_X + l * SPACING_X;
+
+    currentLayer.forEach(tName => {
+      const tbl = tableMap.get(tName.toLowerCase());
+      const h = HEADER_HEIGHT + (tbl ? tbl.columns.length * ROW_HEIGHT : 140);
+      const desiredY = barycenters.get(tName) || currentY;
+      const actualY = Math.max(currentY, desiredY);
+
+      newPositions[tName] = { x: layerX, y: actualY };
+      currentY = actualY + h + 80;
+    });
+  }
+
+  return newPositions;
 }
 
 export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
   schemas,
   activeDatabase,
+  onSelectDatabase,
   onSelectTableForQuery,
 }) => {
-  const [selectedDb, setSelectedDb] = useState(activeDatabase || schemas[0]?.name || '');
-  const currentDb = schemas.find(s => s.name === selectedDb) || schemas[0];
+  // Sincronização do banco selecionado com suporte a seleção local e props externas
+  const [selectedDb, setSelectedDb] = useState<string>(activeDatabase || schemas[0]?.name || '');
+  const prevActiveDbProp = useRef<string>(activeDatabase);
 
-  // Posições das tabelas no canvas
+  useEffect(() => {
+    if (activeDatabase && activeDatabase !== prevActiveDbProp.current) {
+      prevActiveDbProp.current = activeDatabase;
+      setSelectedDb(activeDatabase);
+    }
+  }, [activeDatabase]);
+
+  const handleDbChange = (newDb: string) => {
+    // Salva o banco anterior antes de trocar
+    if (currentDb) {
+      setPositionsByDb(prev => {
+        const next = { ...prev, [currentDb.name]: positionsRef.current };
+        try { localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+    }
+    setSelectedDb(newDb);
+    onSelectDatabase?.(newDb);
+  };
+
+  const currentDb = useMemo(() => {
+    return schemas.find(s => s.name === selectedDb) || schemas[0];
+  }, [schemas, selectedDb]);
+
+  // Posições persistidas por banco de dados
+  const [positionsByDb, setPositionsByDb] = useState<Record<string, Record<string, TablePosition>>>(getStoredPositionsByDb);
+  const [lineOffsetsByDb, setLineOffsetsByDb] = useState<Record<string, Record<string, number>>>(getStoredLineOffsetsByDb);
+
+  // Posições ativas das tabelas do banco atual
   const [positions, setPositions] = useState<Record<string, TablePosition>>({});
+  const positionsRef = useRef<Record<string, TablePosition>>({});
+
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
+
+  // Offsets horizontais customizados das linhas de relacionamento
+  const [lineOffsets, setLineOffsets] = useState<Record<string, number>>({});
+  const lineOffsetsRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    lineOffsetsRef.current = lineOffsets;
+  }, [lineOffsets]);
+
+  // Estado de Arraste da Linha de Relacionamento
+  const [draggingLineKey, setDraggingLineKey] = useState<string | null>(null);
+  const [lineDragStart, setLineDragStart] = useState<{ mouseX: number; initialMidX: number }>({ mouseX: 0, initialMidX: 0 });
   
   // Zoom e Pan do Canvas
   const [zoom, setZoom] = useState<number>(100);
@@ -106,7 +359,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 1. Identifica relacionamentos entre tabelas (via foreignKeyRef explícita ou inferência relacional inteligente)
+  // 1. Identifica relacionamentos entre tabelas
   const relationships: Relationship[] = useMemo(() => {
     if (!currentDb || !currentDb.tables || currentDb.tables.length === 0) return [];
     const rels: Relationship[] = [];
@@ -133,7 +386,6 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
         if (!targetTable && !isSelfPk) {
           const cleanCol = cleanEntityName(col.name);
 
-          // 1. Procura tabela alvo cujo radical coincida
           targetTable = tables.find(t => {
             if (t.name.toLowerCase() === table.name.toLowerCase()) return false;
             const cleanTbl = cleanEntityName(t.name);
@@ -148,7 +400,6 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
             );
           });
 
-          // 2. Se não achou, testa por prefixo/sufixo direto
           if (!targetTable) {
             let targetPrefix = '';
             if (colLower.endsWith('_id')) targetPrefix = colLower.replace(/_id$/, '');
@@ -193,7 +444,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
               fromCol: col.name,
               toTable: targetTable.name,
               toCol: toColName,
-              cardinality: '1:N', // 1 tabela pai (PK) -> N tabela dependente (FK)
+              cardinality: '1:N',
             });
           }
         }
@@ -203,7 +454,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     return rels;
   }, [currentDb]);
 
-  // Função auxiliar segura para obter posição de uma tabela (case-insensitive e com fallback imediato)
+  // Função auxiliar segura para obter posição de uma tabela (case-insensitive)
   const getTablePos = useCallback((tableName: string): TablePosition => {
     if (positions[tableName]) return positions[tableName];
     const key = Object.keys(positions).find(k => k.toLowerCase() === tableName.toLowerCase());
@@ -213,44 +464,17 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     const col = Math.max(0, idx) % colsCount;
     const row = Math.floor(Math.max(0, idx) / colsCount);
     return {
-      x: 60 + col * 360,
-      y: 60 + row * 320,
+      x: 60 + col * 420,
+      y: 60 + row * 340,
     };
   }, [positions, currentDb]);
 
-  // 2. Inicializa layout organizado das tabelas em grid quando o banco muda
-  useEffect(() => {
-    if (!currentDb || currentDb.tables.length === 0) return;
+  // 3. Ajustar à Tela (Fit to View) - Enquadra perfeitamente todas as tabelas na viewport
+  const handleFitToView = useCallback((positionsOverride?: Record<string, TablePosition>) => {
+    const posSource = positionsOverride || positionsRef.current;
+    if (!currentDb || !currentDb.tables || currentDb.tables.length === 0) return;
 
-    const newPos: Record<string, TablePosition> = {};
-    const colsCount = Math.max(2, Math.ceil(Math.sqrt(currentDb.tables.length)));
-    const spacingX = 360;
-    const spacingY = 320;
-
-    currentDb.tables.forEach((tbl, idx) => {
-      const col = idx % colsCount;
-      const row = Math.floor(idx / colsCount);
-      newPos[tbl.name] = {
-        x: 60 + col * spacingX,
-        y: 60 + row * spacingY,
-      };
-    });
-
-    setPositions(newPos);
-  }, [selectedDb, currentDb]);
-
-  // Atualiza banco selecionado caso activeDatabase mude externamente
-  useEffect(() => {
-    if (activeDatabase && activeDatabase !== selectedDb) {
-      setSelectedDb(activeDatabase);
-    }
-  }, [activeDatabase]);
-
-  // 3. Ajustar à Tela (Fit to View)
-  const handleFitToView = useCallback(() => {
-    if (!currentDb || currentDb.tables.length === 0 || !containerRef.current) return;
-
-    const tableNames = Object.keys(positions);
+    const tableNames = Object.keys(posSource);
     if (tableNames.length === 0) return;
 
     let minX = Infinity;
@@ -259,10 +483,10 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     let maxY = -Infinity;
 
     for (const name of tableNames) {
-      const pos = positions[name];
+      const pos = posSource[name];
       if (!pos) continue;
-      const tbl = currentDb.tables.find(t => t.name === name);
-      const h = HEADER_HEIGHT + (tbl ? tbl.columns.length * ROW_HEIGHT : 150);
+      const tbl = currentDb.tables.find(t => t.name.toLowerCase() === name.toLowerCase());
+      const h = HEADER_HEIGHT + (tbl ? tbl.columns.length * ROW_HEIGHT : 140);
 
       minX = Math.min(minX, pos.x);
       minY = Math.min(minY, pos.y);
@@ -270,35 +494,93 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
       maxY = Math.max(maxY, pos.y + h);
     }
 
+    if (!isFinite(minX) || !isFinite(maxX)) return;
+
     const boundsWidth = Math.max(100, maxX - minX);
     const boundsHeight = Math.max(100, maxY - minY);
 
-    const { clientWidth, clientHeight } = containerRef.current;
-    const padding = 100;
+    const clientWidth = containerRef.current?.clientWidth || window.innerWidth - 320;
+    const clientHeight = containerRef.current?.clientHeight || window.innerHeight - 180;
+    const padding = 70;
 
     const scaleX = (clientWidth - padding) / boundsWidth;
     const scaleY = (clientHeight - padding) / boundsHeight;
-    const fitScale = Math.max(0.3, Math.min(1.4, Math.min(scaleX, scaleY)));
+    const fitScale = Math.max(0.35, Math.min(1.2, Math.min(scaleX, scaleY)));
 
     const newZoom = Math.round(fitScale * 100);
     setZoom(newZoom);
 
-    // Centraliza o conteúdo perfeitamente
     const centerX = (clientWidth - boundsWidth * fitScale) / 2 - minX * fitScale;
     const centerY = (clientHeight - boundsHeight * fitScale) / 2 - minY * fitScale;
 
-    setPan({ x: Math.max(20, Math.round(centerX)), y: Math.max(20, Math.round(centerY)) });
-  }, [currentDb, positions]);
+    setPan({
+      x: Math.round(centerX),
+      y: Math.round(centerY),
+    });
+  }, [currentDb]);
 
-  // 4. Arraste de Tabelas e Pan com suporte total a zoom
+  // 2. Aplica layout inicial anti-cruzamento e ajuste à tela quando o banco muda
+  const applyAutoLayout = useCallback((forceRecalculate = false) => {
+    if (!currentDb || !currentDb.tables || currentDb.tables.length === 0) return;
+    const dbKey = currentDb.name;
+
+    // Se já existem posições salvas e não foi forçado recálculo, restaura exatamente como o usuário deixou
+    const savedForDb = positionsByDb[dbKey];
+    const currentTableNames = currentDb.tables.map(t => t.name.toLowerCase());
+    const hasAllTables = !forceRecalculate && savedForDb && currentTableNames.every(name => Object.keys(savedForDb).some(k => k.toLowerCase() === name));
+
+    if (hasAllTables) {
+      setPositions(savedForDb);
+      positionsRef.current = savedForDb;
+      handleFitToView(savedForDb);
+    } else {
+      const calculated = calculateNonCrossingLayout(currentDb.tables, relationships);
+      setPositions(calculated);
+      positionsRef.current = calculated;
+      setPositionsByDb(prev => {
+        const next = { ...prev, [dbKey]: calculated };
+        try { localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+      handleFitToView(calculated);
+      setTimeout(() => handleFitToView(calculated), 60);
+    }
+
+    // Restaura offsets das linhas do banco
+    const savedLines = lineOffsetsByDb[dbKey] || {};
+    setLineOffsets(savedLines);
+    lineOffsetsRef.current = savedLines;
+  }, [currentDb, relationships, positionsByDb, lineOffsetsByDb, handleFitToView]);
+
+  // Dispara carregamento ao trocar o banco
+  useEffect(() => {
+    if (!currentDb || !currentDb.tables || currentDb.tables.length === 0) return;
+    applyAutoLayout(false);
+  }, [selectedDb, currentDb?.name]);
+
+  // 4. Arraste de Tabelas sem limite no canto esquerdo
   const handleTableMouseDown = (tableName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const pos = positions[tableName] || { x: 0, y: 0 };
+    const pos = positions[tableName] || positionsRef.current[tableName] || { x: 0, y: 0 };
     setDraggingTable(tableName);
     const scale = zoom / 100;
+    const canvasMouseX = (e.clientX - pan.x) / scale;
+    const canvasMouseY = (e.clientY - pan.y) / scale;
     setDragOffset({
-      x: e.clientX / scale - pos.x,
-      y: e.clientY / scale - pos.y,
+      x: canvasMouseX - pos.x,
+      y: canvasMouseY - pos.y,
+    });
+  };
+
+  // Início do arraste de uma linha de relacionamento
+  const handleLineMouseDown = (relKey: string, currentMidX: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const scale = zoom / 100;
+    const canvasMouseX = (e.clientX - pan.x) / scale;
+    setDraggingLineKey(relKey);
+    setLineDragStart({
+      mouseX: canvasMouseX,
+      initialMidX: currentMidX,
     });
   };
 
@@ -313,14 +595,34 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    const scale = zoom / 100;
+    const canvasMouseX = (e.clientX - pan.x) / scale;
+    const canvasMouseY = (e.clientY - pan.y) / scale;
+
     if (draggingTable) {
-      const scale = zoom / 100;
-      const newX = Math.max(0, Math.round(e.clientX / scale - dragOffset.x));
-      const newY = Math.max(0, Math.round(e.clientY / scale - dragOffset.y));
-      setPositions(prev => ({
-        ...prev,
-        [draggingTable]: { x: newX, y: newY }
-      }));
+      // Arraste livre sem barreira no limite esquerdo (permite valores negativos para alcançar qualquer margem)
+      const newX = Math.round(canvasMouseX - dragOffset.x);
+      const newY = Math.round(canvasMouseY - dragOffset.y);
+      setPositions(prev => {
+        const next = {
+          ...prev,
+          [draggingTable]: { x: newX, y: newY }
+        };
+        positionsRef.current = next;
+        return next;
+      });
+    } else if (draggingLineKey) {
+      // Ajuste horizontal da linha de relacionamento em tempo real
+      const deltaX = Math.round(canvasMouseX - lineDragStart.mouseX);
+      const newMidX = lineDragStart.initialMidX + deltaX;
+      setLineOffsets(prev => {
+        const next = {
+          ...prev,
+          [draggingLineKey]: newMidX
+        };
+        lineOffsetsRef.current = next;
+        return next;
+      });
     } else if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
@@ -330,8 +632,35 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Salva posições permanentemente no banco ativo ao soltar
+    if (draggingTable && currentDb) {
+      const dbKey = currentDb.name;
+      setPositionsByDb(prev => {
+        const next = { ...prev, [dbKey]: positionsRef.current };
+        try { localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+    }
+    // Salva offsets das linhas permanentemente no banco ativo ao soltar
+    if (draggingLineKey && currentDb) {
+      const dbKey = currentDb.name;
+      setLineOffsetsByDb(prev => {
+        const next = { ...prev, [dbKey]: lineOffsetsRef.current };
+        try { localStorage.setItem(LINE_OFFSETS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+    }
+
     setDraggingTable(null);
+    setDraggingLineKey(null);
     setIsPanning(false);
+  };
+
+  // Suporte a zoom suave com a roda do mouse (Wheel)
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+    setZoom(prev => Math.max(25, Math.min(250, Math.round(prev * zoomFactor))));
   };
 
   // 5. Exportar Diagrama ER para PNG
@@ -386,7 +715,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     const offsetX = padding - minX;
     const offsetY = padding + headerBannerHeight - minY;
 
-    // Desenha Linhas de Relacionamento
+    // Desenha Linhas de Relacionamento Ortogonais 90° com Cantos Arredondados
     for (const rel of relationships) {
       const fromPos = getTablePos(rel.fromTable);
       const toPos = getTablePos(rel.toTable);
@@ -402,75 +731,71 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
 
       let fromX: number;
       let toX: number;
-      let cp1X: number;
-      let cp2X: number;
 
-      if (Math.abs(fromPos.x - toPos.x) < 60) {
-        fromX = fromPos.x + TABLE_WIDTH + offsetX;
-        toX = toPos.x + TABLE_WIDTH + offsetX;
-        const arc = 70;
-        cp1X = fromX + arc;
-        cp2X = toX + arc;
-      } else if (fromPos.x < toPos.x) {
+      if (fromPos.x <= toPos.x) {
         fromX = fromPos.x + TABLE_WIDTH + offsetX;
         toX = toPos.x + offsetX;
-        const curvature = Math.max(45, Math.min(150, Math.abs(toX - fromX) * 0.45));
-        cp1X = fromX + curvature;
-        cp2X = toX - curvature;
       } else {
         fromX = fromPos.x + offsetX;
         toX = toPos.x + TABLE_WIDTH + offsetX;
-        const curvature = Math.max(45, Math.min(150, Math.abs(fromX - toX) * 0.45));
-        cp1X = fromX - curvature;
-        cp2X = toX + curvature;
       }
 
-      // Linha de Conexão Bézier
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      const midX = fromX + dx / 2;
+      const midY = (fromY + toY) / 2;
+      const r = Math.max(2, Math.min(8, Math.abs(dx) / 2, Math.abs(dy) / 2));
+      const signX = dx >= 0 ? 1 : -1;
+      const signY = dy >= 0 ? 1 : -1;
+
+      // Traçado Ortogonal 90° com cantos arredondados
       ctx.beginPath();
       ctx.strokeStyle = isLight ? '#1D4ED8' : '#FFE600';
       ctx.lineWidth = 2.5;
-      ctx.setLineDash([6, 4]);
-      ctx.moveTo(fromX, fromY);
-      ctx.bezierCurveTo(cp1X, fromY, cp2X, toY, toX, toY);
+
+      if (Math.abs(dy) < 3) {
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+      } else {
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(midX - signX * r, fromY);
+        ctx.quadraticCurveTo(midX, fromY, midX, fromY + signY * r);
+        ctx.lineTo(midX, toY - signY * r);
+        ctx.quadraticCurveTo(midX, toY, midX + signX * r, toY);
+        ctx.lineTo(toX, toY);
+      }
       ctx.stroke();
-      ctx.setLineDash([]);
 
-      // Círculo e Badge N no lado FK
-      ctx.fillStyle = '#FF3366';
+      // Círculo Lado FK
+      ctx.fillStyle = '#FF8533';
       ctx.beginPath();
-      ctx.arc(fromX, fromY, 11, 0, Math.PI * 2);
+      ctx.arc(fromX, fromY, 5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 11px "JetBrains Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('N', fromX, fromY);
 
-      // Círculo e Badge 1 no lado PK
+      // Círculo Lado PK
       ctx.fillStyle = isLight ? '#15803D' : '#00E676';
       ctx.beginPath();
-      ctx.arc(toX, toY, 11, 0, Math.PI * 2);
+      ctx.arc(toX, toY, 5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 11px "JetBrains Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('1', toX, toY);
 
-      // Pílula central 1:N
-      const midX = (fromX + toX) / 2;
-      const midY = (fromY + toY) / 2;
-      ctx.fillStyle = isLight ? '#FFFFFF' : '#161922';
-      ctx.strokeStyle = isLight ? '#CFD4DA' : '#2E3445';
+      // Etiqueta com Nome do Relacionamento
+      const relName = `${rel.fromCol} ➔ ${rel.toTable}`;
+      const tagWidth = Math.max(90, relName.length * 7.5 + 24);
+      const tagHeight = 22;
+
+      ctx.fillStyle = isLight ? '#FFFFFF' : '#1A1D26';
+      ctx.strokeStyle = isLight ? '#1D4ED8' : '#FF6B00';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(midX - 25, midY - 12, 50, 24, 6);
+      ctx.roundRect(midX - tagWidth / 2, midY - tagHeight / 2, tagWidth, tagHeight, 5);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = isLight ? '#1D4ED8' : '#FFE600';
-      ctx.font = 'bold 11px "JetBrains Mono", monospace';
-      ctx.fillText('1 : N', midX, midY);
+      ctx.font = 'bold 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(relName, midX, midY);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
@@ -575,8 +900,8 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
             <span className="text-xs font-mono text-[var(--text-muted)]">Banco:</span>
             <select
               value={selectedDb}
-              onChange={(e) => setSelectedDb(e.target.value)}
-              className="bg-[var(--bg-secondary)] text-[var(--accent-yellow)] border border-[var(--border-color)] rounded px-2.5 py-1 text-xs font-mono font-semibold focus:outline-none focus:border-[#FF6B00]"
+              onChange={(e) => handleDbChange(e.target.value)}
+              className="bg-[var(--bg-secondary)] text-[var(--accent-yellow)] border border-[var(--border-color)] rounded px-2.5 py-1 text-xs font-mono font-semibold focus:outline-none focus:border-[#FF6B00] cursor-pointer"
             >
               {schemas.map(s => (
                 <option key={s.name} value={s.name}>
@@ -589,19 +914,24 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
           {/* Zoom In / Out / Reset */}
           <div className="flex items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded p-0.5">
             <button
-              onClick={() => setZoom(z => Math.max(30, z - 10))}
-              title="Diminuir Zoom"
+              onClick={() => setZoom(z => Math.max(25, z - 15))}
+              title="Diminuir Zoom (-)"
               className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px]">remove</span>
             </button>
-            <span className="px-2 text-[11px] font-mono text-[var(--text-secondary)] min-w-[42px] text-center">
-              {zoom}%
-            </span>
             <button
-              onClick={() => setZoom(z => Math.min(200, z + 10))}
-              title="Aumentar Zoom"
+              onClick={() => setZoom(100)}
+              title="Restaurar Zoom (100%)"
+              className="px-2 text-[11px] font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] min-w-[44px] text-center"
+              type="button"
+            >
+              {zoom}%
+            </button>
+            <button
+              onClick={() => setZoom(z => Math.min(250, z + 15))}
+              title="Aumentar Zoom (+)"
               className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded"
               type="button"
             >
@@ -609,9 +939,22 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
             </button>
           </div>
 
+          {/* Botão Reorganizar Layout (Anti-Cruzamento) */}
+          <button
+            onClick={() => applyAutoLayout()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Reorganizar automaticamente as tabelas sem cruzamento de linhas"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[16px] text-[#00E676]">
+              auto_awesome
+            </span>
+            <span>Reorganizar</span>
+          </button>
+
           {/* Botão Ajustar à Tela (Fit to View) */}
           <button
-            onClick={handleFitToView}
+            onClick={() => handleFitToView()}
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded text-xs font-semibold transition-all cursor-pointer shadow-sm"
             title="Ajustar todas as tabelas na tela ao mesmo tempo"
             type="button"
@@ -641,6 +984,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
         onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
         className="flex-1 w-full h-full overflow-hidden relative cursor-grab active:cursor-grabbing bg-[var(--bg-primary)]"
         style={{
           backgroundImage: 'radial-gradient(var(--border-color) 1px, transparent 1px)',
@@ -648,7 +992,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
         }}
       >
         <div
-          className="absolute inset-0 origin-top-left transition-transform duration-75"
+          className={`absolute inset-0 origin-top-left ${isPanning || draggingTable ? '' : 'transition-transform duration-100 ease-out'}`}
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`,
           }}
@@ -756,6 +1100,9 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
             }}
           >
             {relationships.map((rel, i) => {
+              const relKey = `${rel.fromTable}.${rel.fromCol}->${rel.toTable}.${rel.toCol}`;
+              const customMidX = lineOffsets[relKey];
+
               const fromPos = getTablePos(rel.fromTable);
               const toPos = getTablePos(rel.toTable);
 
@@ -768,148 +1115,136 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
               const fromY = fromPos.y + HEADER_HEIGHT + fromColIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
               const toY = toPos.y + HEADER_HEIGHT + toColIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-              let fromX: number;
-              let toX: number;
-              let cp1X: number;
-              let cp2X: number;
-              let isLeftToRight = true;
+              const r1Left = fromPos.x;
+              const r1Right = fromPos.x + TABLE_WIDTH;
+              const r2Left = toPos.x;
+              const r2Right = toPos.x + TABLE_WIDTH;
 
-              if (Math.abs(fromPos.x - toPos.x) < 60) {
-                fromX = fromPos.x + TABLE_WIDTH;
-                toX = toPos.x + TABLE_WIDTH;
-                const arc = 70;
-                cp1X = fromX + arc;
-                cp2X = toX + arc;
-                isLeftToRight = true;
-              } else if (fromPos.x < toPos.x) {
-                fromX = fromPos.x + TABLE_WIDTH;
-                toX = toPos.x;
-                const curvature = Math.max(45, Math.min(150, Math.abs(toX - fromX) * 0.45));
-                cp1X = fromX + curvature;
-                cp2X = toX - curvature;
-                isLeftToRight = true;
+              let fromSide: 'left' | 'right';
+              let toSide: 'left' | 'right';
+
+              // Alternância automática dinâmica de lado do relacionamento para não cruzar por cima da tabela
+              if (r1Right + 20 <= r2Left) {
+                // Tabela 1 está à esquerda da Tabela 2
+                fromSide = 'right';
+                toSide = 'left';
+              } else if (r2Right + 20 <= r1Left) {
+                // Tabela 1 está à direita da Tabela 2
+                fromSide = 'left';
+                toSide = 'right';
               } else {
-                fromX = fromPos.x;
-                toX = toPos.x + TABLE_WIDTH;
-                const curvature = Math.max(45, Math.min(150, Math.abs(fromX - toX) * 0.45));
-                cp1X = fromX - curvature;
-                cp2X = toX + curvature;
-                isLeftToRight = false;
+                // Tabelas sobrepostas no eixo horizontal ou na mesma coluna: contorna pelas margens externas
+                if (customMidX !== undefined && customMidX < Math.min(r1Left, r2Left)) {
+                  fromSide = 'left';
+                  toSide = 'left';
+                } else {
+                  fromSide = 'right';
+                  toSide = 'right';
+                }
               }
 
-              const midX = (fromX + toX) / 2 + (Math.abs(fromPos.x - toPos.x) < 60 ? 40 : 0);
-              const midY = (fromY + toY) / 2;
+              const fromX = fromSide === 'right' ? r1Right : r1Left;
+              const toX = toSide === 'right' ? r2Right : r2Left;
+
+              // Traçado ortogonal de linhas retas com quebras de 90° e cantos arredondados, respeitando os lados dinâmicos e ajustes manuais
+              const { path: orthogonalPath, midX, midY } = getOrthogonalPath(
+                fromX,
+                fromY,
+                toX,
+                toY,
+                8,
+                customMidX,
+                fromSide,
+                toSide
+              );
+
+              // Nome do relacionamento exibido no centro
+              const relName = `${rel.fromCol} ➔ ${rel.toTable}`;
+              const tagWidth = Math.max(90, relName.length * 7.5 + 24);
+              const tagHeight = 24;
 
               const isLightMode = document.documentElement.classList.contains('light');
               const strokeColor = isLightMode ? '#1D4ED8' : '#FFE600';
               const pkColor = isLightMode ? '#15803D' : '#00E676';
-              const pillBg = isLightMode ? '#FFFFFF' : '#1E222D';
+              const fkColor = '#FF8533';
+              const pillBg = isLightMode ? '#FFFFFF' : '#1A1D26';
               const pillBorder = isLightMode ? '#1D4ED8' : '#FF6B00';
+              const isDraggingThis = draggingLineKey === relKey;
 
               return (
                 <g key={`${rel.fromTable}-${rel.fromCol}-${rel.toTable}-${i}`}>
-                  {/* Linha de Conexão Curva Suave (Bézier Cúbica) */}
+                  {/* Área invisível mais ampla para facilitar o clique e arraste da linha de relacionamento */}
                   <path
-                    d={`M ${fromX} ${fromY} C ${cp1X} ${fromY}, ${cp2X} ${toY}, ${toX} ${toY}`}
+                    d={orthogonalPath}
                     fill="none"
-                    stroke={strokeColor}
-                    strokeWidth="3"
-                    strokeDasharray="8 5"
-                    opacity="0.95"
+                    stroke="transparent"
+                    strokeWidth="16"
+                    style={{ pointerEvents: 'stroke', cursor: 'ew-resize' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
+                  >
+                    <title>Arraste para reposicionar a rota desta linha</title>
+                  </path>
+
+                  {/* Linha Ortogonal 90° com Cantos Arredondados */}
+                  <path
+                    d={orthogonalPath}
+                    fill="none"
+                    stroke={isDraggingThis ? '#00E676' : strokeColor}
+                    strokeWidth={isDraggingThis ? "3.5" : "2.5"}
+                    opacity={isDraggingThis ? "1" : "0.95"}
+                    style={{ pointerEvents: 'stroke', cursor: 'ew-resize' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
                   />
 
-                  {/* Círculo de Ancoragem Lado FK */}
+                  {/* Marcador de Chave Estrangeira (Lado FK) */}
                   <circle
                     cx={fromX}
                     cy={fromY}
-                    r="5"
-                    fill="#FF3366"
+                    r="4.5"
+                    fill={fkColor}
                     stroke="#FFFFFF"
-                    strokeWidth="2"
+                    strokeWidth="1.5"
                   />
 
-                  {/* Círculo de Ancoragem Lado PK */}
+                  {/* Marcador de Chave Primária (Lado PK) */}
                   <circle
                     cx={toX}
                     cy={toY}
-                    r="5"
+                    r="4.5"
                     fill={pkColor}
                     stroke="#FFFFFF"
-                    strokeWidth="2"
+                    strokeWidth="1.5"
                   />
 
-                  {/* Cardinalidade: Lado FK (N) */}
-                  <g transform={`translate(${isLeftToRight ? fromX + 6 : fromX - 28}, ${fromY - 12})`}>
+                  {/* Etiqueta Central com o NOME DO RELACIONAMENTO (e NÃO cardinalidade) - Permite arrastar a linha */}
+                  <g
+                    transform={`translate(${midX - tagWidth / 2}, ${midY - tagHeight / 2})`}
+                    style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
+                    className="select-none"
+                  >
+                    <title>Arraste para reposicionar a linha de relacionamento</title>
                     <rect
                       x="0"
                       y="0"
-                      width="22"
-                      height="22"
-                      rx="5"
-                      fill="#FF3366"
-                      stroke="#FFFFFF"
-                      strokeWidth="1.5"
-                    />
-                    <text
-                      x="11"
-                      y="15"
-                      textAnchor="middle"
-                      fill="#FFFFFF"
-                      fontSize="12"
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                    >
-                      N
-                    </text>
-                  </g>
-
-                  {/* Cardinalidade: Lado PK (1) */}
-                  <g transform={`translate(${isLeftToRight ? toX - 28 : toX + 6}, ${toY - 12})`}>
-                    <rect
-                      x="0"
-                      y="0"
-                      width="22"
-                      height="22"
-                      rx="5"
-                      fill={pkColor}
-                      stroke="#FFFFFF"
-                      strokeWidth="1.5"
-                    />
-                    <text
-                      x="11"
-                      y="15"
-                      textAnchor="middle"
-                      fill="#FFFFFF"
-                      fontSize="12"
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                    >
-                      1
-                    </text>
-                  </g>
-
-                  {/* Tag Central com Cardinalidade 1:N */}
-                  <g transform={`translate(${midX - 35}, ${midY - 14})`}>
-                    <rect
-                      x="0"
-                      y="0"
-                      width="70"
-                      height="26"
-                      rx="7"
+                      width={tagWidth}
+                      height={tagHeight}
+                      rx="6"
                       fill={pillBg}
-                      stroke={pillBorder}
-                      strokeWidth="2"
+                      stroke={isDraggingThis ? '#00E676' : pillBorder}
+                      strokeWidth={isDraggingThis ? "2" : "1.5"}
+                      className="shadow-sm"
                     />
                     <text
-                      x="35"
-                      y="18"
+                      x={tagWidth / 2}
+                      y={tagHeight / 2 + 4}
                       textAnchor="middle"
-                      fill={strokeColor}
-                      fontSize="12"
-                      fontFamily="monospace"
+                      fill={isDraggingThis ? '#00E676' : strokeColor}
+                      fontSize="10"
+                      fontFamily="'JetBrains Mono', monospace"
                       fontWeight="bold"
                     >
-                      1 : N
+                      {relName}
                     </text>
                   </g>
                 </g>

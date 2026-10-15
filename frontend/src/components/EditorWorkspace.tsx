@@ -1,9 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
-import type { TabItem, ThemeMode, DatabaseSchema } from '../types';
+import type { TabItem, ThemeMode, FontTheme, DatabaseSchema } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
+import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 
 interface EditorWorkspaceProps {
   tabs: TabItem[];
@@ -22,6 +23,11 @@ interface EditorWorkspaceProps {
   onZoomOut: () => void;
   onZoomReset: () => void;
   theme: ThemeMode;
+  fontTheme: FontTheme;
+  onRenameTab: (id: string, newTitle: string) => void;
+  onExportScript?: () => void;
+  onToggleTheme?: () => void;
+  onToggleFontTheme?: () => void;
   schemas: DatabaseSchema[];
   activeDatabase: string;
   editorRefOut?: React.MutableRefObject<any>;
@@ -44,12 +50,110 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   onZoomOut,
   onZoomReset,
   theme,
+  fontTheme,
+  onRenameTab,
+  onExportScript,
+  onToggleTheme,
+  onToggleFontTheme,
   schemas,
   activeDatabase,
   editorRefOut,
 }) => {
   const editorRef = useRef<any>(null);
+  const monacoInstanceRef = useRef<any>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Estado e métodos para renomeação de abas (duplo clique ou F2)
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Menu de contexto suspenso customizado do Editor de Script (elimina 100% de itens indesejados)
+  const [editorContextMenu, setEditorContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+  }>({ visible: false, x: 0, y: 0 });
+  const editorContextMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenContextMenu = useCallback((clientX: number, clientY: number) => {
+    const x = Math.max(10, Math.min(clientX, window.innerWidth - 300));
+    const y = Math.max(10, Math.min(clientY, window.innerHeight - 240));
+    setEditorContextMenu({ visible: true, x, y });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setEditorContextMenu(prev => prev.visible ? { ...prev, visible: false } : prev);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (editorContextMenuRef.current && !editorContextMenuRef.current.contains(e.target as Node)) {
+        handleCloseContextMenu();
+      }
+    };
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleCloseContextMenu();
+      }
+    };
+    if (editorContextMenu.visible) {
+      window.addEventListener('mousedown', handleGlobalClick);
+      window.addEventListener('keydown', handleGlobalKey);
+      return () => {
+        window.removeEventListener('mousedown', handleGlobalClick);
+        window.removeEventListener('keydown', handleGlobalKey);
+      };
+    }
+  }, [editorContextMenu.visible, handleCloseContextMenu]);
+
+  const startRenaming = useCallback((tabId: string, currentTitle: string) => {
+    setEditingTabId(tabId);
+    setEditingTitle(currentTitle);
+  }, []);
+
+  const commitRename = useCallback(() => {
+    if (editingTabId) {
+      let trimmed = editingTitle.trim();
+      if (trimmed) {
+        const currentTab = tabs.find(t => t.id === editingTabId);
+        const originalExt = currentTab?.title && currentTab.title.includes('.')
+          ? currentTab.title.substring(currentTab.title.lastIndexOf('.'))
+          : '';
+        if (originalExt && !trimmed.includes('.')) {
+          trimmed = `${trimmed}${originalExt}`;
+        }
+        onRenameTab(editingTabId, trimmed);
+      }
+      setEditingTabId(null);
+    }
+  }, [editingTabId, editingTitle, onRenameTab, tabs]);
+
+  const cancelRename = useCallback(() => {
+    setEditingTabId(null);
+  }, []);
+
+  // Ao iniciar a renomeação, foca no input e seleciona somente o nome do arquivo, sem a extensão
+  useEffect(() => {
+    if (editingTabId && editInputRef.current) {
+      const input = editInputRef.current;
+      input.focus();
+      const dotIndex = input.value.lastIndexOf('.');
+      if (dotIndex > 0) {
+        input.setSelectionRange(0, dotIndex);
+      } else {
+        input.select();
+      }
+    }
+  }, [editingTabId]);
+
+  // Sincroniza dinamicamente o tema de sintaxe e cores no Monaco quando theme ou fontTheme mudam
+  useEffect(() => {
+    if (monacoInstanceRef.current) {
+      const themeId = getMonacoThemeName(theme, fontTheme);
+      monacoInstanceRef.current.editor.setTheme(themeId);
+    }
+  }, [theme, fontTheme]);
 
   interface TabViewState {
     viewState: any;
@@ -129,10 +233,54 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
+  // Exportar script da aba ativa como arquivo .sql para download
+  const handleExportCurrentScript = useCallback(() => {
+    const tabToExport = tabs.find(t => t.id === currentTabIdRef.current) || activeTab;
+    if (!tabToExport) return;
+    const content = editorRef.current ? editorRef.current.getValue() : tabToExport.content;
+    const rawTitle = tabToExport.title || 'script';
+    const filename = rawTitle.endsWith('.sql') ? rawTitle : `${rawTitle}.sql`;
+
+    const blob = new Blob([content || ''], { type: 'text/sql;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [tabs, activeTab]);
+
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoInstanceRef.current = monaco;
+    registerAllMonacoThemes(monaco);
+    monaco.editor.setTheme(getMonacoThemeName(theme, fontTheme));
+
     if (editorRefOut) {
       editorRefOut.current = editor;
+    }
+
+    // Atalho F2 dentro do editor Monaco para renomear o script ativo
+    editor.addCommand(monaco.KeyCode.F2, () => {
+      const targetId = currentTabIdRef.current;
+      const tabToRename = tabs.find(t => t.id === targetId) || activeTab;
+      if (tabToRename) {
+        startRenaming(tabToRename.id, tabToRename.title);
+      }
+    });
+
+    // Atalhos para alternar cores do tema e cores das letras direto do editor
+    if (onToggleTheme) {
+      editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyT, () => {
+        onToggleTheme();
+      });
+    }
+    if (onToggleFontTheme) {
+      editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyL, () => {
+        onToggleFontTheme();
+      });
     }
 
     // Monitora seleção e cursor em tempo real para preservar entre abas
@@ -212,95 +360,69 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       },
     });
 
-    // 3. Copiar trecho (Ctrl+C)
+    // 3. Exportar Script .sql (Ctrl+S) com tecla de atalho
     editor.addAction({
-      id: 'sql-copy-selection',
-      label: 'Copiar trecho (Ctrl+C)',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC],
-      contextMenuGroupId: '2_edit_actions',
-      contextMenuOrder: 1,
-      run: (ed) => {
-        const selection = ed.getSelection();
-        if (selection && !selection.isEmpty()) {
-          const text = ed.getModel()?.getValueInRange(selection);
-          if (text) {
-            navigator.clipboard.writeText(text);
-          }
-        }
-      },
-    });
-
-    // 4. Recortar trecho (Ctrl+X)
-    editor.addAction({
-      id: 'sql-cut-selection',
-      label: 'Recortar trecho (Ctrl+X)',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX],
-      contextMenuGroupId: '2_edit_actions',
-      contextMenuOrder: 2,
-      run: (ed) => {
-        const selection = ed.getSelection();
-        if (selection && !selection.isEmpty()) {
-          const text = ed.getModel()?.getValueInRange(selection);
-          if (text) {
-            navigator.clipboard.writeText(text);
-            ed.executeEdits('cut', [{ range: selection, text: '' }]);
-          }
-        }
-      },
-    });
-
-    // 5. Deletar trecho (Del)
-    editor.addAction({
-      id: 'sql-delete-selection',
-      label: 'Deletar trecho (Del)',
-      keybindings: [monaco.KeyCode.Delete],
-      contextMenuGroupId: '2_edit_actions',
+      id: 'sql-export-script',
+      label: 'Exportar Script .sql (Ctrl+S)',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 3,
-      run: (ed) => {
-        const selection = ed.getSelection();
-        if (selection && !selection.isEmpty()) {
-          ed.executeEdits('delete', [{ range: selection, text: '' }]);
+      run: () => {
+        if (onExportScript) {
+          onExportScript();
+        } else {
+          handleExportCurrentScript();
         }
       },
     });
 
-    // 6. Alterar todas as ocorrências com Localizar e Substituir (Ctrl+F2 / Ctrl+H)
+    // 4. Alterar todas as ocorrências (Substituir) (Ctrl+F2 / Ctrl+H)
     editor.addAction({
       id: 'sql-find-and-replace',
       label: 'Alterar todas as ocorrências (Substituir)',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, monaco.KeyMod.CtrlCmd | monaco.KeyCode.F2],
-      contextMenuGroupId: '2_edit_actions',
+      contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 4,
       run: (ed) => {
         ed.getAction('editor.action.startFindReplaceAction')?.run();
       },
     });
 
-    // Oculta a opção redundante em inglês 'Change All Occurrences', mantendo somente a nossa em português
-    const hideEnglishChangeAll = () => {
-      const actionItems = document.querySelectorAll('.monaco-menu .action-item');
-      actionItems.forEach(item => {
-        const label = item.querySelector('.action-label');
-        if (label && label.textContent && label.textContent.toLowerCase().includes('change all occurrences')) {
-          (item as HTMLElement).style.display = 'none';
+    // Ações de recortar/copiar/deletar via atalho permanecem ativas sem poluir o menu de contexto
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      const selection = editor.getSelection();
+      if (selection && !selection.isEmpty()) {
+        const text = editor.getModel()?.getValueInRange(selection);
+        if (text) navigator.clipboard.writeText(text);
+      }
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+      const selection = editor.getSelection();
+      if (selection && !selection.isEmpty()) {
+        const text = editor.getModel()?.getValueInRange(selection);
+        if (text) {
+          navigator.clipboard.writeText(text);
+          editor.executeEdits('cut', [{ range: selection, text: '' }]);
         }
-      });
-    };
+      }
+    });
+
+    // Intercepta e abre o menu de contexto customizado, garantindo 0 opções indesejadas
+    editor.onContextMenu((e: any) => {
+      e.event?.preventDefault();
+      e.event?.stopPropagation();
+      handleOpenContextMenu(e.event?.posx || 120, e.event?.posy || 120);
+    });
 
     const domNode = editor.getDomNode();
     if (domNode) {
-      domNode.addEventListener('contextmenu', () => {
-        setTimeout(hideEnglishChangeAll, 10);
-        setTimeout(hideEnglishChangeAll, 50);
-        setTimeout(hideEnglishChangeAll, 150);
-      });
+      domNode.addEventListener('contextmenu', (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleOpenContextMenu(e.clientX, e.clientY);
+      }, true);
     }
-
-    // Observer para garantir que qualquer abertura de menu filtre o item em inglês
-    const observer = new MutationObserver(() => {
-      hideEnglishChangeAll();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
 
     // Provedor de autocompletar dinâmico estrito ao BANCO ATIVO e com filtro pelo INÍCIO digitado
     monaco.languages.registerCompletionItemProvider('sql', {
@@ -438,25 +560,55 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         >
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
+            const isEditing = tab.id === editingTabId;
             return (
               <div
                 key={tab.id}
                 onClick={() => {
-                  saveCurrentTabState();
-                  onSelectTab(tab.id);
+                  if (!isEditing) {
+                    saveCurrentTabState();
+                    onSelectTab(tab.id);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  startRenaming(tab.id, tab.title);
                 }}
                 className={`group h-8 px-3 flex items-center gap-2 text-xs font-mono cursor-pointer border-r border-[var(--border-color)] transition-colors shrink-0 ${
                   isActive
                     ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] border-t-2 border-t-[var(--accent-yellow)] font-semibold'
                     : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
-                title={tab.title}
+                title={isEditing ? 'Pressione Enter para salvar, Esc para cancelar' : `${tab.title} (Duplo clique ou F2 para renomear)`}
               >
                 <span className="material-symbols-outlined text-[13px] text-[#FF8533]">
                   description
                 </span>
-                <span className="truncate max-w-[120px]">{tab.title}</span>
-                {tabs.length > 1 && (
+                {isEditing ? (
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        commitRename();
+                      } else if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        cancelRename();
+                      }
+                    }}
+                    onBlur={commitRename}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-28 px-1.5 py-0.5 text-xs font-mono bg-[var(--bg-primary)] text-[var(--accent-yellow)] border border-[#FF6B00] rounded outline-none shadow-[0_0_8px_rgba(255,107,0,0.3)]"
+                  />
+                ) : (
+                  <span className="truncate max-w-[140px] select-none">{tab.title}</span>
+                )}
+                {!isEditing && tabs.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -533,11 +685,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           <Editor
             height="100%"
             language="sql"
-            theme={theme === 'dark' ? 'vs-dark' : 'light'}
+            theme={getMonacoThemeName(theme, fontTheme)}
+            beforeMount={(monaco) => {
+              monacoInstanceRef.current = monaco;
+              registerAllMonacoThemes(monaco);
+            }}
             value={activeTab.content}
             onChange={(val) => onUpdateContent(activeTab.id, val || '')}
             onMount={handleEditorDidMount}
             options={{
+              contextmenu: false,
               fontSize: currentFontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
               fontLigatures: true,
@@ -558,6 +715,135 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         ) : (
           <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs">
             Nenhuma aba aberta. Clique em + para criar uma nova aba.
+          </div>
+        )}
+
+        {/* Menu Suspenso Customizado do Editor (100% livre de opções indesejadas) */}
+        {editorContextMenu.visible && (
+          <div
+            ref={editorContextMenuRef}
+            style={{
+              position: 'fixed',
+              left: `${editorContextMenu.x}px`,
+              top: `${editorContextMenu.y}px`,
+              zIndex: 999999,
+            }}
+            className="w-72 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-[0_12px_36px_rgba(0,0,0,0.45)] py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+          >
+            <div className="px-3 py-1 text-[10px] font-mono text-[var(--accent-yellow)] uppercase tracking-wider border-b border-[var(--border-color)] flex items-center justify-between font-semibold">
+              <span>Opções do Script</span>
+              <span className="text-[9px] text-[var(--text-muted)] font-normal">SQL Editor</span>
+            </div>
+
+            {/* 1. Executar esse trecho (Alt+E) */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                const ed = editorRef.current;
+                if (ed) {
+                  const sel = ed.getSelection();
+                  if (sel && !sel.isEmpty()) {
+                    const text = ed.getModel()?.getValueInRange(sel);
+                    if (text && text.trim()) {
+                      onRunSnippet(text.trim());
+                      return;
+                    }
+                  }
+                }
+                onRunQuery();
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
+                  play_arrow
+                </span>
+                <span className="font-medium">Executar esse trecho</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">
+                Alt+E
+              </kbd>
+            </button>
+
+            {/* 2. Revisar trecho (Alt+R) */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                const ed = editorRef.current;
+                let toReview = '';
+                if (ed) {
+                  const sel = ed.getSelection();
+                  if (sel && !sel.isEmpty()) {
+                    toReview = ed.getModel()?.getValueInRange(sel) || '';
+                  }
+                  if (!toReview.trim()) {
+                    toReview = ed.getValue();
+                  }
+                }
+                if (toReview.trim()) {
+                  onReviewSnippet(toReview.trim());
+                }
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--accent-yellow)] group-hover:scale-110 transition-transform">
+                  auto_fix_high
+                </span>
+                <span className="font-medium">Revisar trecho</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">
+                Alt+R
+              </kbd>
+            </button>
+
+            <div className="h-px bg-[var(--border-color)] my-1" />
+
+            {/* 3. Exportar Script .sql (Ctrl+S) */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                if (onExportScript) {
+                  onExportScript();
+                } else {
+                  handleExportCurrentScript();
+                }
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[#00E676] group-hover:scale-110 transition-transform">
+                  download
+                </span>
+                <span className="font-medium">Exportar Script .sql</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-orange)]">
+                Ctrl+S
+              </kbd>
+            </button>
+
+            {/* 4. Alterar todas as ocorrências (Substituir) (Ctrl+F2) */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                editorRef.current?.getAction('editor.action.startFindReplaceAction')?.run();
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[#29B6F6] group-hover:scale-110 transition-transform">
+                  find_replace
+                </span>
+                <span className="font-medium">Alterar todas as ocorrências (Substituir)</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[#29B6F6]">
+                Ctrl+F2
+              </kbd>
+            </button>
           </div>
         )}
       </div>

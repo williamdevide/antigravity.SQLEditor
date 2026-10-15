@@ -1,16 +1,30 @@
 import React, { useState } from 'react';
 import { dbEngine } from '../services/dbEngine';
+import {
+  THEME_OPTIONS,
+  FONT_THEME_OPTIONS,
+  type ThemeMode,
+  type FontTheme,
+} from '../types';
 
 interface SettingsViewProps {
   onResetDb: () => void;
   onRefreshSchemas: () => void;
   onImportSqlSuccess: (sql: string) => void;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+  fontTheme: FontTheme;
+  onFontThemeChange: (fontTheme: FontTheme) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onResetDb,
   onRefreshSchemas,
   onImportSqlSuccess,
+  theme,
+  onThemeChange,
+  fontTheme,
+  onFontThemeChange,
 }) => {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [hideDbo, setHideDbo] = useState<boolean>(() => dbEngine.isHidingSystemDatabases());
@@ -87,6 +101,157 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
+        {/* Seção Temas 1: Cores do Tema (Interface e Fundo) */}
+        <div className="col-span-1 md:col-span-2 p-5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[var(--accent-yellow)] font-semibold text-sm">
+              <span className="material-symbols-outlined text-[20px]">palette</span>
+              <h3>Cores do Tema (Interface & Ambiente)</h3>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-color)]">
+              Tema ativo: <strong className="text-[var(--accent-yellow)]">{THEME_OPTIONS.find(t => t.id === theme)?.name}</strong>
+            </span>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Escolha o esquema de cores base da interface. O tema <strong>Bege Conforto</strong> foi desenvolvido especialmente para reduzir a fadiga ocular em sessões prolongadas de estudo e programação, enquanto o <strong>Grafite Titânio</strong> oferece uma alternativa suave ao escuro total.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            {THEME_OPTIONS.map((t) => {
+              const isSelected = theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => onThemeChange(t.id)}
+                  type="button"
+                  className={`p-3.5 rounded-lg text-left transition-all cursor-pointer border flex flex-col justify-between relative group ${
+                    isSelected
+                      ? 'border-[#FF6B00] bg-[var(--bg-surface)] shadow-[0_0_12px_rgba(255,107,0,0.25)] ring-1 ring-[#FF6B00]'
+                      : 'border-[var(--border-color)] bg-[var(--bg-surface)]/60 hover:bg-[var(--bg-surface)] hover:border-[var(--accent-yellow)]/60'
+                  }`}
+                >
+                  <div>
+                    {/* Badge de Seleção */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-4 h-4 rounded-full border border-black/20 shadow-inner flex items-center justify-center text-[10px]"
+                          style={{ backgroundColor: t.bgPreview }}
+                        />
+                        <div
+                          className="w-4 h-4 rounded-full border border-black/20 shadow-inner -ml-2.5"
+                          style={{ backgroundColor: t.surfacePreview }}
+                        />
+                      </div>
+                      {isSelected ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FF6B00] text-white flex items-center gap-0.5">
+                          ✓ Ativo
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">
+                          Selecionar
+                        </span>
+                      )}
+                    </div>
+
+                    <h4 className="text-xs font-bold text-[var(--text-primary)] mb-1">
+                      {t.name}
+                    </h4>
+                    <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                      {t.description}
+                    </p>
+                  </div>
+
+                  {/* Amostra visual de layout */}
+                  <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]/60 flex items-center gap-1.5">
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">Prévia:</span>
+                    <div
+                      className="flex-1 h-3.5 rounded border border-black/20 flex items-center px-1 text-[9px] font-mono"
+                      style={{ backgroundColor: t.bgPreview, color: t.id === 'light' || t.id === 'beige' ? '#111827' : '#F0F4F8' }}
+                    >
+                      SELECT *
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Seção Temas 2: Cores das Letras (Tipografia e Acentos) */}
+        <div className="col-span-1 md:col-span-2 p-5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[var(--accent-yellow)] font-semibold text-sm">
+              <span className="material-symbols-outlined text-[20px]">format_color_text</span>
+              <h3>Cores das Letras (Tipografia & Acentos de Destaque)</h3>
+            </div>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-color)]">
+              Letras ativas: <strong className="text-[var(--accent-yellow)]">{FONT_THEME_OPTIONS.find(f => f.id === fontTheme)?.name}</strong>
+            </span>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)]">
+            Personalize a paleta de realce de texto, palavras-chave e efeitos de brilho em toda a IDE. Funciona harmoniosamente em todos os modos de tema.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            {FONT_THEME_OPTIONS.map((f) => {
+              const isSelected = fontTheme === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => onFontThemeChange(f.id)}
+                  type="button"
+                  className={`p-3.5 rounded-lg text-left transition-all cursor-pointer border flex flex-col justify-between relative group ${
+                    isSelected
+                      ? 'border-[#FF6B00] bg-[var(--bg-surface)] shadow-[0_0_12px_rgba(255,107,0,0.25)] ring-1 ring-[#FF6B00]'
+                      : 'border-[var(--border-color)] bg-[var(--bg-surface)]/60 hover:bg-[var(--bg-surface)] hover:border-[var(--accent-yellow)]/60'
+                  }`}
+                >
+                  <div>
+                    {/* Badge de Seleção */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-4 h-4 rounded-full border border-black/20 shadow-md flex items-center justify-center text-[10px]"
+                          style={{ backgroundColor: f.accentPreview }}
+                        />
+                        <div
+                          className="w-4 h-4 rounded-full border border-black/20 shadow-md -ml-2.5"
+                          style={{ backgroundColor: f.secondaryPreview }}
+                        />
+                      </div>
+                      {isSelected ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FF6B00] text-white flex items-center gap-0.5">
+                          ✓ Ativo
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[var(--text-muted)] group-hover:text-[var(--text-primary)]">
+                          Selecionar
+                        </span>
+                      )}
+                    </div>
+
+                    <h4 className="text-xs font-bold text-[var(--text-primary)] mb-1">
+                      {f.name}
+                    </h4>
+                    <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                      {f.description}
+                    </p>
+                  </div>
+
+                  {/* Amostra visual de tipografia */}
+                  <div className="mt-3 pt-2.5 border-t border-[var(--border-color)]/60 flex items-center gap-1.5">
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">Texto:</span>
+                    <div className="flex items-center gap-1 text-[11px] font-mono font-bold">
+                      <span style={{ color: f.accentPreview }}>SELECT</span>
+                      <span style={{ color: f.secondaryPreview }}>COUNT(*)</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {/* Card 1: Backup e Exportação */}
         <div className="p-5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-4 shadow-sm">
           <div className="flex items-center gap-2 text-[var(--accent-yellow)] font-semibold text-sm">
@@ -208,6 +373,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="space-y-2 text-[var(--text-primary)]">
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--border-color)]">
+              <span className="text-[var(--text-secondary)]">Alternar Cores do Tema</span>
+              <kbd className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--accent-orange)] font-bold">Alt + T</kbd>
+            </div>
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--border-color)]">
+              <span className="text-[var(--text-secondary)]">Alternar Cores das Letras</span>
+              <kbd className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--accent-yellow)] font-bold">Alt + L</kbd>
+            </div>
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--border-color)]">
+              <span className="text-[var(--text-secondary)]">Renomear Script da Aba</span>
+              <kbd className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[#29B6F6] font-bold">F2 / Duplo clique</kbd>
+            </div>
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--border-color)]">
+              <span className="text-[var(--text-secondary)]">Exportar Script .sql</span>
+              <kbd className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--accent-orange)] font-bold">Ctrl + S</kbd>
+            </div>
             <div className="flex items-center justify-between pb-1 border-b border-[var(--border-color)]">
               <span className="text-[var(--text-secondary)]">Executar Script SQL</span>
               <kbd className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--accent-yellow)] font-bold">Ctrl + Enter</kbd>
