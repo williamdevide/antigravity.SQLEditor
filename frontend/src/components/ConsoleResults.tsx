@@ -17,6 +17,7 @@ interface ConsoleResultsProps {
   onRefreshTablePreview?: () => void;
   schemas?: DatabaseSchema[];
   onSelectPreviewTable?: (dbName: string, tableName: string) => void;
+  onReviewSnippet?: (snippet: string, errorMessage?: string) => void;
 }
 
 export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
@@ -34,6 +35,7 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
   onRefreshTablePreview,
   schemas = [],
   onSelectPreviewTable,
+  onReviewSnippet,
 }) => {
   const [internalTab, setInternalTab] = useState<ConsoleTab>('data');
   
@@ -671,6 +673,25 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
                         </span>
                         <span>{copiedLogIndex === i ? 'Copiado!' : res.status === 'error' ? 'Copiar Erro' : 'Copiar'}</span>
                       </button>
+
+                      {/* Botão Revisar SQL quando houver erro */}
+                      {res.status === 'error' && onReviewSnippet && (
+                        <button
+                          onClick={() => {
+                            onReviewSnippet(res.statement, res.errorMessage);
+                            setTab('review');
+                          }}
+                          title="Revisar este trecho com erro na aba Revisão SQL"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-[#FF8533]/20 hover:bg-[#FF8533]/35 text-[#FF8533] border border-[#FF8533]/40 shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+                          type="button"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">
+                            fact_check
+                          </span>
+                          <span>Revisar SQL</span>
+                        </button>
+                      )}
+
                       <span>{res.executionTimeMs} ms</span>
                       <span
                         className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${

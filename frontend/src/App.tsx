@@ -381,10 +381,10 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, activeDatabase]);
 
-  // Revisar trecho selecionado (Alt+R)
-  const handleReviewSnippet = useCallback((snippet: string) => {
+  // Revisar trecho selecionado (Alt+R) ou comando com erro no log
+  const handleReviewSnippet = useCallback((snippet: string, runtimeError?: string) => {
     if (!snippet.trim()) return;
-    const rev = reviewSqlQuery(snippet, activeDatabase, schemas);
+    const rev = reviewSqlQuery(snippet, activeDatabase, schemas, runtimeError);
     setSqlReview(rev);
     setActiveConsoleTab('review');
   }, [activeDatabase, schemas]);
@@ -431,9 +431,9 @@ export const App: React.FC = () => {
     }
   }, [tabs.length, activeDatabase, activeView]);
 
-  // Criar Aba em Branco (via dropdown)
+  // Criar Aba em Branco (via dropdown ou botão + na barra de abas)
   const handleNewBlankTab = useCallback(() => {
-    handleNewTab();
+    handleNewTab('');
   }, [handleNewTab]);
 
   // Carregar Solução (via dropdown)
@@ -834,6 +834,7 @@ export const App: React.FC = () => {
                     onRefreshTablePreview={handleRefreshTablePreview}
                     schemas={schemas}
                     onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
+                    onReviewSnippet={handleReviewSnippet}
                   />
                 </div>
               </>
@@ -892,6 +893,7 @@ export const App: React.FC = () => {
                   onRefreshTablePreview={handleRefreshTablePreview}
                   schemas={schemas}
                   onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
+                  onReviewSnippet={handleReviewSnippet}
                 />
               </div>
             ) : (

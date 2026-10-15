@@ -15,11 +15,16 @@ const SQL_CLAUSE_KEYWORDS = new Set([
 export function reviewSqlQuery(
   query: string,
   activeDatabase: string,
-  schemas: DatabaseSchema[]
+  schemas: DatabaseSchema[],
+  runtimeError?: string
 ): SqlReview {
   const trimmed = query.trim();
   const errorsDetected: string[] = [];
   const recommendations: string[] = [];
+
+  if (runtimeError) {
+    errorsDetected.push(`Erro de Execução: ${runtimeError}`);
+  }
 
   if (!trimmed) {
     return {

@@ -610,3 +610,44 @@ corrija.`
      - `db_rh`: 500 funcionários (corrigido!).
    - Compilação do frontend validada com `npm run build` (**0 erros** de TypeScript e Vite).
 
+---
+
+## 📌 Prompt 25
+**Data:** 14/10/2026 - 20:46  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal pequenas correções o botão + na linha das abas de scripts não está criando novas abas vazias corretamente. corrija.  
+> se eu digito um comando em uma aba e seleciono esse comando, em seguida clico em nova aba e depois volto a aba onde havia selecionado o comando, aquele comando não esta mais selecionado.  
+> no log de execução quando existir um erro, alem do botão Copiar Erro quero também um botão Revisar SQL que já te joga para a aba Revisão SQL executando a revisão desse trecho.
+
+### 🎯 Diagnóstico e Ações Executadas:
+1. **Correção do Botão `+` na Barra de Abas de Scripts e Criação de Abas Vazias:**
+   - **Diagnóstico da Causa Raiz:** Anteriormente, o botão `+` acionava apenas o menu suspenso `NewTabDropdown`. Como o contêiner das abas possuía `overflow-x-auto` e altura restrita (`h-9`), o menu dropdown ficava oculto/cortado pelo overflow do CSS, aparentando que o botão não funcionava. Além disso, a função `handleNewBlankTab` não passava conteúdo inicial, inserindo comentários e o comando `USE <banco>` por padrão em vez de criar uma aba verdadeiramente limpa/vazia.
+   - **Soluções Implementadas:**
+     - Separado o botão `+` em um acionador direto na linha de abas: ao clicar no `+`, uma nova aba 100% vazia (`content: ''`) é criada imediatamente.
+     - Ao lado do `+`, disponibilizado um gatilho discreto com ícone de seta (`▾`) permitindo abrir o submenu de opções (como "Carregar Soluções").
+     - Refatorado o [NewTabDropdown.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/NewTabDropdown.tsx) para utilizar `createPortal(..., document.body)` com cálculo dinâmico de coordenadas fixas (`position: fixed`), eliminando qualquer risco de corte visual por contêineres pais com `overflow: hidden` ou `overflow-x: auto`.
+     - Atualizado `handleNewBlankTab` em [App.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/App.tsx) para sempre gerar a aba com `content: ''` (limpa e vazia).
+
+2. **Preservação Contínua da Seleção e do Estado do Editor ao Alternar entre Abas:**
+   - **Diagnóstico da Causa Raiz:** O Monaco Editor, por padrão, ao receber novo `value` na troca de abas, reseta o cursor para a linha 1 coluna 1 e descarta qualquer seleção ativa (`selection`).
+   - **Soluções Implementadas:**
+     - Criado o mapa reativo `tabStatesRef` em [EditorWorkspace.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/EditorWorkspace.tsx) para rastrear o `viewState` (posição de scroll, dobras, etc.) e a `selection` (`startLineNumber`, `startColumn`, `endLineNumber`, `endColumn`) de forma independente para cada aba aberta.
+     - Implementados ouvintes em tempo real `editor.onDidChangeCursorSelection` e `editor.onDidScrollChange` no Monaco Editor, atualizando continuamente o estado da aba ativa.
+     - Criada a função `saveCurrentTabState()` acionada preventivamente antes de qualquer clique de troca, fechamento ou criação de abas.
+     - Configurado `useEffect` em `activeTabId`: ao alternar ou retornar a qualquer aba, o estado e a seleção prévia são restaurados deterministicamente via `editor.restoreViewState(saved.viewState)`, `editor.setSelection(saved.selection)`, `editor.revealRangeInCenterIfOutsideViewport(saved.selection)` e foco com `editor.focus()`.
+     - Resultado: comandos selecionados permanecem perfeitamente selecionados e visíveis mesmo após navegar por múltiplas outras abas.
+
+3. **Botão "Revisar SQL" no Log de Execução para Comandos com Erro:**
+   - **Implementação em [ConsoleResults.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/ConsoleResults.tsx):** Adicionado o botão **"Revisar SQL"** (com ícone `fact_check` e realce âmbar/laranja `#FF8533`) imediatamente ao lado do botão "Copiar Erro" em cada item do Log de Execução com status `'error'`.
+   - **Fluxo Integrado em [App.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/App.tsx) e [sqlReviewer.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/services/sqlReviewer.ts):**
+     - Atualizada a função `reviewSqlQuery` para receber o parâmetro opcional `runtimeError?: string`, registrando o erro retornado pelo motor AlaSQL com destaque imediato no diagnóstico.
+     - Ao clicar em "Revisar SQL":
+       1. Executa a análise e diagnóstico sintático/semântico do comando que falhou.
+       2. Alterna automaticamente a visualização do console para a aba **"Revisão SQL"** (`setTab('review')`).
+       3. Apresenta o comando original, o erro de execução, as recomendações de boas práticas e a consulta sugerida pronta para ser aplicada de volta ao editor com o botão "Aplicar no Editor".
+
+4. **Validação de Build e Qualidade:**
+   - Executado `npm run build` com sucesso absoluto (**0 erros** de compilação em TypeScript e Vite).
+   - Executado `npm run lint` (**0 erros** de linter).
+
+

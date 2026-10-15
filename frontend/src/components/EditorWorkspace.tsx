@@ -51,6 +51,68 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const editorRef = useRef<any>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
 
+  interface TabViewState {
+    viewState: any;
+    selection: {
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+    } | null;
+  }
+
+  // Mapa de ViewState e Seleção por aba para preservar a seleção ao alternar entre abas
+  const tabStatesRef = useRef<Record<string, TabViewState>>({});
+  const currentTabIdRef = useRef<string>(activeTabId);
+  currentTabIdRef.current = activeTabId;
+
+  // Salva o ViewState e Seleção da aba ativa atual
+  const saveCurrentTabState = () => {
+    const currentId = currentTabIdRef.current;
+    const editor = editorRef.current;
+    if (currentId && editor) {
+      try {
+        const viewState = editor.saveViewState();
+        const selection = editor.getSelection();
+        tabStatesRef.current[currentId] = {
+          viewState,
+          selection: selection && !selection.isEmpty() ? {
+            startLineNumber: selection.startLineNumber,
+            startColumn: selection.startColumn,
+            endLineNumber: selection.endLineNumber,
+            endColumn: selection.endColumn,
+          } : null,
+        };
+      } catch (_) {}
+    }
+  };
+
+  // Restaura ViewState e Seleção ao trocar de aba ativa
+  useEffect(() => {
+    const targetId = activeTabId;
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const saved = tabStatesRef.current[targetId];
+    if (saved) {
+      const timer = setTimeout(() => {
+        if (editorRef.current && currentTabIdRef.current === targetId) {
+          try {
+            if (saved.viewState) {
+              editorRef.current.restoreViewState(saved.viewState);
+            }
+            if (saved.selection) {
+              editorRef.current.setSelection(saved.selection);
+              editorRef.current.revealRangeInCenterIfOutsideViewport(saved.selection);
+            }
+            editorRef.current.focus();
+          } catch (_) {}
+        }
+      }, 35);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTabId]);
+
   // Rola automaticamente a barra de abas até o final (exibindo a última aba e o botão +)
   useEffect(() => {
     if (tabsContainerRef.current) {
@@ -72,6 +134,40 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     if (editorRefOut) {
       editorRefOut.current = editor;
     }
+
+    // Monitora seleção e cursor em tempo real para preservar entre abas
+    editor.onDidChangeCursorSelection((e) => {
+      const currentId = currentTabIdRef.current;
+      if (currentId && editorRef.current) {
+        try {
+          const viewState = editorRef.current.saveViewState();
+          const sel = e.selection;
+          tabStatesRef.current[currentId] = {
+            viewState,
+            selection: sel && !sel.isEmpty() ? {
+              startLineNumber: sel.startLineNumber,
+              startColumn: sel.startColumn,
+              endLineNumber: sel.endLineNumber,
+              endColumn: sel.endColumn,
+            } : null,
+          };
+        } catch (_) {}
+      }
+    });
+
+    editor.onDidScrollChange(() => {
+      const currentId = currentTabIdRef.current;
+      if (currentId && editorRef.current) {
+        try {
+          const viewState = editorRef.current.saveViewState();
+          if (!tabStatesRef.current[currentId]) {
+            tabStatesRef.current[currentId] = { viewState, selection: null };
+          } else {
+            tabStatesRef.current[currentId].viewState = viewState;
+          }
+        } catch (_) {}
+      }
+    });
 
     // Atalho global do editor: Ctrl+Enter / Cmd+Enter (Executar tudo)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
@@ -345,7 +441,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             return (
               <div
                 key={tab.id}
-                onClick={() => onSelectTab(tab.id)}
+                onClick={() => {
+                  saveCurrentTabState();
+                  onSelectTab(tab.id);
+                }}
                 className={`group h-8 px-3 flex items-center gap-2 text-xs font-mono cursor-pointer border-r border-[var(--border-color)] transition-colors shrink-0 ${
                   isActive
                     ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] border-t-2 border-t-[var(--accent-yellow)] font-semibold'
@@ -361,6 +460,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      saveCurrentTabState();
+                      delete tabStatesRef.current[tab.id];
                       onCloseTab(tab.id);
                     }}
                     title="Fechar Aba"
@@ -374,25 +475,45 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             );
           })}
 
-          {/* Botão de Adicionar Aba com Menu Suspenso */}
-          <NewTabDropdown
-            onNewBlankTab={onNewBlankTab}
-            onSelectSolution={onOpenSolution}
-            solutions={solutions}
-            align="left"
-            triggerButton={({ isOpen, toggle }) => (
-              <button
-                onClick={toggle}
-                title="Nova Aba ou Carregar Solução"
-                className={`w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors ml-1 cursor-pointer shrink-0 ${
-                  isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)] shadow-sm' : ''
-                }`}
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[15px]">add</span>
-              </button>
-            )}
-          />
+          {/* Botão de Adicionar Aba em Branco Direto (+) com Menu Suspenso de Soluções */}
+          <div className="flex items-center ml-1 shrink-0 bg-[var(--bg-secondary)] rounded border border-[var(--border-color)]/60 p-0.5 shadow-sm">
+            <button
+              onClick={() => {
+                saveCurrentTabState();
+                onNewBlankTab();
+              }}
+              title="Nova Aba em Branco (+)"
+              className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+            </button>
+
+            <NewTabDropdown
+              onNewBlankTab={() => {
+                saveCurrentTabState();
+                onNewBlankTab();
+              }}
+              onSelectSolution={(sol) => {
+                saveCurrentTabState();
+                onOpenSolution(sol);
+              }}
+              solutions={solutions}
+              align="left"
+              triggerButton={({ isOpen, toggle }) => (
+                <button
+                  onClick={toggle}
+                  title="Mais Opções (Carregar Soluções)"
+                  className={`w-4 h-6 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer ${
+                    isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)]' : ''
+                  }`}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[13px]">arrow_drop_down</span>
+                </button>
+              )}
+            />
+          </div>
         </div>
 
         {/* Zoom do Editor */}

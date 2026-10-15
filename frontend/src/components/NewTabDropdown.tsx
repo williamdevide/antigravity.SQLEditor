@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { SolutionItem } from '../services/scriptsLoader';
 
 interface NewTabDropdownProps {
@@ -21,12 +22,32 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSolutionsSubmenuOpen, setIsSolutionsSubmenuOpen] = useState(false);
+  const [menuCoords, setMenuCoords] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updatePosition = () => {
+    if (dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const top = rect.bottom + 4;
+      let left = align === 'right' ? rect.right - 210 : rect.left;
+      // Garante limites na tela
+      if (left < 8) left = 8;
+      if (left + 220 > window.innerWidth) left = Math.max(8, window.innerWidth - 225);
+      setMenuCoords({ top, left });
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setIsOpen(false);
         setIsSolutionsSubmenuOpen(false);
       }
@@ -40,18 +61,26 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
     };
 
     if (isOpen) {
+      updatePosition();
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
   }, [isOpen]);
 
   const toggleDropdown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isOpen) {
+      updatePosition();
+    }
     setIsOpen(prev => !prev);
     setIsSolutionsSubmenuOpen(false);
   };
@@ -86,11 +115,16 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
     <div className="relative inline-block text-left" ref={dropdownRef}>
       {triggerButton({ isOpen, toggle: toggleDropdown })}
 
-      {isOpen && (
+      {isOpen && menuCoords && createPortal(
         <div
-          className={`absolute z-50 mt-1 min-w-[210px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: `${menuCoords.top}px`,
+            left: `${menuCoords.left}px`,
+            zIndex: 99999,
+          }}
+          className="min-w-[210px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
         >
           {/* Opção 1: Criar aba em branco */}
           <button
@@ -183,7 +217,8 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
