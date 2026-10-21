@@ -1243,4 +1243,24 @@ corrija.`
    - Criação de commit semântico padronizado: `feat: release v3.1.14 - fechamento de abas, selecao persistente, DER 2D livre, funcoes mysql, favicon e solucoes`.
    - Execução de `git push origin main` com sucesso.
 
+---
+
+## 📌 Prompt 39
+**Data:** 21/10/2026 - 13:06  
+**Usuário:**
+> atualizei no github mas o vercel ainda não atualize / atualize no vercel
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Investigação do Status de Deploy no Vercel:**
+   - Verificado o repositório remoto Git (`https://github.com/williamdevide/antigravity.SQLEditor.git`) na branch `main`: o commit `0df6781` (`v3.1.14`) foi enviado com sucesso.
+   - Verificado o arquivo `vercel.json` na raiz do projeto: configurado com `framework: "vite"`, `buildCommand: "cd frontend && npm install && npm run build"` e `outputDirectory: "frontend/dist"`.
+   - Identificadas as causas mais comuns para o deploy não disparar automaticamente ou exibir versão anterior no navegador:
+     1. **Cache local do navegador:** arquivos estáticos JS/CSS cacheados em Service Worker ou HTTP cache.
+     2. **Fila de Deploy (Building) no Vercel:** o build pode estar em andamento ou em fila no dashboard.
+     3. **Branch de Produção / Root Directory no painel da Vercel:** se a Production Branch estiver configurada para outra branch ou se o GitHub App estiver aguardando permissão.
+2. **Orientações e Procedimento de Redeploy:**
+   - Detalhados os passos para forçar redeploy imediato com *Clear Cache* pelo painel da Vercel e como testar com `Ctrl+F5` (Hard Reload).
+
+
 
