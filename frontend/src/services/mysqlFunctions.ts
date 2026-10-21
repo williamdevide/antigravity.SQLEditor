@@ -79,19 +79,42 @@ export function formatMySQLDate(dateVal: any, formatStr?: string): string {
 export const KNOWN_SQL_FUNCTIONS = new Set<string>([
   // AlaSQL Nativas
   'count', 'sum', 'avg', 'min', 'max', 'first', 'last',
-  'upper', 'lower', 'ucase', 'lcase', 'length', 'len', 'mid', 'substring',
-  'round', 'floor', 'ceil', 'abs', 'coalesce', 'nullif', 'concat',
+  'upper', 'lower', 'ucase', 'lcase', 'length', 'len', 'char_length', 'character_length', 'mid', 'substring', 'substr',
+  'round', 'floor', 'ceil', 'ceiling', 'abs', 'coalesce', 'nullif', 'concat', 'concat_ws',
   // MySQL Registradas
   'date_format', 'now', 'curdate', 'current_date', 'curtime', 'current_time',
-  'datediff', 'year', 'month', 'day', 'hour', 'minute', 'second',
-  'ifnull', 'concat_ws', 'str_to_date'
+  'datediff', 'timediff', 'year', 'month', 'day', 'hour', 'minute', 'second',
+  'ifnull', 'str_to_date', 'trim', 'ltrim', 'rtrim', 'reverse', 'lpad', 'rpad',
+  'mod', 'dayname', 'monthname', 'dayofweek', 'weekday', 'dayofyear', 'week', 'quarter',
+  'left', 'right', 'replace'
 ]);
+
+/**
+ * Pré-processa uma instrução SQL para traduzir funções MySQL incompatíveis com o parser rígido do AlaSQL
+ * Ex: DATEDIFF(d1, d2) -> MYSQL_DATEDIFF(d1, d2)
+ *     LEFT(col, n) -> MYSQL_LEFT(col, n)
+ *     RIGHT(col, n) -> MYSQL_RIGHT(col, n)
+ */
+export function preprocessSqlQuery(sql: string): string {
+  if (!sql) return sql;
+
+  // 1. Substitui DATEDIFF(...) por MYSQL_DATEDIFF(...)
+  let res = sql.replace(/\bDATEDIFF\s*\(/gi, 'MYSQL_DATEDIFF(');
+
+  // 2. Substitui chamadas de função LEFT( por MYSQL_LEFT( e RIGHT( por MYSQL_RIGHT(
+  // Somente quando seguidas por parênteses (chamada de função, e não cláusulas JOIN)
+  res = res.replace(/\bLEFT\s*\(/gi, 'MYSQL_LEFT(');
+  res = res.replace(/\bRIGHT\s*\(/gi, 'MYSQL_RIGHT(');
+
+  return res;
+}
 
 /**
  * Registra extensões de funções MySQL no motor AlaSQL
  */
 export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   const engineFn = (engine as any).fn || {};
+  const engineStdfn = (engine as any).stdfn || {};
 
   // 1. DATE_FORMAT
   const dateFn = (dateVal: any, formatStr?: any) => formatMySQLDate(dateVal, formatStr);
@@ -127,18 +150,184 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.CURRENT_TIME = curtimeFn;
   engineFn.current_time = curtimeFn;
 
-  // 5. DATEDIFF (d1, d2) -> retorna diferença em dias (d1 - d2)
-  const datediffFn = (d1: any, d2: any) => {
-    const date1 = new Date(d1);
-    const date2 = new Date(d2);
+  // 5. DATEDIFF / MYSQL_DATEDIFF
+  // Suporta tanto 2 parâmetros (MySQL: d1 - d2 em dias) quanto 3 parâmetros (unit, d1, d2)
+  const datediffFn = (arg1: any, arg2: any, arg3?: any) => {
+    if (arg3 !== undefined) {
+      // 3 argumentos: (unit, d1, d2)
+      const d1 = new Date(arg2);
+      const d2 = new Date(arg3);
+      if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
+      return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    // 2 argumentos MySQL padrão: DATEDIFF(d1, d2) -> d1 - d2
+    if (arg1 === null || arg1 === undefined || arg2 === null || arg2 === undefined) return null;
+    const date1 = new Date(arg1);
+    const date2 = new Date(arg2);
     if (isNaN(date1.getTime()) || isNaN(date2.getTime())) return null;
     const diffTime = date1.getTime() - date2.getTime();
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   };
   engineFn.DATEDIFF = datediffFn;
   engineFn.datediff = datediffFn;
+  engineFn.MYSQL_DATEDIFF = datediffFn;
+  engineFn.mysql_datediff = datediffFn;
+  engineStdfn.DATEDIFF = datediffFn;
+  engineStdfn.datediff = datediffFn;
 
-  // 6. Funções de Componentes de Data
+  // 6. LENGTH / CHAR_LENGTH / LEN
+  const lengthFn = (val: any) => {
+    if (val === null || val === undefined) return null;
+    return String(val).length;
+  };
+  engineFn.LENGTH = lengthFn;
+  engineFn.length = lengthFn;
+  engineFn.LEN = lengthFn;
+  engineFn.len = lengthFn;
+  engineFn.CHAR_LENGTH = lengthFn;
+  engineFn.char_length = lengthFn;
+  engineFn.CHARACTER_LENGTH = lengthFn;
+  engineFn.character_length = lengthFn;
+  engineStdfn.LENGTH = lengthFn;
+  engineStdfn.length = lengthFn;
+  engineStdfn.LEN = lengthFn;
+  engineStdfn.len = lengthFn;
+  engineStdfn.CHAR_LENGTH = lengthFn;
+  engineStdfn.char_length = lengthFn;
+  engineStdfn.CHARACTER_LENGTH = lengthFn;
+  engineStdfn.character_length = lengthFn;
+
+  // 7. CONCAT & CONCAT_WS
+  const concatFn = (...args: any[]) => {
+    if (args.length === 0) return '';
+    return args.map(a => (a === null || a === undefined ? '' : String(a))).join('');
+  };
+  engineFn.CONCAT = concatFn;
+  engineFn.concat = concatFn;
+  engineStdfn.CONCAT = concatFn;
+  engineStdfn.concat = concatFn;
+
+  const concatWsFn = (separator: any, ...args: any[]) => {
+    return args
+      .filter(a => a !== null && a !== undefined)
+      .map(String)
+      .join(separator ?? '');
+  };
+  engineFn.CONCAT_WS = concatWsFn;
+  engineFn.concat_ws = concatWsFn;
+  engineStdfn.CONCAT_WS = concatWsFn;
+  engineStdfn.concat_ws = concatWsFn;
+
+  // 8. LEFT & RIGHT
+  const leftFn = (str: any, len: any) => {
+    if (str === null || str === undefined) return null;
+    const l = Number(len) || 0;
+    return String(str).slice(0, Math.max(0, l));
+  };
+  const rightFn = (str: any, len: any) => {
+    if (str === null || str === undefined) return null;
+    const l = Number(len) || 0;
+    if (l <= 0) return '';
+    return String(str).slice(-l);
+  };
+  engineFn.MYSQL_LEFT = leftFn;
+  engineFn.mysql_left = leftFn;
+  engineFn.MYSQL_RIGHT = rightFn;
+  engineFn.mysql_right = rightFn;
+
+  // 9. STRING UTILITIES: REVERSE, LPAD, RPAD, TRIM
+  engineFn.REVERSE = (str: any) => (str === null || str === undefined ? null : String(str).split('').reverse().join(''));
+  engineFn.reverse = engineFn.REVERSE;
+  engineFn.LPAD = (str: any, len: any, pad = ' ') => {
+    if (str === null || str === undefined) return null;
+    return String(str).padStart(Number(len) || 0, String(pad));
+  };
+  engineFn.lpad = engineFn.LPAD;
+  engineFn.RPAD = (str: any, len: any, pad = ' ') => {
+    if (str === null || str === undefined) return null;
+    return String(str).padEnd(Number(len) || 0, String(pad));
+  };
+  engineFn.rpad = engineFn.RPAD;
+
+  // 10. MATH UTILITIES: MOD, ROUND, FLOOR, CEIL, ABS
+  engineFn.MOD = (n: any, m: any) => {
+    const num = Number(n);
+    const mod = Number(m);
+    if (isNaN(num) || isNaN(mod) || mod === 0) return null;
+    return num % mod;
+  };
+  engineFn.mod = engineFn.MOD;
+
+  engineFn.ROUND = (val: any, decimals: any = 0) => {
+    const num = Number(val);
+    if (isNaN(num)) return null;
+    const factor = Math.pow(10, Number(decimals) || 0);
+    return Math.round(num * factor) / factor;
+  };
+  engineFn.round = engineFn.ROUND;
+  engineFn.FLOOR = (val: any) => (isNaN(Number(val)) ? null : Math.floor(Number(val)));
+  engineFn.floor = engineFn.FLOOR;
+  engineFn.CEIL = (val: any) => (isNaN(Number(val)) ? null : Math.ceil(Number(val)));
+  engineFn.ceil = engineFn.CEIL;
+  engineFn.CEILING = engineFn.CEIL;
+  engineFn.ceiling = engineFn.CEIL;
+  engineFn.ABS = (val: any) => (isNaN(Number(val)) ? null : Math.abs(Number(val)));
+  engineFn.abs = engineFn.ABS;
+
+  // 11. DAYNAME, MONTHNAME, DAYOFWEEK, WEEKDAY
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  engineFn.DAYNAME = (dVal: any) => {
+    const d = new Date(dVal);
+    if (isNaN(d.getTime())) return null;
+    return dayNames[d.getDay()];
+  };
+  engineFn.dayname = engineFn.DAYNAME;
+  engineFn.MONTHNAME = (dVal: any) => {
+    const d = new Date(dVal);
+    if (isNaN(d.getTime())) return null;
+    return monthNames[d.getMonth()];
+  };
+  engineFn.monthname = engineFn.MONTHNAME;
+  engineFn.DAYOFWEEK = (dVal: any) => {
+    const d = new Date(dVal);
+    if (isNaN(d.getTime())) return null;
+    return d.getDay() + 1; // 1 = Sunday ... 7 = Saturday
+  };
+  engineFn.dayofweek = engineFn.DAYOFWEEK;
+  engineFn.WEEKDAY = (dVal: any) => {
+    const d = new Date(dVal);
+    if (isNaN(d.getTime())) return null;
+    return (d.getDay() + 6) % 7; // 0 = Monday ... 6 = Sunday
+  };
+  engineFn.weekday = engineFn.WEEKDAY;
+
+  // 12. TIMEDIFF
+  const timediffFn = (t1: any, t2: any) => {
+    const parseSec = (t: any) => {
+      if (typeof t === 'string' && t.includes(':')) {
+        const parts = t.split(':').map(Number);
+        return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+      }
+      const d = new Date(t);
+      if (!isNaN(d.getTime())) return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      return 0;
+    };
+    const diffSec = parseSec(t1) - parseSec(t2);
+    const sign = diffSec < 0 ? '-' : '';
+    const absSec = Math.abs(diffSec);
+    const h = String(Math.floor(absSec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((absSec % 3600) / 60)).padStart(2, '0');
+    const s = String(absSec % 60).padStart(2, '0');
+    return `${sign}${h}:${m}:${s}`;
+  };
+  engineFn.TIMEDIFF = timediffFn;
+  engineFn.timediff = timediffFn;
+
+  // 13. Funções de Componentes de Data
   const getPart = (d: any, part: 'year' | 'month' | 'day' | 'hour' | 'min' | 'sec') => {
     const date = new Date(d);
     if (isNaN(date.getTime())) return null;
@@ -163,20 +352,10 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.SECOND = (d: any) => getPart(d, 'sec');
   engineFn.second = (d: any) => getPart(d, 'sec');
 
-  // 7. IFNULL
+  // 14. IFNULL
   const ifnullFn = (val: any, defaultVal: any) => (val === null || val === undefined ? defaultVal : val);
   engineFn.IFNULL = ifnullFn;
   engineFn.ifnull = ifnullFn;
-
-  // 8. CONCAT_WS (separador, ...valores)
-  const concatWsFn = (separator: any, ...args: any[]) => {
-    return args
-      .filter(a => a !== null && a !== undefined)
-      .map(String)
-      .join(separator || '');
-  };
-  engineFn.CONCAT_WS = concatWsFn;
-  engineFn.concat_ws = concatWsFn;
 
   // 9. Funções de Data e Hora Compatíveis (SQLite/MySQL): strftime, julianday, datetime, date, time
   function parseDateParam(val: any): Date {
@@ -285,7 +464,6 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   // Para que funções como DATE(), DATETIME() e TIME() funcionem perfeitamente em consultas SQL
   // sem interferir nas inserções de tabelas, nós as registramos no alasql.stdfn (biblioteca padrão)
   // e em engineFn em minúsculas (date, datetime, time).
-  const engineStdfn = (engine as any).stdfn || {};
   engineStdfn.DATE = dateCustom;
   engineStdfn.date = dateCustom;
   engineStdfn.DATETIME = datetimeCustom;

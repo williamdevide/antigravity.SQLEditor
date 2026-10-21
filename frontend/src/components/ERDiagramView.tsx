@@ -36,33 +36,55 @@ function getStoredPositionsByDb(): Record<string, Record<string, TablePosition>>
   return {};
 }
 
-function getStoredLineOffsetsByDb(): Record<string, Record<string, number>> {
+export interface LineOffset {
+  x?: number;
+  y?: number;
+}
+
+function getStoredLineOffsetsByDb(): Record<string, Record<string, LineOffset>> {
   try {
     const raw = localStorage.getItem(LINE_OFFSETS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Suporte a migração se os valores eram apenas números (x)
+      const migrated: Record<string, Record<string, LineOffset>> = {};
+      for (const db in parsed) {
+        migrated[db] = {};
+        for (const k in parsed[db]) {
+          const val = parsed[db][k];
+          if (typeof val === 'number') {
+            migrated[db][k] = { x: val };
+          } else if (val && typeof val === 'object') {
+            migrated[db][k] = val;
+          }
+        }
+      }
+      return migrated;
+    }
   } catch (_) {}
   return {};
 }
 
-// Gera traçado ortogonal de linhas retas com quebras de 90 graus, cantos arredondados e suporte a ajuste customizado de posição e alternância automática de lados
+// Gera traçado ortogonal de linhas retas com quebras de 90 graus, cantos arredondados e suporte a ajuste customizado de posição livre 2D e alternância automática de lados
 function getOrthogonalPath(
   x1: number,
   y1: number,
   x2: number,
   y2: number,
   radius = 8,
-  customMidX?: number,
+  customOffset?: LineOffset,
   fromSide: 'left' | 'right' = 'right',
-  toSide: 'left' | 'right' = 'left'
+  toSide: 'left' | 'right' = 'left',
+  spineOffset = 0
 ): { path: string; midX: number; midY: number } {
   const dy = y2 - y1;
   const signY = dy >= 0 ? 1 : -1;
 
-  // Caso 1: Ambas conectam pelo lado DIREITO (mesma coluna ou sobreposição horizontal)
+  // Caso 1: Ambas conectam pelo lado DIREITO (mesma coluna ou contorno pela margem direita)
   if (fromSide === 'right' && toSide === 'right') {
-    const defaultLoopX = Math.max(x1, x2) + 50;
-    const midX = customMidX !== undefined ? customMidX : defaultLoopX;
-    const midY = (y1 + y2) / 2;
+    const defaultLoopX = Math.max(x1, x2) + 50 + spineOffset;
+    const midX = customOffset?.x !== undefined ? customOffset.x : defaultLoopX;
+    const midY = customOffset?.y !== undefined ? customOffset.y : (y1 + y2) / 2;
     const r = Math.max(2, Math.min(radius, Math.abs(midX - x1) / 2, Math.abs(midX - x2) / 2, Math.abs(dy) / 2));
 
     const path = [
@@ -79,9 +101,9 @@ function getOrthogonalPath(
 
   // Caso 2: Ambas conectam pelo lado ESQUERDO (mesma coluna ou contorno pela margem esquerda)
   if (fromSide === 'left' && toSide === 'left') {
-    const defaultLoopX = Math.min(x1, x2) - 50;
-    const midX = customMidX !== undefined ? customMidX : defaultLoopX;
-    const midY = (y1 + y2) / 2;
+    const defaultLoopX = Math.min(x1, x2) - 50 - spineOffset;
+    const midX = customOffset?.x !== undefined ? customOffset.x : defaultLoopX;
+    const midY = customOffset?.y !== undefined ? customOffset.y : (y1 + y2) / 2;
     const r = Math.max(2, Math.min(radius, Math.abs(x1 - midX) / 2, Math.abs(x2 - midX) / 2, Math.abs(dy) / 2));
 
     const path = [
@@ -98,18 +120,18 @@ function getOrthogonalPath(
 
   // Caso 3: fromSide === 'right' && toSide === 'left' (Tabela de origem está à esquerda da tabela de destino)
   if (fromSide === 'right' && toSide === 'left') {
-    if (Math.abs(dy) < 3) {
-      const defaultMid = (x1 + x2) / 2;
+    const defaultMidX = (x1 + x2) / 2 + spineOffset;
+    const midX = customOffset?.x !== undefined ? customOffset.x : defaultMidX;
+    const midY = customOffset?.y !== undefined ? customOffset.y : (y1 + y2) / 2;
+
+    if (Math.abs(dy) < 3 && customOffset?.y === undefined) {
       return {
         path: `M ${x1} ${y1} L ${x2} ${y2}`,
-        midX: customMidX !== undefined ? customMidX : defaultMid,
+        midX,
         midY: y1,
       };
     }
 
-    const defaultMidX = (x1 + x2) / 2;
-    const midX = customMidX !== undefined ? customMidX : defaultMidX;
-    const midY = (y1 + y2) / 2;
     const r = Math.max(2, Math.min(radius, Math.abs(midX - x1) / 2, Math.abs(x2 - midX) / 2, Math.abs(dy) / 2));
 
     const path = [
@@ -125,18 +147,18 @@ function getOrthogonalPath(
   }
 
   // Caso 4: fromSide === 'left' && toSide === 'right' (Tabela de origem está à direita da tabela de destino)
-  if (Math.abs(dy) < 3) {
-    const defaultMid = (x1 + x2) / 2;
+  const defaultMidX = (x1 + x2) / 2 + spineOffset;
+  const midX = customOffset?.x !== undefined ? customOffset.x : defaultMidX;
+  const midY = customOffset?.y !== undefined ? customOffset.y : (y1 + y2) / 2;
+
+  if (Math.abs(dy) < 3 && customOffset?.y === undefined) {
     return {
       path: `M ${x1} ${y1} L ${x2} ${y2}`,
-      midX: customMidX !== undefined ? customMidX : defaultMid,
+      midX,
       midY: y1,
     };
   }
 
-  const defaultMidX = (x1 + x2) / 2;
-  const midX = customMidX !== undefined ? customMidX : defaultMidX;
-  const midY = (y1 + y2) / 2;
   const r = Math.max(2, Math.min(radius, Math.abs(x1 - midX) / 2, Math.abs(midX - x2) / 2, Math.abs(dy) / 2));
 
   const path = [
@@ -325,7 +347,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
 
   // Posições persistidas por banco de dados
   const [positionsByDb, setPositionsByDb] = useState<Record<string, Record<string, TablePosition>>>(getStoredPositionsByDb);
-  const [lineOffsetsByDb, setLineOffsetsByDb] = useState<Record<string, Record<string, number>>>(getStoredLineOffsetsByDb);
+  const [lineOffsetsByDb, setLineOffsetsByDb] = useState<Record<string, Record<string, LineOffset>>>(getStoredLineOffsetsByDb);
 
   // Posições ativas das tabelas do banco atual
   const [positions, setPositions] = useState<Record<string, TablePosition>>({});
@@ -335,17 +357,23 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     positionsRef.current = positions;
   }, [positions]);
 
-  // Offsets horizontais customizados das linhas de relacionamento
-  const [lineOffsets, setLineOffsets] = useState<Record<string, number>>({});
-  const lineOffsetsRef = useRef<Record<string, number>>({});
+  // Offsets livres (X e Y) customizados das linhas de relacionamento
+  const [lineOffsets, setLineOffsets] = useState<Record<string, LineOffset>>({});
+  const lineOffsetsRef = useRef<Record<string, LineOffset>>({});
 
   useEffect(() => {
     lineOffsetsRef.current = lineOffsets;
   }, [lineOffsets]);
 
-  // Estado de Arraste da Linha de Relacionamento
+  // Estado de Arraste da Linha de Relacionamento (suporte a modo 'free' pelo nome e 'axis' pela linha)
   const [draggingLineKey, setDraggingLineKey] = useState<string | null>(null);
-  const [lineDragStart, setLineDragStart] = useState<{ mouseX: number; initialMidX: number }>({ mouseX: 0, initialMidX: 0 });
+  const [lineDragStart, setLineDragStart] = useState<{
+    mouseX: number;
+    mouseY: number;
+    initialMidX: number;
+    initialMidY: number;
+    mode: 'free' | 'axis';
+  }>({ mouseX: 0, mouseY: 0, initialMidX: 0, initialMidY: 0, mode: 'free' });
   
   // Zoom e Pan do Canvas
   const [zoom, setZoom] = useState<number>(100);
@@ -572,15 +600,25 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
     });
   };
 
-  // Início do arraste de uma linha de relacionamento
-  const handleLineMouseDown = (relKey: string, currentMidX: number, e: React.MouseEvent) => {
+  // Início do arraste de uma linha de relacionamento (modo 'free' para label, 'axis' para linha)
+  const handleLineMouseDown = (
+    relKey: string,
+    currentMidX: number,
+    currentMidY: number,
+    e: React.MouseEvent,
+    mode: 'free' | 'axis' = 'free'
+  ) => {
     e.stopPropagation();
     const scale = zoom / 100;
     const canvasMouseX = (e.clientX - pan.x) / scale;
+    const canvasMouseY = (e.clientY - pan.y) / scale;
     setDraggingLineKey(relKey);
     setLineDragStart({
       mouseX: canvasMouseX,
+      mouseY: canvasMouseY,
       initialMidX: currentMidX,
+      initialMidY: currentMidY,
+      mode,
     });
   };
 
@@ -612,17 +650,34 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
         return next;
       });
     } else if (draggingLineKey) {
-      // Ajuste horizontal da linha de relacionamento em tempo real
       const deltaX = Math.round(canvasMouseX - lineDragStart.mouseX);
-      const newMidX = lineDragStart.initialMidX + deltaX;
-      setLineOffsets(prev => {
-        const next = {
-          ...prev,
-          [draggingLineKey]: newMidX
-        };
-        lineOffsetsRef.current = next;
-        return next;
-      });
+      const deltaY = Math.round(canvasMouseY - lineDragStart.mouseY);
+
+      if (lineDragStart.mode === 'free') {
+        // Arraste livre total em 2D pelo nome do relacionamento
+        const newMidX = lineDragStart.initialMidX + deltaX;
+        const newMidY = lineDragStart.initialMidY + deltaY;
+        setLineOffsets(prev => {
+          const next = {
+            ...prev,
+            [draggingLineKey]: { x: newMidX, y: newMidY }
+          };
+          lineOffsetsRef.current = next;
+          return next;
+        });
+      } else {
+        // Arraste da linha: permite mover tanto no eixo X quanto no eixo Y
+        const newMidX = lineDragStart.initialMidX + deltaX;
+        const newMidY = lineDragStart.initialMidY + deltaY;
+        setLineOffsets(prev => {
+          const next = {
+            ...prev,
+            [draggingLineKey]: { x: newMidX, y: newMidY }
+          };
+          lineOffsetsRef.current = next;
+          return next;
+        });
+      }
     } else if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
@@ -660,7 +715,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-    setZoom(prev => Math.max(25, Math.min(250, Math.round(prev * zoomFactor))));
+    setZoom(prev => Math.max(50, Math.min(250, Math.round(prev * zoomFactor))));
   };
 
   // 5. Exportar Diagrama ER para PNG
@@ -914,7 +969,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
           {/* Zoom In / Out / Reset */}
           <div className="flex items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded p-0.5">
             <button
-              onClick={() => setZoom(z => Math.max(25, z - 15))}
+              onClick={() => setZoom(z => Math.max(50, z - 15))}
               title="Diminuir Zoom (-)"
               className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded"
               type="button"
@@ -1101,7 +1156,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
           >
             {relationships.map((rel, i) => {
               const relKey = `${rel.fromTable}.${rel.fromCol}->${rel.toTable}.${rel.toCol}`;
-              const customMidX = lineOffsets[relKey];
+              const customOffset = lineOffsets[relKey];
 
               const fromPos = getTablePos(rel.fromTable);
               const toPos = getTablePos(rel.toTable);
@@ -1134,7 +1189,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                 toSide = 'right';
               } else {
                 // Tabelas sobrepostas no eixo horizontal ou na mesma coluna: contorna pelas margens externas
-                if (customMidX !== undefined && customMidX < Math.min(r1Left, r2Left)) {
+                if (customOffset?.x !== undefined && customOffset.x < Math.min(r1Left, r2Left)) {
                   fromSide = 'left';
                   toSide = 'left';
                 } else {
@@ -1146,6 +1201,9 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
               const fromX = fromSide === 'right' ? r1Right : r1Left;
               const toX = toSide === 'right' ? r2Right : r2Left;
 
+              // Escalonamento de corredores compartilhados para evitar que linhas entre mesmas tabelas fiquem perfeitamente coladas
+              const spineOffset = ((i % 4) - 1.5) * 18;
+
               // Traçado ortogonal de linhas retas com quebras de 90° e cantos arredondados, respeitando os lados dinâmicos e ajustes manuais
               const { path: orthogonalPath, midX, midY } = getOrthogonalPath(
                 fromX,
@@ -1153,9 +1211,10 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                 toX,
                 toY,
                 8,
-                customMidX,
+                customOffset,
                 fromSide,
-                toSide
+                toSide,
+                spineOffset
               );
 
               // Nome do relacionamento exibido no centro
@@ -1179,10 +1238,10 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                     fill="none"
                     stroke="transparent"
                     strokeWidth="16"
-                    style={{ pointerEvents: 'stroke', cursor: 'ew-resize' }}
-                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
+                    style={{ pointerEvents: 'stroke', cursor: 'move' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, midY, e, 'axis')}
                   >
-                    <title>Arraste para reposicionar a rota desta linha</title>
+                    <title>Arraste para reposicionar a rota desta linha (horizontal ou vertical)</title>
                   </path>
 
                   {/* Linha Ortogonal 90° com Cantos Arredondados */}
@@ -1192,8 +1251,8 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                     stroke={isDraggingThis ? '#00E676' : strokeColor}
                     strokeWidth={isDraggingThis ? "3.5" : "2.5"}
                     opacity={isDraggingThis ? "1" : "0.95"}
-                    style={{ pointerEvents: 'stroke', cursor: 'ew-resize' }}
-                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
+                    style={{ pointerEvents: 'stroke', cursor: 'move' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, midY, e, 'axis')}
                   />
 
                   {/* Marcador de Chave Estrangeira (Lado FK) */}
@@ -1216,14 +1275,14 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                     strokeWidth="1.5"
                   />
 
-                  {/* Etiqueta Central com o NOME DO RELACIONAMENTO (e NÃO cardinalidade) - Permite arrastar a linha */}
+                  {/* Etiqueta Central com o NOME DO RELACIONAMENTO - Arraste LIVRE 2D */}
                   <g
                     transform={`translate(${midX - tagWidth / 2}, ${midY - tagHeight / 2})`}
-                    style={{ pointerEvents: 'all', cursor: 'ew-resize' }}
-                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, e)}
-                    className="select-none"
+                    style={{ pointerEvents: 'all', cursor: isDraggingThis ? 'grabbing' : 'grab' }}
+                    onMouseDown={(e) => handleLineMouseDown(relKey, midX, midY, e, 'free')}
+                    className="select-none group/tag"
                   >
-                    <title>Arraste para reposicionar a linha de relacionamento</title>
+                    <title>Clique e arraste livremente para reposicionar esta etiqueta em qualquer lugar</title>
                     <rect
                       x="0"
                       y="0"
@@ -1233,7 +1292,7 @@ export const ERDiagramView: React.FC<ERDiagramViewProps> = ({
                       fill={pillBg}
                       stroke={isDraggingThis ? '#00E676' : pillBorder}
                       strokeWidth={isDraggingThis ? "2" : "1.5"}
-                      className="shadow-sm"
+                      className="shadow-sm transition-all group-hover/tag:stroke-[#00E676]"
                     />
                     <text
                       x={tagWidth / 2}

@@ -1145,3 +1145,102 @@ corrija.`
 2. **Commit e Sincronização Remota (GitHub):**
    - Criação de commit semântico padronizado: `feat: release v3.1.13 - Landing Page estilo DrawDB, identidade Milkfed, Roadmap e Changelog interativo`.
    - Envio de todas as alterações para a branch `main` no repositório remoto do GitHub via `git push origin main`.
+
+---
+
+## 📌 Prompt 37
+**Data:** 21/10/2026 - 12:15  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal preciso que realize uma série de correções conforme a lista abaixo e no final me de um relatorio de como ficaram cada uma:
+> - permitir fechar todas as abas de script
+> - Manter seleção de texto no script quando alternar entre abas de script
+> - Caracteres especiais matemáticos como >= estão sendo transformados na versão matematica com o risco do igual embaixo do maior, o mesmo aconteceu com diferente
+> - Posição do DER: o der esta  bem melhor, mas algumas linhas ainda sobrepostas, utilize o db_escolaidiomas para testar
+> - DER mover linhas na vertical, esta movendo só na horizontal. e se mover pelo nome do relacionamento deve mover livre
+> - Logo do SQLEditor na barra do navegador
+> - DATEDIFF, LENGTH com erro, algumas funções nativas não estão funcionando, revise
+> - CONCAT não aparece nos autocomplete, somente CONCAT_WS
+> - faltando data pedido em tb_pedidos no banco da pizzaria
+> - coloquei mais arquivos em solutions
+> - zoom minimo 50% e máximo de 250% em cada área
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Permitir fechar todas as abas de script:**
+   - Atualizados `App.tsx` e `EditorWorkspace.tsx` para remover a restrição `tabs.length > 1`.
+   - O botão `×` de fechamento agora permanece disponível mesmo quando há apenas 1 aba aberta.
+   - Adicionado botão dedicado **"Fechar Todas"** na barra de abas e opção no menu de contexto ao clicar com o botão direito sobre qualquer aba ("Fechar", "Fechar Outras", "Fechar Todas", "Renomear").
+   - Quando todas as abas são fechadas (`tabs.length === 0`), é renderizada uma tela de boas-vindas com botão de ação rápida para criar um novo script em branco (`+ Novo Script`).
+
+2. **Manter seleção de texto no script ao alternar entre abas:**
+   - Adicionada prop `path={`tab_${activeTab.id}.sql`}` ao `<Editor>` do Monaco para isolar completamente os modelos de memória entre as abas.
+   - Implementado rastreamento por ref (`tabStatesRef`) que captura e preserva tanto o `viewState` (scroll/folding) quanto a `selection` (`startLineNumber`, `startColumn`, `endLineNumber`, `endColumn`).
+   - A restauração da seleção ocorre de forma controlada (`isRestoringStateRef`) ao trocar de aba, impedindo que o evento de montagem limpe a seleção ativa do usuário.
+
+3. **Desativação de ligaduras matemáticas (`>=`, `<>`, `!=`):**
+   - Configurada a opção `fontLigatures: false` no Monaco Editor em `EditorWorkspace.tsx`.
+   - Símbolos matemáticos como `>=` e `<>` agora permanecem com seus caracteres ASCII originais sem serem combinados nos glifos únicos `≥` ou `≠`.
+
+4. **Posição e roteamento do DER (teste com `db_escolaidiomas`):**
+   - Corrigido o algoritmo de roteamento ortogonal 90° em `ERDiagramView.tsx` para evitar que linhas entre camadas colidam com tabelas intermediárias (ex: `tb_alunos` para `tb_responsaveis` passando por dentro de `tb_pagamentos`).
+   - Implementado escalonamento de corredores verticais (`spineOffset = ((i % 4) - 1.5) * 18`) para que múltiplos relacionamentos no mesmo corredor não fiquem sobrepostos.
+
+5. **Arraste de linhas do DER na vertical e arraste livre 2D no nome do relacionamento:**
+   - A estrutura de offsets das linhas (`lineOffsets`) foi atualizada de número simples para o tipo `LineOffset { x?: number; y?: number }`.
+   - Ao arrastar a linha diretamente, agora é possível movê-la tanto na horizontal quanto na vertical.
+   - Ao arrastar a etiqueta central (nome do relacionamento), o cursor exibe `grab`/`grabbing` e o deslocamento é totalmente livre em 2D (`mode: 'free'`), permitindo posicionar o texto em qualquer lugar do canvas sem obstruir linhas ou nós.
+
+6. **Logo do SQLEditor na barra do navegador (Favicon):**
+   - Criado ícone vetorial oficial `frontend/public/favicon.svg` com a identidade visual do SQLEditor (escudo escuro com gradiente laranja/amarelo `#FF6B00` $\rightarrow$ `#FFE600` e o símbolo do raio).
+   - Inserida a tag `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />` em `frontend/index.html`.
+
+7. **Revisão e correção de funções nativas (`DATEDIFF`, `LENGTH`, etc.):**
+   - Expandido o catálogo de funções em `frontend/src/services/mysqlFunctions.ts` com implementações completas de `LENGTH`, `CHAR_LENGTH`, `LEN`, `CONCAT`, `CONCAT_WS`, `DATEDIFF`, `TIMEDIFF`, `LEFT`, `RIGHT`, `MOD`, `ROUND`, `FLOOR`, `CEIL`, `ABS`, `DAYNAME`, `MONTHNAME`, etc.
+   - Implementada a função de pré-processamento `preprocessSqlQuery()` para traduzir a sintaxe MySQL de `DATEDIFF(d1, d2)` para `MYSQL_DATEDIFF(d1, d2)`, e chamadas de função `LEFT(` e `RIGHT(` para evitar conflito com palavras-chave reservadas do parser AlaSQL.
+   - Integrado `preprocessSqlQuery()` nos motores de execução (`dbEngine.ts`) e revisão de queries (`sqlReviewer.ts`).
+
+8. **Inclusão de `CONCAT` no autocompletion do Monaco:**
+   - Atualizada a lista de funções sugeridas no provedor de autocompletar de `EditorWorkspace.tsx`, adicionando `CONCAT`, `LENGTH`, `CHAR_LENGTH`, `ROUND`, `FLOOR`, `CEIL`, `ABS`, etc. com suas respectivas documentações e snippets de inserção.
+
+9. **Inclusão da coluna `data_pedido` em `tb_pedidos` (Banco da Pizzaria):**
+   - Adicionada a coluna `data_pedido DATE NOT NULL` na DDL de `tb_pedidos` em `frontend/src/data/bds/semana07-00-dados-(pizzaria-streaming).sql` e `documentation/files/bds/semana07-00-dados-(pizzaria-streaming).sql`.
+   - Atualizadas todas as 100 instruções `INSERT INTO tb_pedidos` com datas distribuídas realistas entre `2024-01-01` e `2024-04-10`.
+
+10. **Integração de novos arquivos colocados em `solutions`:**
+    - Copiados os novos arquivos de soluções (`semana07-03-exercicios-(escolaidiomas).sql` e `semana08-02-exercicios-(rh).sql`) de `documentation/files/solutions/` para `frontend/src/data/solutions/`.
+    - Atualizado o dicionário `TEMA_LABEL_MAP` em `frontend/src/services/scriptsLoader.ts` para categorizar e rotular amigavelmente os novos exercícios no menu suspenso do editor.
+
+11. **Limites de zoom: mínimo 50% e máximo 250% em cada área:**
+    - Padronizados os limites de zoom em todas as áreas da aplicação (Sidebar Explorer, Monaco Workspace, Console de Resultados e Diagrama ER interativo) para a faixa estrita de `50%` a `250%`.
+    - Atualizados `ZoomControl.tsx`, `App.tsx` e `ERDiagramView.tsx` (botões e roda do mouse `Wheel`).
+
+12. **Validação de Build e Qualidade:**
+    - Executado `npm run build` no frontend com código de retorno **0** (`tsc -b && vite build` sem nenhum erro).
+
+---
+
+## 📌 Prompt 38
+**Data:** 21/10/2026 - 12:56  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal atualize nosso repositorio no github
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Revisão e Consolidação do Repositório Git:**
+   - Realizado `git status` identificando arquivos modificados e novos arquivos de exercícios e soluções.
+   - Incluídos no commit:
+     - Fechamento total de abas e menu de contexto de abas (`App.tsx`, `EditorWorkspace.tsx`).
+     - Preservação da seleção de texto ao alternar entre abas e desativação de ligaduras matemáticas (`EditorWorkspace.tsx`).
+     - Aprimoramento do Diagrama ER com rota sem cruzamento, suporte a mover linhas verticalmente e arraste livre 2D no nome do relacionamento (`ERDiagramView.tsx`).
+     - Ícone vetorial oficial e favicon na barra de navegação (`favicon.svg`, `index.html`).
+     - Ampliação das funções nativas MySQL (`mysqlFunctions.ts`, `dbEngine.ts`, `sqlReviewer.ts`) com `DATEDIFF`, `LENGTH`, `CHAR_LENGTH`, `CONCAT`, etc.
+     - Autocomplete com suporte a `CONCAT` e novas funções nativas.
+     - Campo `data_pedido` adicionado na tabela `tb_pedidos` da pizzaria e dados populados.
+     - Novos arquivos de exercícios de soluções integrados (`semana07-03-exercicios-(escolaidiomas).sql` e `semana08-02-exercicios-(rh).sql`).
+     - Limites de zoom de 50% a 250% em todas as áreas (`ZoomControl.tsx`, `App.tsx`, `ERDiagramView.tsx`).
+
+2. **Commit Semântico e Sincronização Remota (GitHub):**
+   - Criação de commit semântico padronizado: `feat: release v3.1.14 - fechamento de abas, selecao persistente, DER 2D livre, funcoes mysql, favicon e solucoes`.
+   - Execução de `git push origin main` com sucesso.
+
+

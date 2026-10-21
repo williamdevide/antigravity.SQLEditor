@@ -29,6 +29,12 @@ const rawSolutionsModules = import.meta.glob<string>('../data/solutions/*.sql', 
   eager: true,
 });
 
+const TEMA_LABEL_MAP: Record<string, string> = {
+  'pizzaria streaming': 'Pizzaria & Streaming',
+  'escolaidiomas': 'Escola de Idiomas',
+  'rh': 'Recursos Humanos (RH)',
+};
+
 /**
  * Formata o nome do arquivo para um título mais legível e amigável
  * Ex: 'semana07-01-apoio-(pizzaria-streaming).sql' -> 'Semana 07: Apoio (Pizzaria Streaming)'
@@ -42,8 +48,9 @@ export function formatSolutionTitle(fileName: string): string {
     const [, sem, num, tipo, tema] = match;
     const tipoCapitalized = tipo.charAt(0).toUpperCase() + tipo.slice(1);
     if (tema) {
-      const temaFormat = tema.replace(/-/g, ' ');
-      return `Semana ${sem} (${num}) - ${tipoCapitalized} [${temaFormat}]`;
+      const temaKey = tema.replace(/-/g, ' ').toLowerCase();
+      const temaDisplay = TEMA_LABEL_MAP[temaKey] || temaKey.replace(/\b\w/g, l => l.toUpperCase());
+      return `Semana ${sem} (${num}) - ${tipoCapitalized} [${temaDisplay}]`;
     }
     return `Semana ${sem} (${num}) - ${tipoCapitalized}`;
   }

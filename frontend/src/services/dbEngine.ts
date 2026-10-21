@@ -3,7 +3,7 @@ import { dbStorage } from './storage';
 import { getClassroomDatabases, splitSqlStatements } from './scriptsLoader';
 import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
-import { registerMySQLFunctions } from './mysqlFunctions';
+import { registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
 
 export interface DatabaseLoadProgress {
   dbName: string;
@@ -523,7 +523,8 @@ class DatabaseEngine {
 
       // Executa consulta normal
       try {
-        const res = alasql(stmt);
+        const processedStmt = preprocessSqlQuery(stmt);
+        const res = alasql(processedStmt);
         const execTime = Math.round(performance.now() - startTime);
 
         // Se criou novo banco, sincroniza banco ativo

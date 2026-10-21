@@ -11,6 +11,8 @@ interface EditorWorkspaceProps {
   activeTabId: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onCloseAllTabs?: () => void;
+  onCloseOtherTabs?: (id: string) => void;
   onNewBlankTab: () => void;
   onOpenSolution: (solution: SolutionItem) => void;
   solutions: SolutionItem[];
@@ -38,6 +40,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseAllTabs,
+  onCloseOtherTabs,
   onNewBlankTab,
   onOpenSolution,
   solutions,
@@ -168,11 +172,40 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   // Mapa de ViewState e Seleção por aba para preservar a seleção ao alternar entre abas
   const tabStatesRef = useRef<Record<string, TabViewState>>({});
   const currentTabIdRef = useRef<string>(activeTabId);
-  currentTabIdRef.current = activeTabId;
+  const prevTabIdRef = useRef<string>(activeTabId);
+  const isRestoringStateRef = useRef<boolean>(false);
+
+  // Menu de contexto com clique com botão direito na aba
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    tabId: string;
+    tabTitle: string;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    tabId: '',
+    tabTitle: '',
+  });
+  const tabContextMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tabContextMenuRef.current && !tabContextMenuRef.current.contains(e.target as Node)) {
+        setTabContextMenu(prev => ({ ...prev, visible: false }));
+      }
+    };
+    if (tabContextMenu.visible) {
+      window.addEventListener('mousedown', handleClickOutside);
+      return () => window.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [tabContextMenu.visible]);
 
   // Salva o ViewState e Seleção da aba ativa atual
-  const saveCurrentTabState = () => {
-    const currentId = currentTabIdRef.current;
+  const saveCurrentTabState = (tabId?: string) => {
+    const currentId = tabId || currentTabIdRef.current;
     const editor = editorRef.current;
     if (currentId && editor) {
       try {
@@ -193,14 +226,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
   // Restaura ViewState e Seleção ao trocar de aba ativa
   useEffect(() => {
-    const targetId = activeTabId;
     const editor = editorRef.current;
-    if (!editor) return;
+    const oldId = prevTabIdRef.current;
+    const newId = activeTabId;
 
-    const saved = tabStatesRef.current[targetId];
+    // Salva o estado da aba anterior antes de mudar
+    if (editor && oldId && oldId !== newId) {
+      saveCurrentTabState(oldId);
+    }
+
+    prevTabIdRef.current = newId;
+    currentTabIdRef.current = newId;
+
+    if (!editor || !newId) return;
+
+    const saved = tabStatesRef.current[newId];
     if (saved) {
+      isRestoringStateRef.current = true;
       const timer = setTimeout(() => {
-        if (editorRef.current && currentTabIdRef.current === targetId) {
+        if (editorRef.current && currentTabIdRef.current === newId) {
           try {
             if (saved.viewState) {
               editorRef.current.restoreViewState(saved.viewState);
@@ -212,7 +256,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             editorRef.current.focus();
           } catch (_) {}
         }
-      }, 35);
+        setTimeout(() => {
+          isRestoringStateRef.current = false;
+        }, 120);
+      }, 40);
       return () => clearTimeout(timer);
     }
   }, [activeTabId]);
@@ -285,6 +332,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
     // Monitora seleção e cursor em tempo real para preservar entre abas
     editor.onDidChangeCursorSelection((e) => {
+      if (isRestoringStateRef.current) return;
       const currentId = currentTabIdRef.current;
       if (currentId && editorRef.current) {
         try {
@@ -491,16 +539,34 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
         // 3. FUNÇÕES SQL / MYSQL (somente iniciadas pelo texto digitado)
         const functions = [
+          { name: 'CONCAT', snippet: 'CONCAT(${1:str1}, ${2:str2})', doc: 'Concatena dois ou mais textos ou colunas' },
+          { name: 'CONCAT_WS', snippet: "CONCAT_WS('${1: }', ${2:val1}, ${3:val2})", doc: 'Concatena valores com separador definido' },
+          { name: 'LENGTH', snippet: 'LENGTH(${1:campo})', doc: 'Retorna a quantidade de caracteres do texto' },
+          { name: 'CHAR_LENGTH', snippet: 'CHAR_LENGTH(${1:campo})', doc: 'Retorna o número de caracteres do texto' },
           { name: 'DATE_FORMAT', snippet: "DATE_FORMAT(${1:campo}, '${2:%d/%m/%Y}')", doc: 'Formata data conforme padrão MySQL' },
+          { name: 'DATEDIFF', snippet: 'DATEDIFF(${1:data1}, ${2:data2})', doc: 'Diferença em dias entre duas datas (data1 - data2)' },
+          { name: 'TIMEDIFF', snippet: 'TIMEDIFF(${1:hora1}, ${2:hora2})', doc: 'Diferença entre dois horários' },
           { name: 'NOW', snippet: 'NOW()', doc: 'Retorna a data e hora atual (YYYY-MM-DD HH:MM:SS)' },
           { name: 'CURDATE', snippet: 'CURDATE()', doc: 'Retorna a data atual (YYYY-MM-DD)' },
           { name: 'CURTIME', snippet: 'CURTIME()', doc: 'Retorna a hora atual (HH:MM:SS)' },
-          { name: 'DATEDIFF', snippet: 'DATEDIFF(${1:data1}, ${2:data2})', doc: 'Diferença em dias entre duas datas' },
+          { name: 'UPPER', snippet: 'UPPER(${1:campo})', doc: 'Converte texto para letras maiúsculas' },
+          { name: 'LOWER', snippet: 'LOWER(${1:campo})', doc: 'Converte texto para letras minúsculas' },
+          { name: 'ROUND', snippet: 'ROUND(${1:numero}, ${2:0})', doc: 'Arredonda valor numérico para N casas decimais' },
+          { name: 'CEIL', snippet: 'CEIL(${1:numero})', doc: 'Arredonda valor numérico sempre para cima' },
+          { name: 'FLOOR', snippet: 'FLOOR(${1:numero})', doc: 'Arredonda valor numérico sempre para baixo' },
+          { name: 'TRIM', snippet: 'TRIM(${1:campo})', doc: 'Remove espaços em branco do início e fim do texto' },
+          { name: 'SUBSTRING', snippet: 'SUBSTRING(${1:campo}, ${2:inicio}, ${3:tamanho})', doc: 'Extrai fatia do texto a partir da posição' },
+          { name: 'REPLACE', snippet: "REPLACE(${1:campo}, '${2:de}', '${3:para}')", doc: 'Substitui ocorrências de um trecho de texto' },
+          { name: 'LEFT', snippet: 'LEFT(${1:campo}, ${2:tamanho})', doc: 'Extrai os primeiros N caracteres da esquerda' },
+          { name: 'RIGHT', snippet: 'RIGHT(${1:campo}, ${2:tamanho})', doc: 'Extrai os últimos N caracteres da direita' },
+          { name: 'YEAR', snippet: 'YEAR(${1:data})', doc: 'Extrai o ano (4 dígitos) de uma data' },
+          { name: 'MONTH', snippet: 'MONTH(${1:data})', doc: 'Extrai o mês (1-12) de uma data' },
+          { name: 'DAY', snippet: 'DAY(${1:data})', doc: 'Extrai o dia do mês (1-31) de uma data' },
           { name: 'IFNULL', snippet: 'IFNULL(${1:campo}, ${2:padrao})', doc: 'Retorna valor padrão se campo for nulo' },
-          { name: 'CONCAT_WS', snippet: "CONCAT_WS('${1: }', ${2:val1}, ${3:val2})", doc: 'Concatena valores com separador' },
+          { name: 'COALESCE', snippet: 'COALESCE(${1:campo}, ${2:padrao})', doc: 'Retorna o primeiro valor não nulo da lista' },
           { name: 'COUNT', snippet: 'COUNT(${1:*})', doc: 'Contagem de linhas' },
-          { name: 'SUM', snippet: 'SUM(${1:campo})', doc: 'Soma dos valores' },
-          { name: 'AVG', snippet: 'AVG(${1:campo})', doc: 'Média dos valores' },
+          { name: 'SUM', snippet: 'SUM(${1:campo})', doc: 'Soma dos valores numéricos' },
+          { name: 'AVG', snippet: 'AVG(${1:campo})', doc: 'Média aritmética dos valores' },
           { name: 'MIN', snippet: 'MIN(${1:campo})', doc: 'Valor mínimo' },
           { name: 'MAX', snippet: 'MAX(${1:campo})', doc: 'Valor máximo' },
         ];
@@ -574,12 +640,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   e.stopPropagation();
                   startRenaming(tab.id, tab.title);
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setTabContextMenu({
+                    visible: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    tabId: tab.id,
+                    tabTitle: tab.title,
+                  });
+                }}
                 className={`group h-8 px-3 flex items-center gap-2 text-xs font-mono cursor-pointer border-r border-[var(--border-color)] transition-colors shrink-0 ${
                   isActive
                     ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] border-t-2 border-t-[var(--accent-yellow)] font-semibold'
                     : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
-                title={isEditing ? 'Pressione Enter para salvar, Esc para cancelar' : `${tab.title} (Duplo clique ou F2 para renomear)`}
+                title={isEditing ? 'Pressione Enter para salvar, Esc para cancelar' : `${tab.title} (Duplo clique ou F2 para renomear, botão direito para opções)`}
               >
                 <span className="material-symbols-outlined text-[13px] text-[#FF8533]">
                   description
@@ -608,7 +685,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 ) : (
                   <span className="truncate max-w-[140px] select-none">{tab.title}</span>
                 )}
-                {!isEditing && tabs.length > 1 && (
+                {!isEditing && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -666,6 +743,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               )}
             />
           </div>
+
+          {/* Botão Fechar Todas as Abas se houver abas abertas */}
+          {tabs.length > 0 && onCloseAllTabs && (
+            <button
+              onClick={() => {
+                saveCurrentTabState();
+                tabStatesRef.current = {};
+                onCloseAllTabs();
+              }}
+              title="Fechar Todas as Abas"
+              className="ml-1 px-1.5 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/15 rounded transition-colors cursor-pointer shrink-0 border border-transparent hover:border-[#FF3366]/30"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[13px]">close</span>
+              <span className="hidden sm:inline">Fechar Todas</span>
+            </button>
+          )}
         </div>
 
         {/* Zoom do Editor */}
@@ -683,6 +777,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       <div className="flex-1 w-full h-full relative overflow-hidden">
         {activeTab ? (
           <Editor
+            key={activeTab.id}
+            path={`tab_${activeTab.id}.sql`}
             height="100%"
             language="sql"
             theme={getMonacoThemeName(theme, fontTheme)}
@@ -697,7 +793,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               contextmenu: false,
               fontSize: currentFontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
-              fontLigatures: true,
+              fontLigatures: false,
               minimap: { enabled: false },
               automaticLayout: true,
               scrollBeyondLastLine: false,
@@ -713,8 +809,28 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             }}
           />
         ) : (
-          <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-xs">
-            Nenhuma aba aberta. Clique em + para criar uma nova aba.
+          <div className="flex flex-col items-center justify-center h-full text-center px-4 select-none bg-[var(--bg-primary)]/40">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FF6B00]/20 to-[#FFE600]/10 border border-[#FF6B00]/30 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(255,107,0,0.15)]">
+              <span className="material-symbols-outlined text-[28px] text-[var(--accent-yellow)]">
+                post_add
+              </span>
+            </div>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+              Nenhuma aba de script aberta
+            </h3>
+            <p className="text-xs text-[var(--text-muted)] max-w-sm mb-4">
+              Todas as abas foram fechadas. Crie um novo script em branco ou carregue um exercício para continuar praticando SQL.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onNewBlankTab()}
+                className="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-[#FF6B00] to-[#FFAA00] text-black font-semibold hover:brightness-110 shadow-md shadow-[#FF6B00]/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px]">add</span>
+                Novo Script
+              </button>
+            </div>
           </div>
         )}
 
@@ -844,6 +960,96 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 Ctrl+F2
               </kbd>
             </button>
+          </div>
+        )}
+
+        {/* Menu de Contexto ao Clicar com Botão Direito na Aba */}
+        {tabContextMenu.visible && (
+          <div
+            ref={tabContextMenuRef}
+            style={{
+              position: 'fixed',
+              left: `${tabContextMenu.x}px`,
+              top: `${tabContextMenu.y}px`,
+              zIndex: 999999,
+            }}
+            className="w-56 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-[0_12px_36px_rgba(0,0,0,0.45)] py-1.5 text-xs select-none backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+          >
+            <div className="px-3 py-1 text-[10px] font-mono text-[var(--accent-yellow)] uppercase tracking-wider border-b border-[var(--border-color)] flex items-center justify-between font-semibold">
+              <span className="truncate max-w-[130px]">{tabContextMenu.tabTitle}</span>
+              <span className="text-[9px] text-[var(--text-muted)] font-normal">Aba</span>
+            </div>
+
+            {/* Renomear Aba */}
+            <button
+              onClick={() => {
+                const targetId = tabContextMenu.tabId;
+                const targetTitle = tabContextMenu.tabTitle;
+                setTabContextMenu(prev => ({ ...prev, visible: false }));
+                startRenaming(targetId, targetTitle);
+              }}
+              className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">edit</span>
+                <span>Renomear</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)]">F2</kbd>
+            </button>
+
+            {/* Fechar esta Aba */}
+            <button
+              onClick={() => {
+                const targetId = tabContextMenu.tabId;
+                setTabContextMenu(prev => ({ ...prev, visible: false }));
+                saveCurrentTabState();
+                delete tabStatesRef.current[targetId];
+                onCloseTab(targetId);
+              }}
+              className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[15px] text-[#FF3366]">close</span>
+              <span>Fechar</span>
+            </button>
+
+            {/* Fechar Outras Abas */}
+            {tabs.length > 1 && onCloseOtherTabs && (
+              <button
+                onClick={() => {
+                  const targetId = tabContextMenu.tabId;
+                  setTabContextMenu(prev => ({ ...prev, visible: false }));
+                  saveCurrentTabState();
+                  Object.keys(tabStatesRef.current).forEach(id => {
+                    if (id !== targetId) delete tabStatesRef.current[id];
+                  });
+                  onCloseOtherTabs(targetId);
+                }}
+                className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px] text-[var(--text-muted)]">tab_close</span>
+                <span>Fechar Outras</span>
+              </button>
+            )}
+
+            {/* Fechar Todas as Abas */}
+            {onCloseAllTabs && (
+              <button
+                onClick={() => {
+                  setTabContextMenu(prev => ({ ...prev, visible: false }));
+                  saveCurrentTabState();
+                  tabStatesRef.current = {};
+                  onCloseAllTabs();
+                }}
+                className="w-full px-3 py-1.5 text-left text-[#FF3366] hover:bg-[#FF3366]/10 flex items-center gap-2 transition-colors cursor-pointer border-t border-[var(--border-color)] mt-1"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px]">clear_all</span>
+                <span>Fechar Todas</span>
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import alasql from 'alasql';
-import { KNOWN_SQL_FUNCTIONS, registerMySQLFunctions } from './mysqlFunctions';
+import { KNOWN_SQL_FUNCTIONS, registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
 import type { DatabaseSchema, SqlReview } from '../types';
 
 // Garante que as funções MySQL estejam registradas no motor AlaSQL
@@ -223,10 +223,11 @@ export function reviewSqlQuery(
     }
   }
 
-  // 2. Validação Sintática com AlaSQL (no código original)
+  // 2. Validação Sintática com AlaSQL (no código original pré-processado para MySQL)
   let rawSyntaxError: string | null = null;
+  const preprocessedForValidation = preprocessSqlQuery(trimmed);
   try {
-    alasql.parse(trimmed);
+    alasql.parse(preprocessedForValidation);
   } catch (err: any) {
     rawSyntaxError = err?.message || String(err);
   }
@@ -242,7 +243,7 @@ export function reviewSqlQuery(
   try {
     if (!/^\s*(USE|CREATE\s+DATABASE|DROP\s+DATABASE)\b/i.test(trimmed)) {
       if (typeof (alasql as any).compile === 'function') {
-        (alasql as any).compile(trimmed);
+        (alasql as any).compile(preprocessedForValidation);
       }
     }
   } catch (err: any) {

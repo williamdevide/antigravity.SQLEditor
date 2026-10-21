@@ -481,20 +481,17 @@ export const App: React.FC = () => {
     handleNewTab(solution.content, solution.fileName);
   }, [handleNewTab]);
 
-  // Fechar Todas as Guias
+  // Fechar Todas as Guias (permite fechar 100% das abas)
   const handleCloseAllTabs = useCallback(() => {
-    const newId = `tab-${Date.now()}`;
-    const defaultContent = activeDatabase
-      ? `-- Script SQL limpo\nUSE \`${activeDatabase}\`;\n\n`
-      : `-- Script SQL limpo\n\n`;
-    const newTab: TabItem = {
-      id: newId,
-      title: 'script_1.sql',
-      content: defaultContent,
-    };
-    setTabs([newTab]);
-    setActiveTabId(newId);
-  }, [activeDatabase]);
+    setTabs([]);
+    setActiveTabId('');
+  }, []);
+
+  // Fechar Outras Guias
+  const handleCloseOtherTabs = useCallback((keepId: string) => {
+    setTabs(prev => prev.filter(t => t.id === keepId));
+    setActiveTabId(keepId);
+  }, []);
 
   // Carregar Preset do Schema Explorer (Vazio, Exemplos, BDs Aula)
   const handleLoadPreset = useCallback(async (preset: DatabasePreset) => {
@@ -559,14 +556,14 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, handleNewTab]);
 
-  // Fechar Aba
+  // Fechar Aba (permite fechar até a última aba, deixando a lista vazia se desejado)
   const handleCloseTab = useCallback((id: string) => {
     setTabs(prev => {
       const next = prev.filter(t => t.id !== id);
-      if (activeTabId === id && next.length > 0) {
-        setActiveTabId(next[next.length - 1].id);
+      if (activeTabId === id) {
+        setActiveTabId(next.length > 0 ? next[next.length - 1].id : '');
       }
-      return next.length > 0 ? next : INITIAL_TABS;
+      return next;
     });
   }, [activeTabId]);
 
@@ -889,10 +886,10 @@ export const App: React.FC = () => {
                   onRefreshSchemas={refreshSchemas}
                   zoomLevel={zoomLevels.sidebar}
                   onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, sidebar: Math.min(180, p.sidebar + 10) }))
+                    setZoomLevels(p => ({ ...p, sidebar: Math.min(250, p.sidebar + 10) }))
                   }
                   onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, sidebar: Math.max(70, p.sidebar - 10) }))
+                    setZoomLevels(p => ({ ...p, sidebar: Math.max(50, p.sidebar - 10) }))
                   }
                   onZoomReset={() =>
                     setZoomLevels(p => ({ ...p, sidebar: 100 }))
@@ -942,14 +939,16 @@ export const App: React.FC = () => {
                     onReviewSnippet={handleReviewSnippet}
                     zoomLevel={zoomLevels.editor}
                     onZoomIn={() =>
-                      setZoomLevels(p => ({ ...p, editor: Math.min(180, p.editor + 10) }))
+                      setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
                     }
                     onZoomOut={() =>
-                      setZoomLevels(p => ({ ...p, editor: Math.max(70, p.editor - 10) }))
+                      setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
                     }
                     onZoomReset={() =>
                       setZoomLevels(p => ({ ...p, editor: 100 }))
                     }
+                    onCloseAllTabs={handleCloseAllTabs}
+                    onCloseOtherTabs={handleCloseOtherTabs}
                     theme={theme}
                     fontTheme={fontTheme}
                     onRenameTab={handleRenameTab}
@@ -981,10 +980,10 @@ export const App: React.FC = () => {
                     isExecuting={isExecuting}
                     zoomLevel={zoomLevels.console}
                     onZoomIn={() =>
-                      setZoomLevels(p => ({ ...p, console: Math.min(180, p.console + 10) }))
+                      setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
                     }
                     onZoomOut={() =>
-                      setZoomLevels(p => ({ ...p, console: Math.max(70, p.console - 10) }))
+                      setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
                     }
                     onZoomReset={() =>
                       setZoomLevels(p => ({ ...p, console: 100 }))
@@ -1018,14 +1017,16 @@ export const App: React.FC = () => {
                   onReviewSnippet={handleReviewSnippet}
                   zoomLevel={zoomLevels.editor}
                   onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, editor: Math.min(180, p.editor + 10) }))
+                    setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
                   }
                   onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, editor: Math.max(70, p.editor - 10) }))
+                    setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
                   }
                   onZoomReset={() =>
                     setZoomLevels(p => ({ ...p, editor: 100 }))
                   }
+                  onCloseAllTabs={handleCloseAllTabs}
+                  onCloseOtherTabs={handleCloseOtherTabs}
                   theme={theme}
                   fontTheme={fontTheme}
                   onRenameTab={handleRenameTab}
@@ -1045,10 +1046,10 @@ export const App: React.FC = () => {
                   isExecuting={isExecuting}
                   zoomLevel={zoomLevels.console}
                   onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, console: Math.min(180, p.console + 10) }))
+                    setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
                   }
                   onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, console: Math.max(70, p.console - 10) }))
+                    setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
                   }
                   onZoomReset={() =>
                     setZoomLevels(p => ({ ...p, console: 100 }))
