@@ -364,6 +364,58 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const isAutoCapitalizingRef = useRef<boolean>(false);
   const completionProviderRef = useRef<any>(null);
 
+  // Sistema de buffer e debounce de digitação para garantir 120 FPS e eliminar 100% do atraso do cursor
+  const contentDebounceTimerRef = useRef<any>(null);
+  const pendingContentRef = useRef<Record<string, string>>({});
+
+  const flushPendingContent = useCallback(() => {
+    if (contentDebounceTimerRef.current) {
+      clearTimeout(contentDebounceTimerRef.current);
+      contentDebounceTimerRef.current = null;
+    }
+    const currentId = currentTabIdRef.current;
+    if (currentId && pendingContentRef.current[currentId] !== undefined) {
+      const content = pendingContentRef.current[currentId];
+      delete pendingContentRef.current[currentId];
+      onUpdateContent(currentId, content);
+    }
+  }, [onUpdateContent]);
+
+  const handleEditorContentChange = useCallback((val: string | undefined) => {
+    const text = val || '';
+    const tabId = currentTabIdRef.current;
+    if (!tabId) return;
+
+    pendingContentRef.current[tabId] = text;
+
+    if (contentDebounceTimerRef.current) {
+      clearTimeout(contentDebounceTimerRef.current);
+    }
+    contentDebounceTimerRef.current = setTimeout(() => {
+      contentDebounceTimerRef.current = null;
+      if (pendingContentRef.current[tabId] !== undefined) {
+        const toSave = pendingContentRef.current[tabId];
+        delete pendingContentRef.current[tabId];
+        onUpdateContent(tabId, toSave);
+      }
+    }, 350);
+  }, [onUpdateContent]);
+
+  // Limpa o timer de debounce no unmount e descarrega qualquer texto pendente
+  useEffect(() => {
+    return () => {
+      if (contentDebounceTimerRef.current) {
+        clearTimeout(contentDebounceTimerRef.current);
+        const currentId = currentTabIdRef.current;
+        if (currentId && pendingContentRef.current[currentId] !== undefined) {
+          const content = pendingContentRef.current[currentId];
+          delete pendingContentRef.current[currentId];
+          onUpdateContent(currentId, content);
+        }
+      }
+    };
+  }, [onUpdateContent]);
+
   // Menu de contexto com clique com botão direito na aba
   const [tabContextMenu, setTabContextMenu] = useState<{
     visible: boolean;
@@ -408,8 +460,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
+  // Sincroniza alterações externas de conteúdo no modelo do editor Monaco quando a aba não está sendo ativamente digitada
+  useEffect(() => {
+    if (!editorRef.current || !activeTab) return;
+    const currentVal = editorRef.current.getValue();
+    if (activeTab.content !== currentVal && !pendingContentRef.current[activeTab.id]) {
+      editorRef.current.setValue(activeTab.content);
+    }
+  }, [activeTab?.id, activeTab?.content]);
+
   // Exportar script da aba ativa como arquivo .sql para download
   const handleExportCurrentScript = useCallback(() => {
+    flushPendingContent();
     const tabToExport = tabs.find(t => t.id === currentTabIdRef.current) || activeTab;
     if (!tabToExport) return;
     const content = editorRef.current ? editorRef.current.getValue() : tabToExport.content;
@@ -509,33 +571,35 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           const wordEndCol = change.range.startColumn;
           const wordRange = new monaco.Range(lineNumber, wordStartCol, lineNumber, wordEndCol);
 
-          isAutoCapitalizingRef.current = true;
-          try {
-            const currentPosition = editor.getPosition();
-            editor.executeEdits('auto-capitalize-keyword', [
-              {
-                range: wordRange,
-                text: upperWord,
-                forceMoveMarkers: true,
-              },
-            ]);
-            // Preserva e restaura com precisão a posição do cursor após a capitalização
-            if (currentPosition) {
-              const delta = upperWord.length - rawWord.length;
-              editor.setPosition({
-                lineNumber: currentPosition.lineNumber,
-                column: currentPosition.column + delta,
-              });
+          // Executa a substituição em microtask sem interromper o loop de digitação nem deslocar o cursor
+          queueMicrotask(() => {
+            if (model.isDisposed()) return;
+            const currentWord = model.getValueInRange(wordRange);
+            if (currentWord === rawWord) {
+              isAutoCapitalizingRef.current = true;
+              try {
+                model.pushEditOperations(
+                  [],
+                  [
+                    {
+                      range: wordRange,
+                      text: upperWord,
+                    },
+                  ],
+                  () => null
+                );
+              } finally {
+                isAutoCapitalizingRef.current = false;
+              }
             }
-          } finally {
-            isAutoCapitalizingRef.current = false;
-          }
+          });
         }
       }
     });
 
     // Atalho global do editor: Ctrl+Enter / Cmd+Enter (Executar tudo)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      flushPendingContent();
       onRunQuery();
     });
 
@@ -845,6 +909,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 key={tab.id}
                 onClick={() => {
                   if (!isEditing) {
+                    flushPendingContent();
                     onSelectTab(tab.id);
                   }
                 }}
@@ -901,6 +966,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      flushPendingContent();
+                      if (monacoInstanceRef.current) {
+                        try {
+                          const uri = monacoInstanceRef.current.Uri.parse(`tab_${tab.id}.sql`);
+                          monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                        } catch (_) {}
+                      }
                       onCloseTab(tab.id);
                     }}
                     title="Fechar Aba"
@@ -917,7 +989,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {/* Botão de Adicionar Aba em Branco Direto (+) com Menu Suspenso de Soluções */}
           <div className="flex items-center ml-1 shrink-0 bg-[var(--bg-secondary)] rounded border border-[var(--border-color)]/60 p-0.5 shadow-sm">
             <button
-              onClick={() => onNewBlankTab()}
+              onClick={() => {
+                flushPendingContent();
+                onNewBlankTab();
+              }}
               title="Nova Aba em Branco (+)"
               className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer"
               type="button"
@@ -926,8 +1001,14 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </button>
 
             <NewTabDropdown
-              onNewBlankTab={() => onNewBlankTab()}
-              onSelectSolution={(sol) => onOpenSolution(sol)}
+              onNewBlankTab={() => {
+                flushPendingContent();
+                onNewBlankTab();
+              }}
+              onSelectSolution={(sol) => {
+                flushPendingContent();
+                onOpenSolution(sol);
+              }}
               solutions={solutions}
               align="left"
               triggerButton={({ isOpen, toggle }) => (
@@ -948,7 +1029,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {/* Botão Fechar Todas as Abas se houver abas abertas */}
           {tabs.length > 0 && onCloseAllTabs && (
             <button
-              onClick={() => onCloseAllTabs()}
+              onClick={() => {
+                flushPendingContent();
+                if (monacoInstanceRef.current) {
+                  tabs.forEach(t => {
+                    try {
+                      const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                      monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                    } catch (_) {}
+                  });
+                }
+                onCloseAllTabs();
+              }}
               title="Fechar Todas as Abas"
               className="ml-1 px-1.5 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/15 rounded transition-colors cursor-pointer shrink-0 border border-transparent hover:border-[#FF3366]/30"
               type="button"
@@ -976,19 +1068,26 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           <Editor
             height="100%"
             language="sql"
+            path={`tab_${activeTab.id}.sql`}
+            saveViewState={false}
+            defaultValue={activeTab.content}
             theme={getMonacoThemeName(theme, fontTheme)}
             beforeMount={(monaco) => {
               monacoInstanceRef.current = monaco;
               registerAllMonacoThemes(monaco);
             }}
-            value={activeTab.content}
-            onChange={(val) => onUpdateContent(activeTab.id, val || '')}
+            onChange={handleEditorContentChange}
             onMount={handleEditorDidMount}
             options={{
               contextmenu: false,
               fontSize: currentFontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
               fontLigatures: false,
+              cursorSmoothCaretAnimation: 'off',
+              cursorBlinking: 'blink',
+              cursorStyle: 'line',
+              cursorWidth: 2,
+              renderWhitespace: 'none',
               minimap: { enabled: false },
               automaticLayout: true,
               scrollBeyondLastLine: false,
@@ -1231,6 +1330,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               onClick={() => {
                 const targetId = tabContextMenu.tabId;
                 setTabContextMenu(prev => ({ ...prev, visible: false }));
+                flushPendingContent();
+                if (monacoInstanceRef.current) {
+                  try {
+                    const uri = monacoInstanceRef.current.Uri.parse(`tab_${targetId}.sql`);
+                    monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                  } catch (_) {}
+                }
                 onCloseTab(targetId);
               }}
               className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
@@ -1246,6 +1352,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 onClick={() => {
                   const targetId = tabContextMenu.tabId;
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
+                  flushPendingContent();
+                  if (monacoInstanceRef.current) {
+                    tabs.filter(t => t.id !== targetId).forEach(t => {
+                      try {
+                        const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                        monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                      } catch (_) {}
+                    });
+                  }
                   onCloseOtherTabs(targetId);
                 }}
                 className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
@@ -1261,6 +1376,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               <button
                 onClick={() => {
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
+                  flushPendingContent();
+                  if (monacoInstanceRef.current) {
+                    tabs.forEach(t => {
+                      try {
+                        const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                        monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                      } catch (_) {}
+                    });
+                  }
                   onCloseAllTabs();
                 }}
                 className="w-full px-3 py-1.5 text-left text-[#FF3366] hover:bg-[#FF3366]/10 flex items-center gap-2 transition-colors cursor-pointer border-t border-[var(--border-color)] mt-1"

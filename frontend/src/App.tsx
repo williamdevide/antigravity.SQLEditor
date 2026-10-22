@@ -345,12 +345,12 @@ export const App: React.FC = () => {
 
   // Executar query completa
   const handleRunQuery = useCallback(async () => {
-    const currentTab = tabs.find(t => t.id === activeTabId);
-    if (!currentTab || !currentTab.content.trim()) return;
+    const activeCode = editorRef.current ? editorRef.current.getValue() : (tabs.find(t => t.id === activeTabId)?.content || '');
+    if (!activeCode.trim()) return;
 
     setIsExecuting(true);
     try {
-      const res = await dbEngine.executeScript(currentTab.content);
+      const res = await dbEngine.executeScript(activeCode);
       setResults(res);
       await refreshSchemas();
       setActiveConsoleTab('grid');
@@ -367,7 +367,7 @@ export const App: React.FC = () => {
     } catch (err: any) {
       setResults([
         {
-          statement: currentTab.content,
+          statement: activeCode,
           columns: ['Erro'],
           rows: [],
           executionTimeMs: 0,

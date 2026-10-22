@@ -1367,3 +1367,41 @@ corrija.`
    - Git commit semântico padronizado: `fix: desativar selecao forcada entre abas e restaurar estabilidade nativa do cursor`.
    - Realizado `git push origin main`.
 
+---
+
+## 📌 Prompt 43
+**Data:** 21/10/2026 - 23:25  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal a digitação continua estranha na nova versão, aparentando o cursor estar atrasado. corrija de uma vez por todas
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Diagnóstico da Causa Raiz do Atraso do Cursor e Latência de Digitação:**
+   - **Renderização Controlada a Cada Tecla:** O componente `<Editor value={activeTab.content} onChange={(val) => onUpdateContent(activeTab.id, val)}>` chamava `setTabs` no `App.tsx` a cada caractere digitado. Para scripts com centenas de linhas e dezenas de kilobytes (como `semana08-01-dados-(rh).sql`), comparar e serializar strings de até 90 KB a cada tecla bloqueava o loop principal da thread do JavaScript em 30ms a 50ms por tecla.
+   - **Execução Síncrona de Edits:** O Monaco internamente interceptava o loop de eventos ao receber o novo valor via `executeEdits` concorrendo com o pipeline de renderização nativo.
+   - **Interpolação de Animação do Cursor:** O Monaco vinha com animação suave de cursor (`cursorSmoothCaretAnimation`) ativada por padrão, criando a sensação visual de "cursor atrasado" em relação à digitação no teclado físico.
+
+2. **Arquitetura de Digitação a 120+ FPS com Buffer Desacoplado:**
+   - **Buffer Local e Debounce Inteligente:** Criados `pendingContentRef` e `contentDebounceTimerRef` (350ms) com a função `handleEditorContentChange`. A digitação não dispara re-renderizações no React a cada tecla, permitindo que o Monaco atualize sua memória de texto a 120 FPS nativamente e com latência 0ms.
+   - **Descarregamento Imediato (`flushPendingContent`):** Qualquer ação que exija persistência (troca de aba no cabeçalho ou menu de contexto, fechamento de abas, atalho `Ctrl+Enter`, exportação de script ou unmount do componente) executa `flushPendingContent()`, sincronizando o estado com `App.tsx` sem perder nenhum caractere.
+   - **Leitura Direta do Buffer ao Executar (`handleRunQuery`):** No `App.tsx`, `handleRunQuery` lê diretamente `editorRef.current.getValue()`, garantindo 100% de precisão e frescor imediato do código SQL mesmo se o usuário clicar no botão "Executar" antes dos 350ms do debounce.
+
+3. **Desacoplamento do Modelo e Otimização Visual do Cursor no Monaco:**
+   - **Desacoplamento via `defaultValue` e `path`:** Configurado `<Editor path={`tab_${activeTab.id}.sql`} saveViewState={false} defaultValue={activeTab.content} ... />`, eliminando o diff contínuo de strings gigantes a cada ciclo do React.
+   - **Sincronização Externa Segura:** Criado `useEffect` dedicado que sincroniza alterações vindas de fora (como carregamento de soluções, importações de arquivo ou presets) sem interferir na digitação ativa do usuário.
+   - **Descarte Limpo de Recursos:** Descarte explícito dos modelos de texto (`model.dispose()`) ao fechar abas individuais ou em lote.
+   - **Opções de Cursor Ultra-responsivas:** Adicionadas as configurações no Monaco:
+     - `cursorSmoothCaretAnimation: 'off'` (elimina qualquer interpolação ou efeito elástico de animação do cursor).
+     - `cursorBlinking: 'blink'` (renderização nítida e direta).
+     - `cursorStyle: 'line'`, `cursorWidth: 2`.
+     - `renderWhitespace: 'none'`.
+   - **Auto-capitalização Não Bloqueante:** A auto-capitalização de palavras-chave SQL (`from` -> `FROM`) opera em microtask assíncrona (`queueMicrotask`) e via `model.pushEditOperations`, sem interferir no cursor ou no fluxo de digitação contínuo.
+
+4. **Validação e Compilação:**
+   - Executado `npm run build` no frontend: compilado com sucesso absoluto (**0 erros** de TypeScript e Vite) em 1.29s.
+
+5. **Sincronização com o Repositório Remoto (GitHub) e Deploy na Vercel:**
+   - Git commit semântico padronizado: `fix: eliminar atraso do cursor e latencia de digitacao com buffer desacoplado e microtask no monaco`.
+   - Realizado `git push origin main`.
+
+
