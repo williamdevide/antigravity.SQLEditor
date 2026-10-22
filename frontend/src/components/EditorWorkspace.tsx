@@ -359,10 +359,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
   }, [theme, fontTheme]);
 
-  // Mapa de ViewState por aba: armazena a posição exata do cursor, seleção de texto e rolagem
-  const tabStatesRef = useRef<Record<string, any>>({});
   const currentTabIdRef = useRef<string>(activeTabId);
-  const prevTabIdRef = useRef<string>(activeTabId);
+  currentTabIdRef.current = activeTabId;
   const isAutoCapitalizingRef = useRef<boolean>(false);
   const completionProviderRef = useRef<any>(null);
 
@@ -393,43 +391,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       return () => window.removeEventListener('mousedown', handleClickOutside);
     }
   }, [tabContextMenu.visible]);
-
-  // Salva o ViewState completo (rolagem, cursor e seleção) da aba ativa
-  const saveCurrentTabState = useCallback((tabId?: string) => {
-    const currentId = tabId || currentTabIdRef.current;
-    const editor = editorRef.current;
-    if (currentId && editor) {
-      try {
-        const viewState = editor.saveViewState();
-        if (viewState) {
-          tabStatesRef.current[currentId] = viewState;
-        }
-      } catch (_) {}
-    }
-  }, []);
-
-  // Restaura ViewState e Cursor fielmente ao trocar de aba ativa sem jumps ou atrasos
-  useEffect(() => {
-    const oldId = prevTabIdRef.current;
-    const newId = activeTabId;
-
-    if (editorRef.current && oldId && oldId !== newId) {
-      saveCurrentTabState(oldId);
-    }
-
-    prevTabIdRef.current = newId;
-    currentTabIdRef.current = newId;
-
-    if (!editorRef.current || !newId) return;
-
-    const saved = tabStatesRef.current[newId];
-    if (saved) {
-      try {
-        editorRef.current.restoreViewState(saved);
-        editorRef.current.focus();
-      } catch (_) {}
-    }
-  }, [activeTabId, saveCurrentTabState]);
 
   // Rola automaticamente a barra de abas até o final (exibindo a última aba e o botão +)
   useEffect(() => {
@@ -497,57 +458,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       });
     }
 
-    // Sincroniza viewState (cursor, seleção e rolagem) de forma nativa e sem desmonte ao alternar modelos
-    editor.onDidChangeModel((e: any) => {
-      if (e.oldModelUrl) {
-        const oldMatch = e.oldModelUrl.path.match(/tab_(.+)\.sql$/);
-        if (oldMatch && editorRef.current) {
-          try {
-            const vs = editorRef.current.saveViewState();
-            if (vs) {
-              tabStatesRef.current[oldMatch[1]] = vs;
-            }
-          } catch (_) {}
-        }
-      }
-      if (e.newModelUrl) {
-        const newMatch = e.newModelUrl.path.match(/tab_(.+)\.sql$/);
-        const targetId = newMatch ? newMatch[1] : currentTabIdRef.current;
-        const saved = tabStatesRef.current[targetId];
-        if (saved && editorRef.current) {
-          try {
-            editorRef.current.restoreViewState(saved);
-            editorRef.current.focus();
-          } catch (_) {}
-        }
-      }
-    });
-
-    // Monitora seleção, cursor e rolagem em tempo real para sincronizar o estado da aba
-    editor.onDidChangeCursorSelection(() => {
-      const currentId = currentTabIdRef.current;
-      if (currentId && editorRef.current) {
-        try {
-          const viewState = editorRef.current.saveViewState();
-          if (viewState) {
-            tabStatesRef.current[currentId] = viewState;
-          }
-        } catch (_) {}
-      }
-    });
-
-    editor.onDidScrollChange(() => {
-      const currentId = currentTabIdRef.current;
-      if (currentId && editorRef.current) {
-        try {
-          const viewState = editorRef.current.saveViewState();
-          if (viewState) {
-            tabStatesRef.current[currentId] = viewState;
-          }
-        } catch (_) {}
-      }
-    });
-
     // Auto-correção em tempo real de palavras-chave SQL para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
     editor.onDidChangeModelContent((e) => {
       if (isAutoCapitalizingRef.current) return;
@@ -601,6 +511,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
           isAutoCapitalizingRef.current = true;
           try {
+            const currentPosition = editor.getPosition();
             editor.executeEdits('auto-capitalize-keyword', [
               {
                 range: wordRange,
@@ -608,6 +519,14 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 forceMoveMarkers: true,
               },
             ]);
+            // Preserva e restaura com precisão a posição do cursor após a capitalização
+            if (currentPosition) {
+              const delta = upperWord.length - rawWord.length;
+              editor.setPosition({
+                lineNumber: currentPosition.lineNumber,
+                column: currentPosition.column + delta,
+              });
+            }
           } finally {
             isAutoCapitalizingRef.current = false;
           }
@@ -926,7 +845,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 key={tab.id}
                 onClick={() => {
                   if (!isEditing) {
-                    saveCurrentTabState();
                     onSelectTab(tab.id);
                   }
                 }}
@@ -983,8 +901,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      saveCurrentTabState();
-                      delete tabStatesRef.current[tab.id];
                       onCloseTab(tab.id);
                     }}
                     title="Fechar Aba"
@@ -1001,10 +917,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {/* Botão de Adicionar Aba em Branco Direto (+) com Menu Suspenso de Soluções */}
           <div className="flex items-center ml-1 shrink-0 bg-[var(--bg-secondary)] rounded border border-[var(--border-color)]/60 p-0.5 shadow-sm">
             <button
-              onClick={() => {
-                saveCurrentTabState();
-                onNewBlankTab();
-              }}
+              onClick={() => onNewBlankTab()}
               title="Nova Aba em Branco (+)"
               className="w-6 h-6 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer"
               type="button"
@@ -1013,14 +926,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </button>
 
             <NewTabDropdown
-              onNewBlankTab={() => {
-                saveCurrentTabState();
-                onNewBlankTab();
-              }}
-              onSelectSolution={(sol) => {
-                saveCurrentTabState();
-                onOpenSolution(sol);
-              }}
+              onNewBlankTab={() => onNewBlankTab()}
+              onSelectSolution={(sol) => onOpenSolution(sol)}
               solutions={solutions}
               align="left"
               triggerButton={({ isOpen, toggle }) => (
@@ -1041,11 +948,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {/* Botão Fechar Todas as Abas se houver abas abertas */}
           {tabs.length > 0 && onCloseAllTabs && (
             <button
-              onClick={() => {
-                saveCurrentTabState();
-                tabStatesRef.current = {};
-                onCloseAllTabs();
-              }}
+              onClick={() => onCloseAllTabs()}
               title="Fechar Todas as Abas"
               className="ml-1 px-1.5 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/15 rounded transition-colors cursor-pointer shrink-0 border border-transparent hover:border-[#FF3366]/30"
               type="button"
@@ -1071,7 +974,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       <div className="flex-1 w-full h-full relative overflow-hidden">
         {activeTab ? (
           <Editor
-            path={`tab_${activeTab.id}.sql`}
             height="100%"
             language="sql"
             theme={getMonacoThemeName(theme, fontTheme)}
@@ -1329,8 +1231,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               onClick={() => {
                 const targetId = tabContextMenu.tabId;
                 setTabContextMenu(prev => ({ ...prev, visible: false }));
-                saveCurrentTabState();
-                delete tabStatesRef.current[targetId];
                 onCloseTab(targetId);
               }}
               className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
@@ -1346,10 +1246,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 onClick={() => {
                   const targetId = tabContextMenu.tabId;
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
-                  saveCurrentTabState();
-                  Object.keys(tabStatesRef.current).forEach(id => {
-                    if (id !== targetId) delete tabStatesRef.current[id];
-                  });
                   onCloseOtherTabs(targetId);
                 }}
                 className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
@@ -1365,8 +1261,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               <button
                 onClick={() => {
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
-                  saveCurrentTabState();
-                  tabStatesRef.current = {};
                   onCloseAllTabs();
                 }}
                 className="w-full px-3 py-1.5 text-left text-[#FF3366] hover:bg-[#FF3366]/10 flex items-center gap-2 transition-colors cursor-pointer border-t border-[var(--border-color)] mt-1"

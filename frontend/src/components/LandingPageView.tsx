@@ -25,7 +25,7 @@ const CHANGELOG_HISTORY: ChangelogEntry[] = [
     isLatest: true,
     tag: 'Lançamento Atual',
     items: [
-      'Cursor e viewport 100% estáveis ao trocar de abas: eliminação de remount do React e adoção da troca síncrona de modelo do Monaco com restauração nativa de viewState.',
+      'Restauração da estabilidade nativa do cursor: desativação completa do mecanismo forçado de seleção entre abas e preservação da posição exata do cursor durante auto-capitalização.',
       'Auto-capitalização em tempo real: comandos e palavras-chave SQL digitados em minúsculas são auto-corrigidos para MAIÚSCULAS instantaneamente (ex: from → FROM, select → SELECT), preservando strings e comentários.',
       'Autocompletar estritamente filtrado pelo banco ativo: sugestões de tabelas e colunas restritas ao esquema atualmente selecionado, sem poluição de outros bancos.',
       'Autocompletar avançado por ponto (Dot Completion): suporte a tabela.coluna e alias.coluna com resolução inteligente de alias da query (ex: FROM clientes c → c.).',

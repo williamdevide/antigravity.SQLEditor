@@ -1339,3 +1339,31 @@ corrija.`
 4. **Sincronização com o Repositório Remoto (GitHub) e Disparo de Deploy no Vercel:**
    - Git commit semântico padronizado: `feat: release v3.1.15 - autocompletar banco ativo, auto-capitalizacao sql, cursor estavel entre abas e changelog`.
    - Realizado `git push origin main`, disparando automaticamente a nova compilação e deploy na nuvem da Vercel.
+
+---
+
+## 📌 Prompt 42
+**Data:** 21/10/2026 - 23:00  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal o recurso de amnter selecionado entre abas não funcionou corretamente e ainda esta afetando a posição do cursor. desligue esse recurso e garanta que a posição do cursor volte a funcionar.
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Desativação Completa do Recurso de Manter Seleção Entre Abas:**
+   - **Causa Raiz Identificada:**
+     - O mecanismo de preservação de seleção e viewState entre abas (`tabStatesRef`, `saveCurrentTabState`, `restoreViewState`) interceptava os eventos de cursor (`onDidChangeCursorSelection`, `onDidChangeModel`, `onDidScrollChange`) e os cliques de alternância de aba (`onSelectTab`), forçando a restauração de seleções antigas e reposicionando o cursor arbitrariamente.
+     - Além disso, a auto-capitalização (`executeEdits`) movia o cursor para o final do intervalo substituído (antes do espaço/delimitador), fazendo com que o cursor parecesse recuar ou quebrar a digitação.
+   - **Solução Implementada:**
+     - Removidos completamente `tabStatesRef`, `saveCurrentTabState` e o efeito de restauração de `viewState` em `EditorWorkspace.tsx`.
+     - Removidos os listeners `editor.onDidChangeModel`, `editor.onDidChangeCursorSelection` e `editor.onDidScrollChange` que gravavam e forçavam estados de visualização.
+     - Removidas todas as chamadas e limpezas a `tabStatesRef` nos botões de fechar abas ("Fechar", "Fechar Outras", "Fechar Todas") e nova aba.
+     - Removida a propriedade `path` do `<Editor>`, retornando ao comportamento nativo e limpo de modelo único controlado por `value={activeTab.content}`, onde o cursor e o foco respondem exclusivamente às ações e cliques naturais do usuário.
+     - No evento de auto-capitalização (`onDidChangeModelContent`), adicionada a captura prévia e restauração exata da posição do cursor (`editor.setPosition`), garantindo que o cursor permaneça exatamente após o delimitador digitado (ex: após o espaço em `FROM `).
+
+2. **Validação de Build:**
+   - Executado `npm run build` no frontend com TypeScript (`tsc -b`) e Vite: concluído com sucesso e 0 erros em 1.83s.
+
+3. **Sincronização com o Repositório Remoto (GitHub) e Disparo de Deploy no Vercel:**
+   - Git commit semântico padronizado: `fix: desativar selecao forcada entre abas e restaurar estabilidade nativa do cursor`.
+   - Realizado `git push origin main`.
+
