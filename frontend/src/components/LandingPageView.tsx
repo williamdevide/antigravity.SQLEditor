@@ -19,11 +19,37 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.15',
+    date: '21/10/2026',
+    title: 'Autocompletar Estrito do Banco Ativo, Auto-Capitalização SQL e Cursor Estável Entre Abas',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Cursor e viewport 100% estáveis ao trocar de abas: eliminação de remount do React e adoção da troca síncrona de modelo do Monaco com restauração nativa de viewState.',
+      'Auto-capitalização em tempo real: comandos e palavras-chave SQL digitados em minúsculas são auto-corrigidos para MAIÚSCULAS instantaneamente (ex: from → FROM, select → SELECT), preservando strings e comentários.',
+      'Autocompletar estritamente filtrado pelo banco ativo: sugestões de tabelas e colunas restritas ao esquema atualmente selecionado, sem poluição de outros bancos.',
+      'Autocompletar avançado por ponto (Dot Completion): suporte a tabela.coluna e alias.coluna com resolução inteligente de alias da query (ex: FROM clientes c → c.).',
+      'Execução cirúrgica por posição do cursor: atalhos Alt+E e menu de contexto executam o comando exato sob o cursor quando não há texto selecionado.',
+      'Desativação de sugestões genéricas baseadas em palavras avulsas de outros documentos abertos (wordBasedSuggestions desativado).',
+    ],
+  },
+  {
+    version: 'v3.1.14',
+    date: '21/10/2026',
+    title: 'Fechamento de Abas em Massa, DER 2D Livre, Favicon Oficial e Funções MySQL Expandidas',
+    items: [
+      'Menu de contexto nas abas do editor com opções de "Fechar Todas as Abas" e "Fechar Outras Abas".',
+      'Diagrama ER com arraste 2D livre dos títulos de relacionamentos e rotas ortogonais sem sobreposição de tabelas.',
+      'Favicon vetorial SVG oficial da Milkfed integrado na aba do navegador.',
+      'Expansão das funções nativas MySQL no motor local (CONCAT, CONCAT_WS, LENGTH, CHAR_LENGTH, DATEDIFF, TIMEDIFF).',
+      'Novos scripts de exercícios e soluções didáticas para aulas de Banco de Dados.',
+      'Controles de zoom ampliados com faixa de 50% até 250% em todos os módulos.',
+    ],
+  },
+  {
     version: 'v3.1.13',
     date: '15/10/2026',
     title: 'Landing Page Estilo DrawDB, Identidade Milkfed, Changelog Expansível e Presets de Exemplo',
-    isLatest: true,
-    tag: 'Lançamento Atual',
     items: [
       'Página Inicial sensacional inspirada no drawdb.app com Live Interactive Showcase (Diagrama ER, Monaco SQL, Dados e Modelo ER).',
       'Seção institucional da Milkfed Devs && Reqs Lords com modal de ampliação em alta resolução para o logotipo oficial.',
@@ -170,9 +196,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.13 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.15 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.13': true,
+    'v3.1.15': true,
   });
 
   const toggleVersion = (version: string) => {
@@ -276,7 +302,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 SQL<span className="text-[#FF6B00]">Editor</span>
               </span>
               <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-full bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/20">
-                v3.1.13
+                v3.1.15
               </span>
             </div>
           </div>
@@ -414,7 +440,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         {/* Badge Flutuante no Topo */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm text-xs font-mono font-medium text-[var(--text-secondary)] mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse shadow-[0_0_8px_#00E676]" />
-          <span>v3.1.13 · 100% Offline-First · Zero Cadastro · Execução Local no Navegador</span>
+          <span>v3.1.15 · 100% Offline-First · Zero Cadastro · Execução Local no Navegador</span>
         </div>
 
         {/* Título Principal de Alto Impacto */}
@@ -1533,7 +1559,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#FF6B00] text-[20px]">bolt</span>
             <span className="font-bold text-sm text-[var(--text-primary)]">SQLEditor</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]">v3.1.13</span>
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]">v3.1.15</span>
             <span>• Milkfed Devs &amp;&amp; Reqs Lords</span>
           </div>
 

@@ -1260,7 +1260,82 @@ corrija.`
      2. **Fila de Deploy (Building) no Vercel:** o build pode estar em andamento ou em fila no dashboard.
      3. **Branch de Produção / Root Directory no painel da Vercel:** se a Production Branch estiver configurada para outra branch ou se o GitHub App estiver aguardando permissão.
 2. **Orientações e Procedimento de Redeploy:**
-   - Detalhados os passos para forçar redeploy imediato com *Clear Cache* pelo painel da Vercel e como testar com `Ctrl+F5` (Hard Reload).
+   - Detalhados os passos para forçar redeploy imediato com *Clear Cache* pelo painel da Vercel e como testar com `Ctrl+F5` (Hard Reload).---
 
+## 📌 Prompt 40
+**Data:** 21/10/2026 - 22:20  
+**Usuário:**
+> /agente-orquestrador /grill-me /goal o recurso de amnter a seleção do conteudo ao trocar de abas fez com que agora a posição do cursor em relação ao comando fique estranha e com problema, corrija.
+> além disso, gostaria que o recurso de auto-completar só sugerisse campos e tabelas do banco ativo e que ao digitar parte de um comando (por exemplo o "from" ele auto corrigisse para "FROM". verfique no geral todo o funcionamento do auto-comletar e verifique outras correções necessárias. no final me liste todas as alterações realizadas.
 
+### 🎯 Diagnóstico e Ações Executadas:
 
+1. **Correção do Posicionamento do Cursor e Preservação de Estado entre Abas:**
+   - **Causa Raiz Identificada:**
+     - O componente `<Editor>` estava utilizando `key={activeTab.id}`, o que forçava o React a desmontar e recriar toda a instância DOM do Monaco Editor em cada troca de aba.
+     - O estado de seleção anterior só salvava seleções ativas (`!selection.isEmpty()`), descartando a posição de um cursor simples quando não havia texto marcado (`selection: null`).
+     - A restauração utilizava `setTimeout(..., 40)` e `revealRangeInCenterIfOutsideViewport`, gerando atrasos visuais, saltos de viewport e desalinhamento do cursor em relação ao comando que o usuário estava editando.
+   - **Solução Implementada:**
+     - Removida a prop `key={activeTab.id}` do `<Editor>` em `EditorWorkspace.tsx`, mantendo uma única instância montada do editor e aproveitando a troca nativa de modelos (`path={activeTab.id}`) do Monaco.
+     - Implementado listener `editor.onDidChangeModel` que captura e restaura de forma síncrona o `viewState` exato (posição do cursor, seleção e scroll) do modelo ativo.
+     - Salva o estado imediatamente em `editor.onDidChangeCursorSelection` sem delays artificiais de timeout.
+     - O cursor agora permanece exatamente onde estava ao alternar entre abas, sem deslocamentos ou comportamentos estranhos.
+
+2. **Auto-Correção / Auto-Capitalização de Palavras-chave e Comandos SQL:**
+   - Implementado listener em tempo real no Monaco Editor (`editor.onDidChangeModelContent`) com bloqueio de reentrância (`isAutoCasingRef`).
+   - Ao digitar qualquer delimitador após uma palavra (espaço, quebra de linha `\n`, abertura de parêntese `(`, vírgula `,` ou ponto e vírgula `;`), a palavra anterior é inspecionada.
+   - Se coincidir com palavras-chave SQL essenciais (`from` -> `FROM`, `select` -> `SELECT`, `where` -> `WHERE`, `insert into`, `update`, `join`, `order by`, etc.) ou funções SQL (`count`, `concat`, `now`, etc.), o texto é automaticamente corrigido para MAIÚSCULAS no cursor.
+   - Linhas de comentário (`--`) e literais de string (`'...'`, `"..."`, `` `...` ``) são devidamente respeitadas e ignoradas pela auto-capitalização.
+
+3. **Restrição do Autocompletar Estritamente ao Banco de Dados Ativo:**
+   - O provedor de autocompletar do Monaco (`monaco.languages.registerCompletionItemProvider('sql', ...)`) foi reestruturado para filtrar exclusivamente as tabelas e colunas do esquema do banco ativo (`activeDatabase` / `activeDbSchema`).
+   - Tabelas e campos de outros bancos de dados carregados na memória não poluem mais as sugestões do editor.
+   - Desativado `wordBasedSuggestions` (`'off'`) e `suggest.showWords: false` nas opções do Monaco, impedindo que o Monaco injete termos aleatórios de documentos em segundo plano.
+
+4. **Auditoria Geral e Melhorias no Funcionamento do Autocompletar:**
+   - **Autocompletar com Ponto (Dot Completion):** Corrigido o autocomplete para notação `tabela.coluna` ou `alias.coluna`. Quando o usuário digita `nome_tabela.` ou `alias.`, o editor detecta o caractere anterior e sugere imediatamente as colunas correspondentes da tabela.
+   - **Resolução de Alias:** O autocompletar agora analisa cláusulas `FROM tabela t` ou `JOIN tabela AS t` na consulta e resolve alias para sugerir os campos corretos da respectiva tabela.
+   - **Prioridade e Ordenação:** Palavras-chave recebem prefixo de ordenação prioritário (`1_`), tabelas (`2_`), colunas (`3_`) e funções (`4_`).
+   - **Enriquecimento com Snippets:** Funções como `CONCAT`, `DATE_FORMAT`, `IFNULL`, `ROUND` etc. contam com snippets interativos com documentação explicativa em português e tabstops para parâmetros.
+
+5. **Aprimoramento dos Atalhos de Execução e Revisão (Alt+E e Alt+R):**
+   - Criada a função auxiliar `extractStatementAtPosition` para identificar a instrução SQL delimitada por ponto e vírgula `;` onde o cursor está posicionado.
+   - Ao pressionar `Alt+E` ou usar o menu de contexto sem texto selecionado, o editor executa cirurgicamente o comando em que o cursor está inserido, em vez de executar o script inteiro inadvertidamente.
+   - Sincronizado tanto nas ações internas do Monaco quanto nos listeners globais do teclado em `App.tsx`.
+
+6. **Validação e Compilação:**
+   - Build do frontend validado com sucesso (`tsc -b && vite build`) com código de saída 0 e 0 erros.
+
+---
+
+## 📌 Prompt 41
+**Data:** 21/10/2026 - 22:46  
+**Usuário:**
+> /agente-orquestrador /goal atualize nosso repositorio e o vercel. atualize a versão para 3.1.15 e atualize tambem o changelog na pagina inicial
+
+### 🎯 Diagnóstico e Ações Executadas:
+
+1. **Atualização da Versão Global do Sistema para `v3.1.15`:**
+   - `frontend/package.json`: Versão atualizada de `3.1.13` para `3.1.15`.
+   - `frontend/src/components/Header.tsx`: Badge no cabeçalho do editor atualizado para `v3.1.15`.
+   - `frontend/src/components/AboutView.tsx`: Badge ao lado do título principal atualizado para `v3.1.15`.
+   - `frontend/src/components/LandingPageView.tsx`: Badges do cabeçalho, da hero section e do rodapé atualizados para `v3.1.15`.
+
+2. **Atualização do Changelog na Página Inicial:**
+   - Adicionada a versão `v3.1.15` como o lançamento mais recente (`isLatest: true`) e destacada no topo da seção de Changelog.
+   - Adicionada a versão intermediária `v3.1.14` com as melhorias de fechamento de abas, DER 2D e funções MySQL adicionais.
+   - Configurado o acordeom do Changelog para iniciar expandido por padrão na versão `v3.1.15`.
+   - Detalhadas as novidades:
+     - Estabilidade total do cursor e viewport ao alternar abas sem remount do DOM.
+     - Auto-capitalização em tempo real de comandos SQL para MAIÚSCULAS ao digitar (`from` -> `FROM`).
+     - Restrição rigorosa do autocompletar às tabelas e colunas do banco ativo.
+     - Autocompletar avançado por ponto (`tabela.` e `alias.`) com resolução inteligente de alias.
+     - Execução cirúrgica da instrução SQL sob a posição do cursor (`Alt+E` e menu de contexto).
+     - Desativação de sugestões de palavras avulsas de outras abas (`wordBasedSuggestions: 'off'`).
+
+3. **Validação de Build:**
+   - Executado `npm run build` no frontend com TypeScript (`tsc -b`) e Vite: concluído com sucesso e 0 erros.
+
+4. **Sincronização com o Repositório Remoto (GitHub) e Disparo de Deploy no Vercel:**
+   - Git commit semântico padronizado: `feat: release v3.1.15 - autocompletar banco ativo, auto-capitalizacao sql, cursor estavel entre abas e changelog`.
+   - Realizado `git push origin main`, disparando automaticamente a nova compilação e deploy na nuvem da Vercel.

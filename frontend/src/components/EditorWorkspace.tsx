@@ -6,6 +6,206 @@ import type { TabItem, ThemeMode, FontTheme, DatabaseSchema } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 
+// Dicionário de auto-correção de palavras-chave para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
+const SQL_KEYWORDS_MAP: Record<string, string> = {
+  select: 'SELECT',
+  from: 'FROM',
+  where: 'WHERE',
+  insert: 'INSERT',
+  into: 'INTO',
+  values: 'VALUES',
+  update: 'UPDATE',
+  set: 'SET',
+  delete: 'DELETE',
+  create: 'CREATE',
+  table: 'TABLE',
+  database: 'DATABASE',
+  schema: 'SCHEMA',
+  drop: 'DROP',
+  alter: 'ALTER',
+  add: 'ADD',
+  column: 'COLUMN',
+  use: 'USE',
+  truncate: 'TRUNCATE',
+  show: 'SHOW',
+  describe: 'DESCRIBE',
+  desc: 'DESC',
+  asc: 'ASC',
+  join: 'JOIN',
+  inner: 'INNER',
+  left: 'LEFT',
+  right: 'RIGHT',
+  outer: 'OUTER',
+  cross: 'CROSS',
+  on: 'ON',
+  group: 'GROUP',
+  order: 'ORDER',
+  by: 'BY',
+  having: 'HAVING',
+  limit: 'LIMIT',
+  offset: 'OFFSET',
+  as: 'AS',
+  distinct: 'DISTINCT',
+  and: 'AND',
+  or: 'OR',
+  not: 'NOT',
+  null: 'NULL',
+  is: 'IS',
+  in: 'IN',
+  between: 'BETWEEN',
+  like: 'LIKE',
+  exists: 'EXISTS',
+  case: 'CASE',
+  when: 'WHEN',
+  then: 'THEN',
+  else: 'ELSE',
+  end: 'END',
+  union: 'UNION',
+  all: 'ALL',
+  primary: 'PRIMARY',
+  key: 'KEY',
+  foreign: 'FOREIGN',
+  references: 'REFERENCES',
+  auto_increment: 'AUTO_INCREMENT',
+  autoincrement: 'AUTOINCREMENT',
+  default: 'DEFAULT',
+  check: 'CHECK',
+  unique: 'UNIQUE',
+  int: 'INT',
+  integer: 'INTEGER',
+  varchar: 'VARCHAR',
+  char: 'CHAR',
+  decimal: 'DECIMAL',
+  numeric: 'NUMERIC',
+  float: 'FLOAT',
+  double: 'DOUBLE',
+  date: 'DATE',
+  datetime: 'DATETIME',
+  time: 'TIME',
+  timestamp: 'TIMESTAMP',
+  text: 'TEXT',
+  boolean: 'BOOLEAN',
+  bool: 'BOOL',
+  count: 'COUNT',
+  sum: 'SUM',
+  avg: 'AVG',
+  min: 'MIN',
+  max: 'MAX',
+  concat: 'CONCAT',
+  concat_ws: 'CONCAT_WS',
+  length: 'LENGTH',
+  char_length: 'CHAR_LENGTH',
+  date_format: 'DATE_FORMAT',
+  datediff: 'DATEDIFF',
+  timediff: 'TIMEDIFF',
+  now: 'NOW',
+  curdate: 'CURDATE',
+  curtime: 'CURTIME',
+  upper: 'UPPER',
+  lower: 'LOWER',
+  round: 'ROUND',
+  ceil: 'CEIL',
+  ceiling: 'CEILING',
+  floor: 'FLOOR',
+  trim: 'TRIM',
+  substring: 'SUBSTRING',
+  replace: 'REPLACE',
+  year: 'YEAR',
+  month: 'MONTH',
+  day: 'DAY',
+  hour: 'HOUR',
+  minute: 'MINUTE',
+  second: 'SECOND',
+  ifnull: 'IFNULL',
+  coalesce: 'COALESCE',
+  strftime: 'STRFTIME',
+  julianday: 'JULIANDAY',
+};
+
+// Lista de palavras-chave SQL exibidas prioritariamente no autocompletar em MAIÚSCULAS
+const SQL_KEYWORDS_LIST: string[] = [
+  'SELECT', 'FROM', 'WHERE', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET',
+  'DELETE FROM', 'CREATE DATABASE', 'USE', 'CREATE TABLE', 'DROP TABLE',
+  'DROP DATABASE', 'ALTER TABLE', 'ADD COLUMN', 'ORDER BY', 'GROUP BY',
+  'HAVING', 'LIMIT', 'OFFSET', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
+  'CROSS JOIN', 'ON', 'AS', 'DISTINCT', 'AND', 'OR', 'NOT', 'NULL', 'IS NULL',
+  'IS NOT NULL', 'LIKE', 'BETWEEN', 'IN', 'NOT IN', 'PRIMARY KEY', 'FOREIGN KEY',
+  'REFERENCES', 'AUTO_INCREMENT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
+  'UNION', 'UNION ALL', 'ASC', 'DESC', 'SHOW TABLES', 'SHOW DATABASES',
+  'DESCRIBE', 'TRUNCATE TABLE', 'INT', 'VARCHAR', 'DECIMAL', 'DATE', 'DATETIME',
+  'TEXT', 'BOOLEAN'
+];
+
+// Lista de funções SQL/MySQL enriquecidas com snippets interativos
+const SQL_FUNCTIONS_LIST = [
+  { name: 'CONCAT', snippet: 'CONCAT(${1:str1}, ${2:str2})', doc: 'Concatena dois ou mais textos ou colunas' },
+  { name: 'CONCAT_WS', snippet: "CONCAT_WS('${1: }', ${2:val1}, ${3:val2})", doc: 'Concatena valores com separador definido' },
+  { name: 'LENGTH', snippet: 'LENGTH(${1:campo})', doc: 'Retorna a quantidade de caracteres do texto' },
+  { name: 'CHAR_LENGTH', snippet: 'CHAR_LENGTH(${1:campo})', doc: 'Retorna o número de caracteres do texto' },
+  { name: 'DATE_FORMAT', snippet: "DATE_FORMAT(${1:campo}, '${2:%d/%m/%Y}')", doc: 'Formata data conforme padrão MySQL' },
+  { name: 'DATEDIFF', snippet: 'DATEDIFF(${1:data1}, ${2:data2})', doc: 'Diferença em dias entre duas datas (data1 - data2)' },
+  { name: 'TIMEDIFF', snippet: 'TIMEDIFF(${1:hora1}, ${2:hora2})', doc: 'Diferença entre dois horários' },
+  { name: 'NOW', snippet: 'NOW()', doc: 'Retorna a data e hora atual (YYYY-MM-DD HH:MM:SS)' },
+  { name: 'CURDATE', snippet: 'CURDATE()', doc: 'Retorna a data atual (YYYY-MM-DD)' },
+  { name: 'CURTIME', snippet: 'CURTIME()', doc: 'Retorna a hora atual (HH:MM:SS)' },
+  { name: 'UPPER', snippet: 'UPPER(${1:campo})', doc: 'Converte texto para letras maiúsculas' },
+  { name: 'LOWER', snippet: 'LOWER(${1:campo})', doc: 'Converte texto para letras minúsculas' },
+  { name: 'ROUND', snippet: 'ROUND(${1:numero}, ${2:0})', doc: 'Arredonda valor numérico para N casas decimais' },
+  { name: 'CEIL', snippet: 'CEIL(${1:numero})', doc: 'Arredonda valor numérico sempre para cima' },
+  { name: 'FLOOR', snippet: 'FLOOR(${1:numero})', doc: 'Arredonda valor numérico sempre para baixo' },
+  { name: 'TRIM', snippet: 'TRIM(${1:campo})', doc: 'Remove espaços em branco do início e fim do texto' },
+  { name: 'SUBSTRING', snippet: 'SUBSTRING(${1:campo}, ${2:inicio}, ${3:tamanho})', doc: 'Extrai fatia do texto a partir da posição' },
+  { name: 'REPLACE', snippet: "REPLACE(${1:campo}, '${2:de}', '${3:para}')", doc: 'Substitui ocorrências de um trecho de texto' },
+  { name: 'LEFT', snippet: 'LEFT(${1:campo}, ${2:tamanho})', doc: 'Extrai os primeiros N caracteres da esquerda' },
+  { name: 'RIGHT', snippet: 'RIGHT(${1:campo}, ${2:tamanho})', doc: 'Extrai os últimos N caracteres da direita' },
+  { name: 'YEAR', snippet: 'YEAR(${1:data})', doc: 'Extrai o ano (4 dígitos) de uma data' },
+  { name: 'MONTH', snippet: 'MONTH(${1:data})', doc: 'Extrai o mês (1-12) de uma data' },
+  { name: 'DAY', snippet: 'DAY(${1:data})', doc: 'Extrai o dia do mês (1-31) de uma data' },
+  { name: 'IFNULL', snippet: 'IFNULL(${1:campo}, ${2:padrao})', doc: 'Retorna valor padrão se campo for nulo' },
+  { name: 'COALESCE', snippet: 'COALESCE(${1:campo}, ${2:padrao})', doc: 'Retorna o primeiro valor não nulo da lista' },
+  { name: 'COUNT', snippet: 'COUNT(${1:*})', doc: 'Contagem de linhas' },
+  { name: 'SUM', snippet: 'SUM(${1:campo})', doc: 'Soma dos valores numéricos' },
+  { name: 'AVG', snippet: 'AVG(${1:campo})', doc: 'Média aritmética dos valores' },
+  { name: 'MIN', snippet: 'MIN(${1:campo})', doc: 'Valor mínimo' },
+  { name: 'MAX', snippet: 'MAX(${1:campo})', doc: 'Valor máximo' },
+  { name: 'STRFTIME', snippet: "STRFTIME('${1:%Y-%m-%d}', ${2:data})", doc: 'Formata data estilo SQLite/AlaSQL' },
+  { name: 'JULIANDAY', snippet: 'JULIANDAY(${1:data})', doc: 'Número de dias julianos' },
+  { name: 'DATETIME', snippet: "DATETIME(${1:'now'})", doc: 'Retorna data e hora' },
+];
+
+/**
+ * Extrai a instrução SQL delimitada por ';' que envolve a posição atual do cursor.
+ */
+export function extractStatementAtPosition(fullText: string, position: { lineNumber: number; column: number }): string | null {
+  if (!fullText || !fullText.trim()) return null;
+  const lines = fullText.split('\n');
+  const lineIdx = position.lineNumber - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return null;
+
+  let startIdx = lineIdx;
+  while (startIdx > 0) {
+    const prevLine = lines[startIdx - 1];
+    const trimmed = prevLine.trim();
+    if (trimmed.endsWith(';') || (prevLine.includes(';') && !trimmed.startsWith('--'))) {
+      break;
+    }
+    startIdx--;
+  }
+
+  let endIdx = lineIdx;
+  while (endIdx < lines.length - 1) {
+    const curLine = lines[endIdx];
+    const trimmed = curLine.trim();
+    if (trimmed.endsWith(';') || (curLine.includes(';') && !trimmed.startsWith('--'))) {
+      break;
+    }
+    endIdx++;
+  }
+
+  const chunk = lines.slice(startIdx, endIdx + 1).join('\n').trim();
+  return chunk || null;
+}
+
 interface EditorWorkspaceProps {
   tabs: TabItem[];
   activeTabId: string;
@@ -159,21 +359,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
   }, [theme, fontTheme]);
 
-  interface TabViewState {
-    viewState: any;
-    selection: {
-      startLineNumber: number;
-      startColumn: number;
-      endLineNumber: number;
-      endColumn: number;
-    } | null;
-  }
-
-  // Mapa de ViewState e Seleção por aba para preservar a seleção ao alternar entre abas
-  const tabStatesRef = useRef<Record<string, TabViewState>>({});
+  // Mapa de ViewState por aba: armazena a posição exata do cursor, seleção de texto e rolagem
+  const tabStatesRef = useRef<Record<string, any>>({});
   const currentTabIdRef = useRef<string>(activeTabId);
   const prevTabIdRef = useRef<string>(activeTabId);
-  const isRestoringStateRef = useRef<boolean>(false);
+  const isAutoCapitalizingRef = useRef<boolean>(false);
+  const completionProviderRef = useRef<any>(null);
 
   // Menu de contexto com clique com botão direito na aba
   const [tabContextMenu, setTabContextMenu] = useState<{
@@ -203,66 +394,42 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
   }, [tabContextMenu.visible]);
 
-  // Salva o ViewState e Seleção da aba ativa atual
-  const saveCurrentTabState = (tabId?: string) => {
+  // Salva o ViewState completo (rolagem, cursor e seleção) da aba ativa
+  const saveCurrentTabState = useCallback((tabId?: string) => {
     const currentId = tabId || currentTabIdRef.current;
     const editor = editorRef.current;
     if (currentId && editor) {
       try {
         const viewState = editor.saveViewState();
-        const selection = editor.getSelection();
-        tabStatesRef.current[currentId] = {
-          viewState,
-          selection: selection && !selection.isEmpty() ? {
-            startLineNumber: selection.startLineNumber,
-            startColumn: selection.startColumn,
-            endLineNumber: selection.endLineNumber,
-            endColumn: selection.endColumn,
-          } : null,
-        };
+        if (viewState) {
+          tabStatesRef.current[currentId] = viewState;
+        }
       } catch (_) {}
     }
-  };
+  }, []);
 
-  // Restaura ViewState e Seleção ao trocar de aba ativa
+  // Restaura ViewState e Cursor fielmente ao trocar de aba ativa sem jumps ou atrasos
   useEffect(() => {
-    const editor = editorRef.current;
     const oldId = prevTabIdRef.current;
     const newId = activeTabId;
 
-    // Salva o estado da aba anterior antes de mudar
-    if (editor && oldId && oldId !== newId) {
+    if (editorRef.current && oldId && oldId !== newId) {
       saveCurrentTabState(oldId);
     }
 
     prevTabIdRef.current = newId;
     currentTabIdRef.current = newId;
 
-    if (!editor || !newId) return;
+    if (!editorRef.current || !newId) return;
 
     const saved = tabStatesRef.current[newId];
     if (saved) {
-      isRestoringStateRef.current = true;
-      const timer = setTimeout(() => {
-        if (editorRef.current && currentTabIdRef.current === newId) {
-          try {
-            if (saved.viewState) {
-              editorRef.current.restoreViewState(saved.viewState);
-            }
-            if (saved.selection) {
-              editorRef.current.setSelection(saved.selection);
-              editorRef.current.revealRangeInCenterIfOutsideViewport(saved.selection);
-            }
-            editorRef.current.focus();
-          } catch (_) {}
-        }
-        setTimeout(() => {
-          isRestoringStateRef.current = false;
-        }, 120);
-      }, 40);
-      return () => clearTimeout(timer);
+      try {
+        editorRef.current.restoreViewState(saved);
+        editorRef.current.focus();
+      } catch (_) {}
     }
-  }, [activeTabId]);
+  }, [activeTabId, saveCurrentTabState]);
 
   // Rola automaticamente a barra de abas até o final (exibindo a última aba e o botão +)
   useEffect(() => {
@@ -330,23 +497,41 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       });
     }
 
-    // Monitora seleção e cursor em tempo real para preservar entre abas
-    editor.onDidChangeCursorSelection((e) => {
-      if (isRestoringStateRef.current) return;
+    // Sincroniza viewState (cursor, seleção e rolagem) de forma nativa e sem desmonte ao alternar modelos
+    editor.onDidChangeModel((e: any) => {
+      if (e.oldModelUrl) {
+        const oldMatch = e.oldModelUrl.path.match(/tab_(.+)\.sql$/);
+        if (oldMatch && editorRef.current) {
+          try {
+            const vs = editorRef.current.saveViewState();
+            if (vs) {
+              tabStatesRef.current[oldMatch[1]] = vs;
+            }
+          } catch (_) {}
+        }
+      }
+      if (e.newModelUrl) {
+        const newMatch = e.newModelUrl.path.match(/tab_(.+)\.sql$/);
+        const targetId = newMatch ? newMatch[1] : currentTabIdRef.current;
+        const saved = tabStatesRef.current[targetId];
+        if (saved && editorRef.current) {
+          try {
+            editorRef.current.restoreViewState(saved);
+            editorRef.current.focus();
+          } catch (_) {}
+        }
+      }
+    });
+
+    // Monitora seleção, cursor e rolagem em tempo real para sincronizar o estado da aba
+    editor.onDidChangeCursorSelection(() => {
       const currentId = currentTabIdRef.current;
       if (currentId && editorRef.current) {
         try {
           const viewState = editorRef.current.saveViewState();
-          const sel = e.selection;
-          tabStatesRef.current[currentId] = {
-            viewState,
-            selection: sel && !sel.isEmpty() ? {
-              startLineNumber: sel.startLineNumber,
-              startColumn: sel.startColumn,
-              endLineNumber: sel.endLineNumber,
-              endColumn: sel.endColumn,
-            } : null,
-          };
+          if (viewState) {
+            tabStatesRef.current[currentId] = viewState;
+          }
         } catch (_) {}
       }
     });
@@ -356,12 +541,77 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       if (currentId && editorRef.current) {
         try {
           const viewState = editorRef.current.saveViewState();
-          if (!tabStatesRef.current[currentId]) {
-            tabStatesRef.current[currentId] = { viewState, selection: null };
-          } else {
-            tabStatesRef.current[currentId].viewState = viewState;
+          if (viewState) {
+            tabStatesRef.current[currentId] = viewState;
           }
         } catch (_) {}
+      }
+    });
+
+    // Auto-correção em tempo real de palavras-chave SQL para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
+    editor.onDidChangeModelContent((e) => {
+      if (isAutoCapitalizingRef.current) return;
+      if (!e.changes || e.changes.length === 0) return;
+
+      for (const change of e.changes) {
+        // Se for inserção em lote (ex: colagem grande), não processa tecla por tecla
+        if (change.text.length > 5) continue;
+
+        // Dispara quando o usuário digita delimitadores como espaço, quebra de linha, parênteses, vírgula ou ponto-e-vírgula
+        if (!/[\s\(\,\;\)\n\t]/.test(change.text)) continue;
+
+        const model = editor.getModel();
+        if (!model) continue;
+
+        const lineNumber = change.range.startLineNumber;
+        const lineContent = model.getLineContent(lineNumber);
+        const textBeforeChange = lineContent.substring(0, change.range.startColumn - 1);
+
+        // Ignora comentários de linha (--)
+        const commentIndex = textBeforeChange.indexOf('--');
+        if (commentIndex !== -1) {
+          const beforeComment = textBeforeChange.substring(0, commentIndex);
+          const singleQ = (beforeComment.match(/'/g) || []).length;
+          const doubleQ = (beforeComment.match(/"/g) || []).length;
+          if (singleQ % 2 === 0 && doubleQ % 2 === 0) continue;
+        }
+
+        // Ignora strings ou identificadores em aspas ou crases
+        const singleQuotes = (textBeforeChange.match(/'/g) || []).length;
+        const doubleQuotes = (textBeforeChange.match(/"/g) || []).length;
+        const backticks = (textBeforeChange.match(/`/g) || []).length;
+        if (singleQuotes % 2 !== 0 || doubleQuotes % 2 !== 0 || backticks % 2 !== 0) continue;
+
+        // Extrai a palavra imediatamente anterior ao delimitador digitado
+        const match = textBeforeChange.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/);
+        if (!match) continue;
+
+        const rawWord = match[1];
+        const lowerWord = rawWord.toLowerCase();
+
+        // Se for acesso de propriedade/coluna precedido por ponto (ex: tb.from ou tabela.campo), não capitaliza
+        const charBeforeWord = textBeforeChange.charAt(textBeforeChange.length - rawWord.length - 1);
+        if (charBeforeWord === '.') continue;
+
+        const upperWord = SQL_KEYWORDS_MAP[lowerWord];
+        if (upperWord && rawWord !== upperWord) {
+          const wordStartCol = (change.range.startColumn - 1) - rawWord.length + 1;
+          const wordEndCol = change.range.startColumn;
+          const wordRange = new monaco.Range(lineNumber, wordStartCol, lineNumber, wordEndCol);
+
+          isAutoCapitalizingRef.current = true;
+          try {
+            editor.executeEdits('auto-capitalize-keyword', [
+              {
+                range: wordRange,
+                text: upperWord,
+                forceMoveMarkers: true,
+              },
+            ]);
+          } finally {
+            isAutoCapitalizingRef.current = false;
+          }
+        }
       }
     });
 
@@ -386,7 +636,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             return;
           }
         }
-        // Se não houver seleção, executa a linha atual ou tudo
+        // Se não houver seleção de texto, executa o comando onde o cursor está posicionado
+        const model = ed.getModel();
+        const pos = ed.getPosition();
+        if (model && pos) {
+          const stmt = extractStatementAtPosition(model.getValue(), pos);
+          if (stmt && stmt.trim()) {
+            onRunSnippet(stmt.trim());
+            return;
+          }
+        }
         onRunQuery();
       },
     });
@@ -400,10 +659,21 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       contextMenuOrder: 2,
       run: (ed) => {
         const selection = ed.getSelection();
-        const text = selection && !selection.isEmpty() ? ed.getModel()?.getValueInRange(selection) : '';
-        const codeToReview = text && text.trim() ? text.trim() : ed.getValue();
-        if (codeToReview) {
-          onReviewSnippet(codeToReview);
+        let codeToReview = '';
+        if (selection && !selection.isEmpty()) {
+          codeToReview = ed.getModel()?.getValueInRange(selection) || '';
+        } else {
+          const model = ed.getModel();
+          const pos = ed.getPosition();
+          if (model && pos) {
+            codeToReview = extractStatementAtPosition(model.getValue(), pos) || '';
+          }
+        }
+        if (!codeToReview.trim()) {
+          codeToReview = ed.getValue();
+        }
+        if (codeToReview.trim()) {
+          onReviewSnippet(codeToReview.trim());
         }
       },
     });
@@ -473,13 +743,85 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
 
     // Provedor de autocompletar dinâmico estrito ao BANCO ATIVO e com filtro pelo INÍCIO digitado
-    monaco.languages.registerCompletionItemProvider('sql', {
+    if (completionProviderRef.current) {
+      completionProviderRef.current.dispose();
+    }
+    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
       triggerCharacters: ['.', '`'],
       provideCompletionItems: (model: any, position: any) => {
+        const lineContentBefore = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        });
+
         const word = model.getWordUntilPosition(position);
         const query = (word?.word || '').trim().toLowerCase();
 
-        // Só exibe sugestões conforme digitamos letra correspondente ao início (não exibe em espaço em branco)
+        // 1. Obtenção estrita do Banco Ativo Atual
+        const currentSchemas = schemasRef.current || [];
+        const rawActiveDb = (activeDatabaseRef.current || '').trim().replace(/[`'"]/g, '');
+        let activeDbSchema = currentSchemas.find(
+          d => d.name.toLowerCase() === rawActiveDb.toLowerCase()
+        );
+        if (!activeDbSchema && currentSchemas.length === 1) {
+          activeDbSchema = currentSchemas[0];
+        }
+
+        const suggestions: any[] = [];
+
+        // 2. SUPORTE A AUTOCOMPLETAR APÓS PONTO (.) -> Ex: tb_alunos. ou alias.
+        const dotMatch = lineContentBefore.match(/([a-zA-Z0-9_`]+)\.([a-zA-Z0-9_]*)$/);
+        if (dotMatch) {
+          const qualifier = dotMatch[1].replace(/[`'"]/g, '').toLowerCase();
+          const colQuery = dotMatch[2].toLowerCase();
+
+          // Procura a tabela correspondente no banco ativo
+          let targetTable = activeDbSchema?.tables.find(
+            t => t.name.toLowerCase() === qualifier
+          );
+
+          // Se não encontrou pelo nome direto da tabela, procura se é um alias no script (ex: FROM tb_alunos a / tb_alunos AS a)
+          if (!targetTable && activeDbSchema) {
+            const scriptText = model.getValue();
+            const aliasRegex = new RegExp(`(?:FROM|JOIN)\\s+[\`']?([a-zA-Z0-9_]+)[\`']?\\s+(?:AS\\s+)?${qualifier}\\b`, 'i');
+            const aliasMatch = scriptText.match(aliasRegex);
+            if (aliasMatch) {
+              const actualTableName = aliasMatch[1].toLowerCase();
+              targetTable = activeDbSchema.tables.find(t => t.name.toLowerCase() === actualTableName);
+            }
+          }
+
+          if (targetTable) {
+            const colRange = {
+              startLineNumber: position.lineNumber,
+              endLineNumber: position.lineNumber,
+              startColumn: position.column - colQuery.length,
+              endColumn: position.column,
+            };
+
+            for (const col of targetTable.columns) {
+              if (!colQuery || col.name.toLowerCase().startsWith(colQuery)) {
+                suggestions.push({
+                  label: {
+                    label: col.name,
+                    description: `${targetTable.name}.${col.name}`,
+                    detail: ` [${col.type}]`,
+                  },
+                  kind: monaco.languages.CompletionItemKind.Field,
+                  insertText: col.name,
+                  sortText: `00_${col.name}`,
+                  documentation: `Coluna '${col.name}' (${col.type}) da tabela '${targetTable.name}' no banco ativo '${activeDbSchema?.name}'.`,
+                  range: colRange,
+                });
+              }
+            }
+            return { suggestions };
+          }
+        }
+
+        // Se não for autocompletar de ponto e não tiver nada digitado, não abre popup desnecessário
         if (!query || query.length === 0) {
           return { suggestions: [] };
         }
@@ -491,32 +833,40 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           endColumn: word.endColumn,
         };
 
-        const currentActiveDb = activeDatabaseRef.current;
-        const currentSchemas = schemasRef.current;
-        const activeDbSchema = currentSchemas.find(d => d.name === currentActiveDb);
+        // 3. PALAVRAS-CHAVE SQL (SEMPRE EM MAIÚSCULAS) - Prioridade alta (00_) ao digitar iniciais
+        for (const kw of SQL_KEYWORDS_LIST) {
+          if (kw.toLowerCase().startsWith(query)) {
+            suggestions.push({
+              label: kw,
+              kind: monaco.languages.CompletionItemKind.Keyword,
+              insertText: kw,
+              sortText: `00_${kw}`,
+              documentation: `Comando SQL: ${kw}`,
+              range,
+            });
+          }
+        }
 
-        const suggestions: any[] = [];
-
-        // 1. TABELAS PERTINENTES AO BANCO SELECIONADO (somente iniciadas pelo texto digitado)
+        // 4. TABELAS PERTINENTES EXCLUSIVAMENTE AO BANCO SELECIONADO
         if (activeDbSchema) {
           for (const tbl of activeDbSchema.tables) {
             if (tbl.name.toLowerCase().startsWith(query)) {
               suggestions.push({
                 label: {
                   label: tbl.name,
-                  description: `Tabela (${currentActiveDb})`,
+                  description: `Tabela (${activeDbSchema.name})`,
                   detail: ` • ${tbl.rowCount} linhas`,
                 },
                 kind: monaco.languages.CompletionItemKind.Class,
                 insertText: tbl.name,
-                sortText: `00_${tbl.name}`,
-                documentation: `Tabela '${tbl.name}' no banco ativo '${currentActiveDb}'.\nColunas:\n${tbl.columns.map(c => ` - ${c.name} (${c.type})`).join('\n')}`,
+                sortText: `01_${tbl.name}`,
+                documentation: `Tabela '${tbl.name}' no banco ativo '${activeDbSchema.name}'.\nColunas:\n${tbl.columns.map(c => ` - ${c.name} (${c.type})`).join('\n')}`,
                 range,
               });
             }
           }
 
-          // 2. COLUNAS DO BANCO SELECIONADO (somente iniciadas pelo texto digitado)
+          // 5. COLUNAS DO BANCO SELECIONADO
           for (const tbl of activeDbSchema.tables) {
             for (const col of tbl.columns) {
               if (col.name.toLowerCase().startsWith(query)) {
@@ -528,8 +878,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   },
                   kind: monaco.languages.CompletionItemKind.Field,
                   insertText: col.name,
-                  sortText: `01_${col.name}`,
-                  documentation: `Coluna '${col.name}' (${col.type}) na tabela '${tbl.name}' do banco ativo '${currentActiveDb}'.`,
+                  sortText: `02_${col.name}`,
+                  documentation: `Coluna '${col.name}' (${col.type}) na tabela '${tbl.name}' do banco ativo '${activeDbSchema.name}'.`,
                   range,
                 });
               }
@@ -537,72 +887,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           }
         }
 
-        // 3. FUNÇÕES SQL / MYSQL (somente iniciadas pelo texto digitado)
-        const functions = [
-          { name: 'CONCAT', snippet: 'CONCAT(${1:str1}, ${2:str2})', doc: 'Concatena dois ou mais textos ou colunas' },
-          { name: 'CONCAT_WS', snippet: "CONCAT_WS('${1: }', ${2:val1}, ${3:val2})", doc: 'Concatena valores com separador definido' },
-          { name: 'LENGTH', snippet: 'LENGTH(${1:campo})', doc: 'Retorna a quantidade de caracteres do texto' },
-          { name: 'CHAR_LENGTH', snippet: 'CHAR_LENGTH(${1:campo})', doc: 'Retorna o número de caracteres do texto' },
-          { name: 'DATE_FORMAT', snippet: "DATE_FORMAT(${1:campo}, '${2:%d/%m/%Y}')", doc: 'Formata data conforme padrão MySQL' },
-          { name: 'DATEDIFF', snippet: 'DATEDIFF(${1:data1}, ${2:data2})', doc: 'Diferença em dias entre duas datas (data1 - data2)' },
-          { name: 'TIMEDIFF', snippet: 'TIMEDIFF(${1:hora1}, ${2:hora2})', doc: 'Diferença entre dois horários' },
-          { name: 'NOW', snippet: 'NOW()', doc: 'Retorna a data e hora atual (YYYY-MM-DD HH:MM:SS)' },
-          { name: 'CURDATE', snippet: 'CURDATE()', doc: 'Retorna a data atual (YYYY-MM-DD)' },
-          { name: 'CURTIME', snippet: 'CURTIME()', doc: 'Retorna a hora atual (HH:MM:SS)' },
-          { name: 'UPPER', snippet: 'UPPER(${1:campo})', doc: 'Converte texto para letras maiúsculas' },
-          { name: 'LOWER', snippet: 'LOWER(${1:campo})', doc: 'Converte texto para letras minúsculas' },
-          { name: 'ROUND', snippet: 'ROUND(${1:numero}, ${2:0})', doc: 'Arredonda valor numérico para N casas decimais' },
-          { name: 'CEIL', snippet: 'CEIL(${1:numero})', doc: 'Arredonda valor numérico sempre para cima' },
-          { name: 'FLOOR', snippet: 'FLOOR(${1:numero})', doc: 'Arredonda valor numérico sempre para baixo' },
-          { name: 'TRIM', snippet: 'TRIM(${1:campo})', doc: 'Remove espaços em branco do início e fim do texto' },
-          { name: 'SUBSTRING', snippet: 'SUBSTRING(${1:campo}, ${2:inicio}, ${3:tamanho})', doc: 'Extrai fatia do texto a partir da posição' },
-          { name: 'REPLACE', snippet: "REPLACE(${1:campo}, '${2:de}', '${3:para}')", doc: 'Substitui ocorrências de um trecho de texto' },
-          { name: 'LEFT', snippet: 'LEFT(${1:campo}, ${2:tamanho})', doc: 'Extrai os primeiros N caracteres da esquerda' },
-          { name: 'RIGHT', snippet: 'RIGHT(${1:campo}, ${2:tamanho})', doc: 'Extrai os últimos N caracteres da direita' },
-          { name: 'YEAR', snippet: 'YEAR(${1:data})', doc: 'Extrai o ano (4 dígitos) de uma data' },
-          { name: 'MONTH', snippet: 'MONTH(${1:data})', doc: 'Extrai o mês (1-12) de uma data' },
-          { name: 'DAY', snippet: 'DAY(${1:data})', doc: 'Extrai o dia do mês (1-31) de uma data' },
-          { name: 'IFNULL', snippet: 'IFNULL(${1:campo}, ${2:padrao})', doc: 'Retorna valor padrão se campo for nulo' },
-          { name: 'COALESCE', snippet: 'COALESCE(${1:campo}, ${2:padrao})', doc: 'Retorna o primeiro valor não nulo da lista' },
-          { name: 'COUNT', snippet: 'COUNT(${1:*})', doc: 'Contagem de linhas' },
-          { name: 'SUM', snippet: 'SUM(${1:campo})', doc: 'Soma dos valores numéricos' },
-          { name: 'AVG', snippet: 'AVG(${1:campo})', doc: 'Média aritmética dos valores' },
-          { name: 'MIN', snippet: 'MIN(${1:campo})', doc: 'Valor mínimo' },
-          { name: 'MAX', snippet: 'MAX(${1:campo})', doc: 'Valor máximo' },
-        ];
-
-        for (const fn of functions) {
+        // 6. FUNÇÕES SQL / MYSQL (EM MAIÚSCULAS COM SNIPPET)
+        for (const fn of SQL_FUNCTIONS_LIST) {
           if (fn.name.toLowerCase().startsWith(query)) {
             suggestions.push({
               label: fn.name,
               kind: monaco.languages.CompletionItemKind.Function,
               insertText: fn.snippet,
               insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              sortText: `02_${fn.name}`,
+              sortText: `03_${fn.name}`,
               documentation: fn.doc,
-              range,
-            });
-          }
-        }
-
-        // 4. PALAVRAS-CHAVE MYSQL (somente iniciadas pelo texto digitado)
-        const keywords = [
-          'SELECT', 'FROM', 'WHERE', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET',
-          'DELETE FROM', 'CREATE DATABASE', 'USE', 'CREATE TABLE', 'DROP TABLE',
-          'DROP DATABASE', 'ALTER TABLE', 'ADD COLUMN', 'ORDER BY', 'GROUP BY',
-          'HAVING', 'LIMIT', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
-          'ON', 'AS', 'AND', 'OR', 'NOT', 'NULL', 'IS NULL', 'IS NOT NULL',
-          'PRIMARY KEY', 'FOREIGN KEY', 'REFERENCES', 'AUTO_INCREMENT',
-          'INT', 'VARCHAR', 'DECIMAL', 'DATE', 'DATETIME', 'TEXT', 'BOOLEAN'
-        ];
-
-        for (const kw of keywords) {
-          if (kw.toLowerCase().startsWith(query)) {
-            suggestions.push({
-              label: kw,
-              kind: monaco.languages.CompletionItemKind.Keyword,
-              insertText: kw,
-              sortText: `03_${kw}`,
               range,
             });
           }
@@ -777,7 +1071,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       <div className="flex-1 w-full h-full relative overflow-hidden">
         {activeTab ? (
           <Editor
-            key={activeTab.id}
             path={`tab_${activeTab.id}.sql`}
             height="100%"
             language="sql"
@@ -805,6 +1098,24 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               scrollbar: {
                 verticalScrollbarSize: 8,
                 horizontalScrollbarSize: 8,
+              },
+              // Configurações de precisão do autocompletar (sem poluição de palavras aleatórias)
+              wordBasedSuggestions: 'off',
+              quickSuggestions: {
+                other: true,
+                comments: false,
+                strings: false,
+              },
+              suggestOnTriggerCharacters: true,
+              acceptSuggestionOnEnter: 'on',
+              tabCompletion: 'on',
+              suggest: {
+                showWords: false,
+                showClasses: true,
+                showFields: true,
+                showFunctions: true,
+                showKeywords: true,
+                snippetsPreventQuickSuggestions: false,
               },
             }}
           />
@@ -865,6 +1176,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                       return;
                     }
                   }
+                  const model = ed.getModel();
+                  const pos = ed.getPosition();
+                  if (model && pos) {
+                    const stmt = extractStatementAtPosition(model.getValue(), pos);
+                    if (stmt && stmt.trim()) {
+                      onRunSnippet(stmt.trim());
+                      return;
+                    }
+                  }
                 }
                 onRunQuery();
               }}
@@ -892,6 +1212,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   const sel = ed.getSelection();
                   if (sel && !sel.isEmpty()) {
                     toReview = ed.getModel()?.getValueInRange(sel) || '';
+                  } else {
+                    const model = ed.getModel();
+                    const pos = ed.getPosition();
+                    if (model && pos) {
+                      toReview = extractStatementAtPosition(model.getValue(), pos) || '';
+                    }
                   }
                   if (!toReview.trim()) {
                     toReview = ed.getValue();

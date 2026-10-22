@@ -84,7 +84,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   Sobre o SQLEditor
                 </h1>
                 <span className="px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30">
-                  v3.1.13
+                  v3.1.15
                 </span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">

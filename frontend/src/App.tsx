@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { EditorWorkspace } from './components/EditorWorkspace';
+import { EditorWorkspace, extractStatementAtPosition } from './components/EditorWorkspace';
 import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
@@ -730,12 +730,23 @@ export const App: React.FC = () => {
         if (editorRef.current) {
           const ed = editorRef.current;
           const selection = ed.getSelection();
-          const selectedText = ed.getModel()?.getValueInRange(selection);
-          if (selectedText && selectedText.trim()) {
-            handleRunSnippet(selectedText.trim());
-          } else {
-            handleRunQuery();
+          if (selection && !selection.isEmpty()) {
+            const selectedText = ed.getModel()?.getValueInRange(selection);
+            if (selectedText && selectedText.trim()) {
+              handleRunSnippet(selectedText.trim());
+              return;
+            }
           }
+          const model = ed.getModel();
+          const pos = ed.getPosition();
+          if (model && pos) {
+            const stmt = extractStatementAtPosition(model.getValue(), pos);
+            if (stmt && stmt.trim()) {
+              handleRunSnippet(stmt.trim());
+              return;
+            }
+          }
+          handleRunQuery();
         }
       }
       if (e.altKey && (e.key === 'r' || e.key === 'R')) {
@@ -743,10 +754,21 @@ export const App: React.FC = () => {
         if (editorRef.current) {
           const ed = editorRef.current;
           const selection = ed.getSelection();
-          const selectedText = ed.getModel()?.getValueInRange(selection);
-          const toReview = selectedText && selectedText.trim() ? selectedText.trim() : ed.getValue();
-          if (toReview) {
-            handleReviewSnippet(toReview);
+          let toReview = '';
+          if (selection && !selection.isEmpty()) {
+            toReview = ed.getModel()?.getValueInRange(selection) || '';
+          } else {
+            const model = ed.getModel();
+            const pos = ed.getPosition();
+            if (model && pos) {
+              toReview = extractStatementAtPosition(model.getValue(), pos) || '';
+            }
+          }
+          if (!toReview.trim()) {
+            toReview = ed.getValue();
+          }
+          if (toReview.trim()) {
+            handleReviewSnippet(toReview.trim());
           }
         }
       }

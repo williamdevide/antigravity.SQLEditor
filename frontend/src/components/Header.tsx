@@ -99,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Versão */}
         <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
-          v3.1.13
+          v3.1.15
         </span>
 
         {/* Indicador de Banco Ativo */}
