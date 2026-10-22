@@ -12,10 +12,13 @@
     <title>SQLEditor - Ambiente Interativo MySQL</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=block" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
   </head>
   <body class="bg-[#0F1117] text-[#F0F4F8] antialiased overflow-hidden select-none">
+    <!-- Pré-carregamento imediato de fontes para garantir medição perfeita no Monaco sem drift -->
+    <span style="font-family: 'JetBrains Mono'; font-weight: 400; font-style: normal; position: absolute; left: -9999px; visibility: hidden;" aria-hidden="true">ABCXYZ123</span>
+    <span style="font-family: 'JetBrains Mono'; font-weight: 700; font-style: normal; position: absolute; left: -9999px; visibility: hidden;" aria-hidden="true">ABCXYZ123</span>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

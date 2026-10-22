@@ -467,6 +467,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     if (activeTab.content !== currentVal && !pendingContentRef.current[activeTab.id]) {
       editorRef.current.setValue(activeTab.content);
     }
+    if (monacoInstanceRef.current) {
+      try {
+        monacoInstanceRef.current.editor.remeasureFonts();
+        editorRef.current.layout();
+      } catch (_) {}
+    }
   }, [activeTab?.id, activeTab?.content]);
 
   // Exportar script da aba ativa como arquivo .sql para download
@@ -498,6 +504,27 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     if (editorRefOut) {
       editorRefOut.current = editor;
     }
+
+    // Sincronização contínua e recálculo de métricas de fontes no Monaco para eliminar 100% do drift de cursor
+    const triggerFontRemeasure = () => {
+      try {
+        monaco.editor.remeasureFonts();
+        editor.layout();
+      } catch (_) {}
+    };
+
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(triggerFontRemeasure);
+      document.fonts.addEventListener('loadingdone', triggerFontRemeasure);
+    }
+
+    // Disparos automáticos pós-montagem cobrindo o ciclo de download e renderização de fontes
+    [30, 100, 250, 600, 1200, 2500].forEach((delay) => {
+      setTimeout(() => {
+        if (!editor.getDomNode()) return;
+        triggerFontRemeasure();
+      }, delay);
+    });
 
     // Atalho F2 dentro do editor Monaco para renomear o script ativo
     editor.addCommand(monaco.KeyCode.F2, () => {
@@ -1083,6 +1110,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               fontSize: currentFontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
               fontLigatures: false,
+              letterSpacing: 0,
               cursorSmoothCaretAnimation: 'off',
               cursorBlinking: 'blink',
               cursorStyle: 'line',
