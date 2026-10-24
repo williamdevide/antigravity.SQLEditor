@@ -639,8 +639,53 @@ class DatabaseEngine {
           if (tObj?.columns && tObj.columns.length > 0) {
             for (const col of tObj.columns) {
               const colName = col.columnid || col.name;
-              const isPk = col.pk === true || col.primary === true || colName.toLowerCase() === 'id' || colName.toLowerCase().startsWith('id_');
+              const colLower = colName.toLowerCase();
+              const tblLower = tableName.toLowerCase();
+
+              // Detecção de Primary Key
+              const isExplicitPk = col.pk === true || col.primary === true || col.primarykey === true ||
+                (tObj.pk && Array.isArray(tObj.pk.columns) && tObj.pk.columns.some((c: any) => {
+                  const n = typeof c === 'string' ? c : (c?.columnid || c?.name || '');
+                  return n.toLowerCase() === colLower;
+                }));
+
+              const isPk = isExplicitPk || (
+                colLower === 'id' ||
+                colLower === `id_${tblLower}` ||
+                colLower === `id${tblLower}` ||
+                colLower === `cod_${tblLower}` ||
+                colLower === `codigo_${tblLower}`
+              );
+
+              // Detecção de Foreign Key
               const fkObj = col.foreignkey || (tObj.xcolumns && tObj.xcolumns[colName]?.foreignkey);
+              const isFk = !isPk && (
+                !!fkObj ||
+                colLower.endsWith('_id') ||
+                (colLower.startsWith('id_') && colLower !== `id_${tblLower}`) ||
+                (colLower.startsWith('cod_') && colLower !== `cod_${tblLower}`) ||
+                colLower.startsWith('fk_')
+              );
+
+              // Detecção de NOT NULL
+              const isNotNull = col.notnull === true || col.nullable === false || isPk;
+
+              // Detecção de UNIQUE
+              const isExplicitUnique = col.unique === true ||
+                (tObj.uk && Array.isArray(tObj.uk) && tObj.uk.some((u: any) => {
+                  const fnStr = u.onrightfns || '';
+                  if (fnStr.includes(`"${colName}"`) || fnStr.includes(`'${colName}'`) || fnStr.includes(`[${colName}]`)) {
+                    return true;
+                  }
+                  if (Array.isArray(u.columns)) {
+                    return u.columns.some((c: any) => {
+                      const n = typeof c === 'string' ? c : (c?.columnid || c?.name || c?.value || '');
+                      return n.toLowerCase() === colLower;
+                    });
+                  }
+                  return false;
+                }));
+              const isUnique = isExplicitUnique;
 
               // Detecta tipo formal registrado no AlaSQL
               let rawType = col.dbtypeid || col.type || '';
@@ -666,11 +711,13 @@ class DatabaseEngine {
                 name: colName,
                 type: finalType,
                 isPrimary: isPk,
-                isForeignKey: !!fkObj,
+                isForeignKey: isFk,
                 foreignKeyRef: fkObj ? {
                   table: fkObj.tableid,
                   column: fkObj.columnid || 'id'
-                } : undefined
+                } : undefined,
+                isNotNull,
+                isUnique,
               });
             }
           } else if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
@@ -678,10 +725,17 @@ class DatabaseEngine {
             for (const key of Object.keys(firstRow)) {
               const val = firstRow[key];
               const inferredType = inferSqlType(key, val);
+              const keyLower = key.toLowerCase();
+              const tblLower = tableName.toLowerCase();
+              const isPk = keyLower === 'id' || keyLower === `id_${tblLower}` || keyLower === `cod_${tblLower}`;
+              const isFk = !isPk && (keyLower.endsWith('_id') || keyLower.startsWith('fk_') || (keyLower.startsWith('id_') && keyLower !== `id_${tblLower}`));
               columns.push({
                 name: key,
                 type: inferredType,
-                isPrimary: key.toLowerCase() === 'id' || key.toLowerCase().startsWith('id_')
+                isPrimary: isPk,
+                isForeignKey: isFk,
+                isNotNull: isPk,
+                isUnique: false,
               });
             }
           }

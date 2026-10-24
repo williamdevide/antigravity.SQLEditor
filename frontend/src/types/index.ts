@@ -5,6 +5,8 @@ export interface ColumnSchema {
   isForeignKey?: boolean;
   foreignKeyRef?: { table: string; column: string };
   isNullable?: boolean;
+  isNotNull?: boolean;
+  isUnique?: boolean;
 }
 
 export interface TableSchema {

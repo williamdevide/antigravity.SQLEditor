@@ -486,24 +486,78 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             {/* Colunas da Tabela (Quando expandido) */}
                             {isTableExpanded && (
                               <div className="pl-6 pr-1 py-1 space-y-0.5 text-[11px] text-[var(--text-muted)] border-l border-[var(--border-color)] ml-3">
-                                {table.columns.map((col) => (
-                                  <div
-                                    key={col.name}
-                                    className="flex items-center justify-between py-0.5 px-1 rounded hover:bg-[var(--bg-hover)]"
-                                  >
-                                    <div className="flex items-center gap-1 truncate">
-                                      <span className="material-symbols-outlined text-[10px] text-[var(--accent-yellow)]">
-                                        {col.isPrimary ? 'key' : 'view_column'}
-                                      </span>
-                                      <span className={`truncate ${col.isPrimary ? 'text-[var(--accent-yellow)] font-semibold' : 'text-[var(--text-primary)]'}`}>
-                                        {col.name}
-                                      </span>
+                                {table.columns.map((col) => {
+                                  const isPk = !!col.isPrimary;
+                                  const isFk = !isPk && (!!col.isForeignKey || !!col.foreignKeyRef);
+                                  const isNN = !!col.isNotNull || isPk;
+                                  const isUQ = !!col.isUnique;
+
+                                  return (
+                                    <div
+                                      key={col.name}
+                                      className="flex items-center justify-between py-0.5 px-1 rounded hover:bg-[var(--bg-hover)] group/col"
+                                      title={`${col.name} (${col.type})${isPk ? ' • Chave Primária (PK)' : ''}${isFk ? ' • Chave Estrangeira (FK)' : ''}${isNN ? ' • NOT NULL' : ''}${isUQ ? ' • UNIQUE' : ''}`}
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate mr-1">
+                                        {isPk ? (
+                                          <span
+                                            className="material-symbols-outlined text-[11px] text-[var(--accent-yellow)] shrink-0 drop-shadow-[0_0_2px_rgba(255,230,0,0.5)]"
+                                            title="Chave Primária (PK)"
+                                          >
+                                            key
+                                          </span>
+                                        ) : isFk ? (
+                                          <span
+                                            className="material-symbols-outlined text-[11px] text-white shrink-0"
+                                            title="Chave Estrangeira (FK)"
+                                          >
+                                            key
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className="material-symbols-outlined text-[11px] text-white/90 shrink-0"
+                                            title="Campo Normal"
+                                          >
+                                            view_column
+                                          </span>
+                                        )}
+                                        <span
+                                          className={`truncate ${
+                                            isPk
+                                              ? 'text-[var(--accent-yellow)] font-semibold'
+                                              : isFk
+                                              ? 'text-[var(--text-primary)] font-medium'
+                                              : 'text-[var(--text-primary)]'
+                                          }`}
+                                        >
+                                          {col.name}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {isNN && (
+                                          <span
+                                            className="text-[8px] font-mono font-bold px-1 py-0.2 rounded bg-sky-500/20 text-sky-400 border border-sky-500/40"
+                                            title="NOT NULL (Preenchimento Obrigatório)"
+                                          >
+                                            NN
+                                          </span>
+                                        )}
+                                        {isUQ && (
+                                          <span
+                                            className="text-[8px] font-mono font-bold px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                            title="UNIQUE (Restrição de Unicidade)"
+                                          >
+                                            UQ
+                                          </span>
+                                        )}
+                                        <span className="text-[9px] uppercase text-[var(--text-muted)] font-mono">
+                                          {col.type}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <span className="text-[9px] uppercase text-[var(--text-muted)]">
-                                      {col.type}
-                                    </span>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

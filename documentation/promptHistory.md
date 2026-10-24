@@ -1619,4 +1619,60 @@ YEAR()
    - Criação de commit semântico padronizado: `feat: release v3.1.16 - split button executar trecho, auto-update bds por sessao e 15 funcoes mysql`.
    - Execução de `git push origin main` disparando automaticamente o pipeline de build e deploy em produção na Vercel.
 
+---
+
+## 📌 Prompt 49
+**Data:** 23/10/2026 - 21:36  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal transforme o botão + Nova Aba para que funcione igual o botão + que existe abaixo, se clicar no + Nova Aba já cria uma aba em branco, se clicar na seta abre as opções existentes.
+alem disso o X Fechar Todas também deve pedir confirmação igual ao Fechar Todas de cima.
+O botão Recarregar Metadados dos Bancos deve recarregar os bancos completos (inclusive com as barras de progresso).
+na exibição dos campos da tabela no schema explorer a chave primaria aparece com o icone da chave colorida. as chaves estrangeiras aparecem com uma chave branca e os outros campos com o icone branco. além disso preciso que seja visual se o campo é not null e/ou unique.
+faça tudo isso, mude a versão para 3.1.17 e atualize o github e o vercel
+```
+
+### 🎯 Ações Executadas:
+
+1. **Transformação do Botão `+ Nova Aba` em Split Button:**
+   - Em `frontend/src/components/Header.tsx`, o botão `+ Nova Aba` foi remodelado para o padrão *split button*, espelhando a ergonomia do botão `+` da barra de abas:
+     - **Botão Principal (Esquerda):** Ao clicar em `+ Nova Aba`, cria imediatamente uma aba em branco sem abrir menus adicionais (`onNewBlankTab`).
+     - **Botão Secundário (Direita - Setinha `arrow_drop_down`):** Abre o menu suspenso com as opções existentes (Criar aba em branco, Carregar Soluções de aula com submenus por categoria).
+
+2. **Confirmação Padronizada no Botão e Menu `Fechar Todas`:**
+   - Em `frontend/src/components/EditorWorkspace.tsx`:
+     - O botão `X Fechar Todas` da barra de abas agora solicita confirmação via `window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')`, igualando seu comportamento ao botão do cabeçalho.
+     - A opção "Fechar Todas" do menu de contexto de clique com o botão direito nas abas também foi protegida com a mesma confirmação, prevenindo perda acidental de scripts abertos.
+
+3. **Recarga Completa dos Bancos com Barras de Progresso:**
+   - Em `frontend/src/App.tsx`, criada a função `handleReloadAllDatabases`:
+     - Obtém o preset ativo via `dbEngine.getPreset()`.
+     - Executa `handleLoadPreset(preset)` de forma assíncrona, ativando as barras de progresso animadas no Schema Explorer para cada banco e tabela carregados.
+     - Conectada ao botão `Recarregar Metadados dos Bancos` no componente `<Sidebar />`.
+
+4. **Diferenciação Visual de Constraints e Chaves no Schema Explorer:**
+   - Atualizada a interface `ColumnSchema` em `frontend/src/types/index.ts` com as propriedades `isNotNull?: boolean; isUnique?: boolean;`.
+   - No motor `frontend/src/services/dbEngine.ts` (`getSchemaTree`), implementada análise aprofundada de constraints:
+     - `isPrimary`: detecta PKs declaradas ou heurísticas de chave primária.
+     - `isForeignKey`: detecta FKs formais e relacionamentos de chave estrangeira.
+     - `isNotNull`: detecta restrição `NOT NULL` explícita ou inerente à PK.
+     - `isUnique`: inspeciona constraints `UNIQUE` e tabelas de unicidade do AlaSQL (`tObj.uk`).
+   - Em `frontend/src/components/Sidebar.tsx`:
+     - **Chave Primária:** Ícone `key` colorido em amarelo/dourado (`text-[var(--accent-yellow)]`).
+     - **Chave Estrangeira:** Ícone `key` na cor branca (`text-white`).
+     - **Outros Campos:** Ícone `view_column` na cor branca (`text-white`).
+     - **Badges Visuais:** Adicionados badges compactos e modernos:
+       - `NN`: Campo com restrição `NOT NULL` (azul).
+       - `UQ`: Campo com restrição `UNIQUE` (âmbar/dourado).
+       - Tooltip descritivo em cada linha detalhando o tipo e as restrições do campo.
+
+5. **Atualização da Versão para `v3.1.17`:**
+   - Sincronizados `version.ts`, `package.json`, `Header.tsx`, `AboutView.tsx` e `LandingPageView.tsx`.
+   - Adicionada entrada completa da versão `v3.1.17` no Changelog da página inicial com expansão padrão no acordeom.
+
+6. **Validação de Build, Commit Semântico e Deploy Vercel:**
+   - Build de produção (`npm run build`) concluído com código 0 e 0 erros em 752ms.
+   - Sincronização via `git commit` e `git push origin main`.
+
+
 

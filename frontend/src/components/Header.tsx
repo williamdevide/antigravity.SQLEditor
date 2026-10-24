@@ -209,29 +209,41 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* Nova Aba com Menu Suspenso */}
-            <NewTabDropdown
-              onNewBlankTab={onNewBlankTab}
-              onSelectSolution={onOpenSolution}
-              solutions={solutions}
-              align="left"
-              triggerButton={({ isOpen, toggle }) => (
-                <button
-                  onClick={toggle}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer ${
-                    isOpen ? 'border-[#FFE600] bg-[var(--bg-hover)] shadow-[0_0_8px_rgba(255,230,0,0.2)]' : ''
-                  }`}
-                  title="Nova Aba ou Carregar Solução (Ctrl+T)"
-                  type="button"
-                >
-                  <span className="material-symbols-outlined text-[15px] text-[#FFE600]">add</span>
-                  <span className="hidden sm:inline">Nova Aba</span>
-                  <span className="material-symbols-outlined text-[13px] text-[var(--text-muted)] -ml-0.5">
-                    arrow_drop_down
-                  </span>
-                </button>
-              )}
-            />
+            {/* Nova Aba (Split Button): Clique no texto/ícone cria aba em branco, clique na seta abre menu suspenso */}
+            <div className="flex items-center bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] rounded transition-colors shadow-sm">
+              <button
+                onClick={onNewBlankTab}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-[var(--text-primary)] hover:text-[var(--accent-yellow)] text-xs font-medium rounded-l transition-colors cursor-pointer"
+                title="Nova Aba em Branco (Ctrl+T)"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px] text-[#FFE600]">add</span>
+                <span className="hidden sm:inline">Nova Aba</span>
+              </button>
+
+              <div className="w-[1px] h-4 bg-[var(--border-color)] self-center"></div>
+
+              <NewTabDropdown
+                onNewBlankTab={onNewBlankTab}
+                onSelectSolution={onOpenSolution}
+                solutions={solutions}
+                align="left"
+                triggerButton={({ isOpen, toggle }) => (
+                  <button
+                    onClick={toggle}
+                    className={`px-1 py-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-r transition-colors cursor-pointer flex items-center justify-center ${
+                      isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)]' : ''
+                    }`}
+                    title="Mais opções de Nova Aba (Carregar Soluções)"
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      arrow_drop_down
+                    </span>
+                  </button>
+                )}
+              />
+            </div>
 
             {/* Limpar */}
             <button

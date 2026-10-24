@@ -1197,18 +1197,20 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {tabs.length > 0 && onCloseAllTabs && (
             <button
               onClick={() => {
-                flushPendingContent();
-                if (monacoInstanceRef.current) {
-                  tabs.forEach(t => {
-                    try {
-                      const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
-                      monacoInstanceRef.current.editor.getModel(uri)?.dispose();
-                    } catch (_) {}
-                  });
+                if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
+                  flushPendingContent();
+                  if (monacoInstanceRef.current) {
+                    tabs.forEach(t => {
+                      try {
+                        const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                        monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                      } catch (_) {}
+                    });
+                  }
+                  onCloseAllTabs();
                 }
-                onCloseAllTabs();
               }}
-              title="Fechar Todas as Abas"
+              title="Fechar Todas as Abas (com confirmação)"
               className="ml-1 px-1.5 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/15 rounded transition-colors cursor-pointer shrink-0 border border-transparent hover:border-[#FF3366]/30"
               type="button"
             >
@@ -1545,16 +1547,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               <button
                 onClick={() => {
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
-                  flushPendingContent();
-                  if (monacoInstanceRef.current) {
-                    tabs.forEach(t => {
-                      try {
-                        const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
-                        monacoInstanceRef.current.editor.getModel(uri)?.dispose();
-                      } catch (_) {}
-                    });
+                  if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
+                    flushPendingContent();
+                    if (monacoInstanceRef.current) {
+                      tabs.forEach(t => {
+                        try {
+                          const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                          monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                        } catch (_) {}
+                      });
+                    }
+                    onCloseAllTabs();
                   }
-                  onCloseAllTabs();
                 }}
                 className="w-full px-3 py-1.5 text-left text-[#FF3366] hover:bg-[#FF3366]/10 flex items-center gap-2 transition-colors cursor-pointer border-t border-[var(--border-color)] mt-1"
                 type="button"

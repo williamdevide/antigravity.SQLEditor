@@ -20,11 +20,25 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.17',
+    date: '23/10/2026',
+    title: 'Split Button Nova Aba, Confirmação ao Fechar Todas, Recarga Completa de Bancos e Badges de Constraints (PK, FK, NN, UQ)',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Split button em "+ Nova Aba": o botão principal cria imediatamente uma aba em branco, enquanto a setinha lateral abre o menu de opções existentes (soluções de aula).',
+      'Confirmação padronizada em "Fechar Todas": o botão "X Fechar Todas" da barra de abas e do menu de contexto agora exige confirmação do usuário, prevenindo fechamentos acidentais.',
+      'Recarga completa dos bancos: o botão "Recarregar Metadados dos Bancos" agora recarrega todos os bancos de dados de forma assíncrona com barras de progresso animadas.',
+      'Diferenciação visual de chaves e constraints no Schema Explorer: chave primária com ícone colorido, chaves estrangeiras com chave branca e campos convencionais com ícone branco.',
+      'Badges de integridade no Schema Explorer: identificação visual imediata de campos NOT NULL ("NN") e UNIQUE ("UQ") em todas as tabelas.',
+    ],
+  },
+  {
     version: 'v3.1.16',
     date: '23/10/2026',
     title: 'Execução de Trecho na Linha do Cursor, Dropdown no Botão Executar, Sincronização de Sessão e Suporte a 15 Funções SQL',
-    isLatest: true,
-    tag: 'Lançamento Atual',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Execução cirúrgica na linha do cursor: o comando "Executar esse trecho" (Alt+E) agora opera perfeitamente apenas com o cursor posicionado na linha, sem necessidade de selecionar a linha toda.',
       'Botão Executar com menu suspenso: adicionada setinha lateral no botão Executar com a opção "Executar esse trecho", idêntica à ergonomia do botão de abas.',
@@ -210,9 +224,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.16 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.17 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.16': true,
+    'v3.1.17': true,
   });
 
   const toggleVersion = (version: string) => {

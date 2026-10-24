@@ -569,6 +569,12 @@ export const App: React.FC = () => {
     }, 1800);
   }, [refreshSchemas]);
 
+  // Recarregar Bancos Completos (inclusive com as barras de progresso)
+  const handleReloadAllDatabases = useCallback(async () => {
+    const preset = dbEngine.getPreset();
+    await handleLoadPreset(preset);
+  }, [handleLoadPreset]);
+
   // Criar Novo Banco de Dados (pelo botão na Sidebar)
   const handleCreateDatabase = useCallback(async (name: string) => {
     try {
@@ -931,7 +937,7 @@ export const App: React.FC = () => {
                     setActiveDatabase(db);
                   }}
                   onCreateDatabase={handleCreateDatabase}
-                  onRefreshSchemas={refreshSchemas}
+                  onRefreshSchemas={handleReloadAllDatabases}
                   zoomLevel={zoomLevels.sidebar}
                   onZoomIn={() =>
                     setZoomLevels(p => ({ ...p, sidebar: Math.min(250, p.sidebar + 10) }))
