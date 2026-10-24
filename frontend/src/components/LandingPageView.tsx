@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ActiveView, ThemeMode } from '../types';
+import { APP_VERSION } from '../config/version';
 
 interface LandingPageViewProps {
   onOpenEditor: () => void;
@@ -19,11 +20,24 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.16',
+    date: '23/10/2026',
+    title: 'Execução de Trecho na Linha do Cursor, Dropdown no Botão Executar, Sincronização de Sessão e Suporte a 15 Funções SQL',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Execução cirúrgica na linha do cursor: o comando "Executar esse trecho" (Alt+E) agora opera perfeitamente apenas com o cursor posicionado na linha, sem necessidade de selecionar a linha toda.',
+      'Botão Executar com menu suspenso: adicionada setinha lateral no botão Executar com a opção "Executar esse trecho", idêntica à ergonomia do botão de abas.',
+      'Sincronização automática de versão: cada sessão salva a versão do SQLEditor utilizada e, ao carregar uma versão mais recente, atualiza automaticamente os bancos de dados carregados.',
+      'Garantia de funcionamento de 15 funções essenciais do MySQL: CONCAT(), CONCAT_WS(), UPPER(), LOWER(), SUBSTRING(), LENGTH(), ROUND(), CEIL(), FLOOR(), NOW(), CURDATE(), DATE_FORMAT(), DATEDIFF(), TIMESTAMPDIFF() e YEAR().',
+    ],
+  },
+  {
     version: 'v3.1.15',
     date: '21/10/2026',
     title: 'Autocompletar Estrito do Banco Ativo, Auto-Capitalização SQL e Cursor Estável Entre Abas',
-    isLatest: true,
-    tag: 'Lançamento Atual',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Restauração da estabilidade nativa do cursor: desativação completa do mecanismo forçado de seleção entre abas e preservação da posição exata do cursor durante auto-capitalização.',
       'Auto-capitalização em tempo real: comandos e palavras-chave SQL digitados em minúsculas são auto-corrigidos para MAIÚSCULAS instantaneamente (ex: from → FROM, select → SELECT), preservando strings e comentários.',
@@ -196,9 +210,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.15 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.16 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.15': true,
+    'v3.1.16': true,
   });
 
   const toggleVersion = (version: string) => {
@@ -302,7 +316,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 SQL<span className="text-[#FF6B00]">Editor</span>
               </span>
               <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-full bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/20">
-                v3.1.15
+                v{APP_VERSION}
               </span>
             </div>
           </div>
@@ -440,7 +454,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         {/* Badge Flutuante no Topo */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm text-xs font-mono font-medium text-[var(--text-secondary)] mb-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse shadow-[0_0_8px_#00E676]" />
-          <span>v3.1.15 · 100% Offline-First · Zero Cadastro · Execução Local no Navegador</span>
+          <span>v{APP_VERSION} · 100% Offline-First · Zero Cadastro · Execução Local no Navegador</span>
         </div>
 
         {/* Título Principal de Alto Impacto */}
@@ -1559,7 +1573,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#FF6B00] text-[20px]">bolt</span>
             <span className="font-bold text-sm text-[var(--text-primary)]">SQLEditor</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]">v3.1.15</span>
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]">v{APP_VERSION}</span>
             <span>• Milkfed Devs &amp;&amp; Reqs Lords</span>
           </div>
 

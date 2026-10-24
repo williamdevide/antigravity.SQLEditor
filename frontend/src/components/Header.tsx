@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   type ActiveView,
   type ThemeMode,
@@ -8,6 +8,7 @@ import {
 import { NewTabDropdown } from './NewTabDropdown';
 import { MainMenuDropdown, type VisiblePanels } from './MainMenuDropdown';
 import type { SolutionItem } from '../services/scriptsLoader';
+import { APP_VERSION } from '../config/version';
 
 interface HeaderProps {
   activeView: ActiveView;
@@ -15,6 +16,7 @@ interface HeaderProps {
   visiblePanels: VisiblePanels;
   onTogglePanel: (panel: keyof VisiblePanels) => void;
   onRunQuery: () => void;
+  onRunSnippet?: () => void;
   onNewBlankTab: () => void;
   onOpenSolution: (solution: SolutionItem) => void;
   solutions: SolutionItem[];
@@ -49,7 +51,30 @@ export const Header: React.FC<HeaderProps> = ({
   onFontThemeChange,
   isExecuting,
   activeDatabase,
+  onRunSnippet,
 }) => {
+  const [runDropdownOpen, setRunDropdownOpen] = useState(false);
+  const runDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (runDropdownRef.current && !runDropdownRef.current.contains(e.target as Node)) {
+        setRunDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRunDropdownOpen(false);
+    };
+    if (runDropdownOpen) {
+      window.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [runDropdownOpen]);
+
   const currentThemeObj = THEME_OPTIONS.find(t => t.id === theme);
 
   const getThemeIcon = () => {
@@ -99,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Versão */}
         <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
-          v3.1.15
+          v{APP_VERSION}
         </span>
 
         {/* Indicador de Banco Ativo */}
@@ -115,22 +140,74 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Botões operacionais exclusivos do modo Workspace */}
         {activeView === 'workspace' && (
           <>
-            {/* Executar */}
-            <button
-              onClick={onRunQuery}
-              disabled={isExecuting}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-xs font-semibold rounded shadow-[0_0_14px_rgba(255,107,0,0.4)] transition-all cursor-pointer disabled:opacity-50"
-              title="Executar Script SQL (Ctrl+Enter)"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                {isExecuting ? 'sync' : 'play_arrow'}
-              </span>
-              <span>{isExecuting ? 'Executando...' : 'Executar'}</span>
-              <span className="hidden xl:inline text-[10px] text-white/80 font-mono font-normal">
-                (Ctrl+↵)
-              </span>
-            </button>
+            {/* Executar Split Button com Setinha Dropdown */}
+            <div className="relative inline-flex items-stretch rounded shadow-[0_0_14px_rgba(255,107,0,0.4)]">
+              {/* Botão Principal: Executar Tudo (Ctrl+Enter) */}
+              <button
+                onClick={onRunQuery}
+                disabled={isExecuting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-xs font-semibold rounded-l transition-all cursor-pointer disabled:opacity-50"
+                title="Executar Script SQL Completo (Ctrl+Enter)"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {isExecuting ? 'sync' : 'play_arrow'}
+                </span>
+                <span>{isExecuting ? 'Executando...' : 'Executar'}</span>
+                <span className="hidden xl:inline text-[10px] text-white/80 font-mono font-normal">
+                  (Ctrl+↵)
+                </span>
+              </button>
+
+              {/* Divisor vertical sutil */}
+              <div className="w-[1px] bg-white/20 self-stretch"></div>
+
+              {/* Botão com Setinha para Opções de Execução */}
+              <button
+                onClick={() => setRunDropdownOpen(prev => !prev)}
+                disabled={isExecuting}
+                className={`px-1 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white rounded-r transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center ${
+                  runDropdownOpen ? 'bg-[#FF8533]' : ''
+                }`}
+                title="Mais opções de execução"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  arrow_drop_down
+                </span>
+              </button>
+
+              {/* Menu Suspenso de Execução */}
+              {runDropdownOpen && (
+                <div
+                  ref={runDropdownRef}
+                  className="absolute top-full left-0 mt-1 w-60 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-[0_12px_36px_rgba(0,0,0,0.45)] py-1.5 text-xs select-none backdrop-blur-md z-[999999] animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <button
+                    onClick={() => {
+                      setRunDropdownOpen(false);
+                      if (onRunSnippet) {
+                        onRunSnippet();
+                      } else {
+                        onRunQuery();
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+                    type="button"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
+                        play_arrow
+                      </span>
+                      <span className="font-medium">Executar esse trecho</span>
+                    </div>
+                    <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">
+                      Alt+E
+                    </kbd>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Nova Aba com Menu Suspenso */}
             <NewTabDropdown

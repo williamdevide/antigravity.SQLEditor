@@ -4,6 +4,7 @@ import { getClassroomDatabases, splitSqlStatements } from './scriptsLoader';
 import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
 import { registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
+import { APP_VERSION, isNewerVersion } from '../config/version';
 
 export interface DatabaseLoadProgress {
   dbName: string;
@@ -208,11 +209,29 @@ class DatabaseEngine {
     if (this.isInitialized) return;
 
     try {
+      // 1. Controle de versão da sessão do SQL Editor
+      const savedVersion = localStorage.getItem('sqleditor_app_version') || localStorage.getItem('sqleditor_version');
+      const hasNewerVersion = savedVersion ? isNewerVersion(APP_VERSION, savedVersion) : false;
+
+      // Sempre persiste a versão atual utilizada nesta sessão
+      try {
+        localStorage.setItem('sqleditor_app_version', APP_VERSION);
+        localStorage.setItem('sqleditor_version', APP_VERSION);
+      } catch (_) {}
+
       const savedPreset = (localStorage.getItem('sqleditor_db_preset') as DatabasePreset) || 'empty';
       this.currentPreset = savedPreset;
 
       const savedHideSystem = localStorage.getItem('sqleditor_hide_system_dbs');
       this.hideSystemDatabases = savedHideSystem === null ? true : savedHideSystem === 'true';
+
+      // 2. Se a versão atual for mais nova que a salva, atualiza automaticamente os BDs carregados
+      if (hasNewerVersion && (savedPreset === 'samples' || savedPreset === 'class')) {
+        console.log(`[SQLEditor] Nova versão detectada (${APP_VERSION} > ${savedVersion}). Atualizando automaticamente os bancos carregados...`);
+        await this.loadPreset(savedPreset);
+        this.isInitialized = true;
+        return;
+      }
 
       const storedDbs = await dbStorage.databasesState.toArray();
 

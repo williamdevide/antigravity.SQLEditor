@@ -421,6 +421,31 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, activeDatabase]);
 
+  // Executar trecho onde o cursor está posicionado ou trecho selecionado
+  const handleRunCurrentSnippet = useCallback(() => {
+    const ed = editorRef.current;
+    if (ed) {
+      const sel = ed.getSelection();
+      if (sel && !sel.isEmpty()) {
+        const text = ed.getModel()?.getValueInRange(sel);
+        if (text && text.trim()) {
+          handleRunSnippet(text.trim());
+          return;
+        }
+      }
+      const model = ed.getModel();
+      const pos = ed.getPosition();
+      if (model && pos) {
+        const stmt = extractStatementAtPosition(model.getValue(), pos);
+        if (stmt && stmt.trim()) {
+          handleRunSnippet(stmt.trim());
+          return;
+        }
+      }
+    }
+    handleRunQuery();
+  }, [handleRunSnippet, handleRunQuery]);
+
   // Revisar trecho selecionado (Alt+R) ou comando com erro no log
   const handleReviewSnippet = useCallback((snippet: string, runtimeError?: string) => {
     if (!snippet.trim()) return;
@@ -834,6 +859,7 @@ export const App: React.FC = () => {
         visiblePanels={visiblePanels}
         onTogglePanel={handleTogglePanel}
         onRunQuery={handleRunQuery}
+        onRunSnippet={handleRunCurrentSnippet}
         onNewBlankTab={handleNewBlankTab}
         onOpenSolution={handleOpenSolution}
         solutions={solutions}

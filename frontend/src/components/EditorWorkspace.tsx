@@ -5,6 +5,7 @@ import { NewTabDropdown } from './NewTabDropdown';
 import type { TabItem, ThemeMode, FontTheme, DatabaseSchema } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
+import { registerEnhancedSqlLanguage } from '../services/mysqlLanguageDefinition';
 
 // Dicionário de auto-correção de palavras-chave para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
 const SQL_KEYWORDS_MAP: Record<string, string> = {
@@ -144,6 +145,7 @@ const SQL_FUNCTIONS_LIST = [
   { name: 'CHAR_LENGTH', snippet: 'CHAR_LENGTH(${1:campo})', doc: 'Retorna o número de caracteres do texto' },
   { name: 'DATE_FORMAT', snippet: "DATE_FORMAT(${1:campo}, '${2:%d/%m/%Y}')", doc: 'Formata data conforme padrão MySQL' },
   { name: 'DATEDIFF', snippet: 'DATEDIFF(${1:data1}, ${2:data2})', doc: 'Diferença em dias entre duas datas (data1 - data2)' },
+  { name: 'TIMESTAMPDIFF', snippet: 'TIMESTAMPDIFF(${1:YEAR}, ${2:data_inicial}, ${3:data_final})', doc: 'Diferença entre duas datas na unidade especificada (YEAR, MONTH, DAY, HOUR, MINUTE, SECOND)' },
   { name: 'TIMEDIFF', snippet: 'TIMEDIFF(${1:hora1}, ${2:hora2})', doc: 'Diferença entre dois horários' },
   { name: 'NOW', snippet: 'NOW()', doc: 'Retorna a data e hora atual (YYYY-MM-DD HH:MM:SS)' },
   { name: 'CURDATE', snippet: 'CURDATE()', doc: 'Retorna a data atual (YYYY-MM-DD)' },
@@ -154,7 +156,7 @@ const SQL_FUNCTIONS_LIST = [
   { name: 'CEIL', snippet: 'CEIL(${1:numero})', doc: 'Arredonda valor numérico sempre para cima' },
   { name: 'FLOOR', snippet: 'FLOOR(${1:numero})', doc: 'Arredonda valor numérico sempre para baixo' },
   { name: 'TRIM', snippet: 'TRIM(${1:campo})', doc: 'Remove espaços em branco do início e fim do texto' },
-  { name: 'SUBSTRING', snippet: 'SUBSTRING(${1:campo}, ${2:inicio}, ${3:tamanho})', doc: 'Extrai fatia do texto a partir da posição' },
+  { name: 'SUBSTRING', snippet: 'SUBSTRING(${1:campo}, ${2:inicio}, ${3:tamanho})', doc: 'Extrai fatia do texto a partir da posição (1-based)' },
   { name: 'REPLACE', snippet: "REPLACE(${1:campo}, '${2:de}', '${3:para}')", doc: 'Substitui ocorrências de um trecho de texto' },
   { name: 'LEFT', snippet: 'LEFT(${1:campo}, ${2:tamanho})', doc: 'Extrai os primeiros N caracteres da esquerda' },
   { name: 'RIGHT', snippet: 'RIGHT(${1:campo}, ${2:tamanho})', doc: 'Extrai os últimos N caracteres da direita' },
@@ -173,8 +175,11 @@ const SQL_FUNCTIONS_LIST = [
   { name: 'DATETIME', snippet: "DATETIME(${1:'now'})", doc: 'Retorna data e hora' },
 ];
 
+const MAJOR_SQL_VERBS = /^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|USE|SHOW|DESCRIBE|DESC|SET|WITH|TRUNCATE)\b/i;
+
 /**
- * Extrai a instrução SQL delimitada por ';' que envolve a posição atual do cursor.
+ * Extrai a instrução SQL que envolve a posição atual do cursor,
+ * funcionando perfeitamente apenas de o cursor estar na linha, sem precisar selecionar a linha toda.
  */
 export function extractStatementAtPosition(fullText: string, position: { lineNumber: number; column: number }): string | null {
   if (!fullText || !fullText.trim()) return null;
@@ -182,28 +187,147 @@ export function extractStatementAtPosition(fullText: string, position: { lineNum
   const lineIdx = position.lineNumber - 1;
   if (lineIdx < 0 || lineIdx >= lines.length) return null;
 
-  let startIdx = lineIdx;
-  while (startIdx > 0) {
-    const prevLine = lines[startIdx - 1];
-    const trimmed = prevLine.trim();
-    if (trimmed.endsWith(';') || (prevLine.includes(';') && !trimmed.startsWith('--'))) {
-      break;
+  // Calcula o offset de caractere absoluto da posição do cursor
+  let cursorOffset = 0;
+  for (let i = 0; i < lineIdx; i++) {
+    cursorOffset += lines[i].length + 1;
+  }
+  cursorOffset += Math.max(0, (position.column || 1) - 1);
+
+  // Varredura identificando os limites reais de cada declaração SQL
+  // considerando strings ('...', "..."), crases (`...`), comentários (-- e /* */) e ponto-e-vírgula (;)
+  const statements: Array<{ start: number; end: number; text: string; hasSemicolon: boolean }> = [];
+  let stmtStart = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < fullText.length; i++) {
+    const ch = fullText[i];
+    const next = i + 1 < fullText.length ? fullText[i + 1] : '';
+
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
     }
-    startIdx--;
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inSingleQuote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === "'") {
+        if (next === "'") { i++; continue; }
+        inSingleQuote = false;
+      }
+      continue;
+    }
+    if (inDoubleQuote) {
+      if (ch === '\\') { i++; continue; }
+      if (ch === '"') {
+        if (next === '"') { i++; continue; }
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+    if (inBacktick) {
+      if (ch === '`') inBacktick = false;
+      continue;
+    }
+
+    // Início de comentários
+    if (ch === '-' && next === '-') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '#' && (i === 0 || fullText[i - 1] === '\n' || /\s/.test(fullText[i - 1]))) {
+      inLineComment = true;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    // Início de strings
+    if (ch === "'") { inSingleQuote = true; continue; }
+    if (ch === '"') { inDoubleQuote = true; continue; }
+    if (ch === '`') { inBacktick = true; continue; }
+
+    // Delimitador de declaração explícito ';'
+    if (ch === ';') {
+      statements.push({
+        start: stmtStart,
+        end: i + 1,
+        text: fullText.substring(stmtStart, i + 1),
+        hasSemicolon: true,
+      });
+      stmtStart = i + 1;
+    }
   }
 
-  let endIdx = lineIdx;
-  while (endIdx < lines.length - 1) {
-    const curLine = lines[endIdx];
-    const trimmed = curLine.trim();
-    if (trimmed.endsWith(';') || (curLine.includes(';') && !trimmed.startsWith('--'))) {
-      break;
+  // Trecho restante após o último ';'
+  if (stmtStart < fullText.length) {
+    const remaining = fullText.substring(stmtStart);
+    if (remaining.trim().length > 0) {
+      statements.push({
+        start: stmtStart,
+        end: fullText.length,
+        text: remaining,
+        hasSemicolon: false,
+      });
     }
-    endIdx++;
   }
 
-  const chunk = lines.slice(startIdx, endIdx + 1).join('\n').trim();
-  return chunk || null;
+  // 1. Se encontramos declaração com ponto-e-vírgula contendo o cursor, retorna-a
+  if (statements.length > 0) {
+    for (const stmt of statements) {
+      if (cursorOffset >= stmt.start && cursorOffset <= stmt.end) {
+        const trimmed = stmt.text.trim();
+        if (stmt.hasSemicolon && trimmed) {
+          return trimmed;
+        }
+      }
+    }
+  }
+
+  // 2. Se a declaração não possui ponto-e-vírgula ou é um script em formato livre:
+  const currentLine = lines[lineIdx];
+  const trimmedLine = currentLine.trim();
+
+  if (trimmedLine && !trimmedLine.startsWith('--') && !trimmedLine.startsWith('#')) {
+    let blockStart = lineIdx;
+    while (
+      blockStart > 0 &&
+      lines[blockStart - 1].trim().length > 0 &&
+      !lines[blockStart - 1].trim().endsWith(';') &&
+      !MAJOR_SQL_VERBS.test(lines[blockStart].trim())
+    ) {
+      blockStart--;
+    }
+
+    let blockEnd = lineIdx;
+    while (
+      blockEnd < lines.length - 1 &&
+      lines[blockEnd + 1].trim().length > 0 &&
+      !lines[blockEnd].trim().endsWith(';') &&
+      !MAJOR_SQL_VERBS.test(lines[blockEnd + 1].trim())
+    ) {
+      blockEnd++;
+    }
+
+    const block = lines.slice(blockStart, blockEnd + 1).join('\n').trim();
+    if (block) return block;
+  }
+
+  return trimmedLine || null;
 }
 
 interface EditorWorkspaceProps {
@@ -499,6 +623,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     editorRef.current = editor;
     monacoInstanceRef.current = monaco;
     registerAllMonacoThemes(monaco);
+    registerEnhancedSqlLanguage(monaco);
     monaco.editor.setTheme(getMonacoThemeName(theme, fontTheme));
 
     if (editorRefOut) {
@@ -740,6 +865,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     editor.onContextMenu((e: any) => {
       e.event?.preventDefault();
       e.event?.stopPropagation();
+      if (e.target && e.target.position) {
+        const sel = editor.getSelection();
+        if (!sel || sel.isEmpty()) {
+          editor.setPosition(e.target.position);
+        }
+      }
       handleOpenContextMenu(e.event?.posx || 120, e.event?.posy || 120);
     });
 
@@ -754,9 +885,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
     // Provedor de autocompletar dinâmico estrito ao BANCO ATIVO e com filtro pelo INÍCIO digitado
     if (completionProviderRef.current) {
-      completionProviderRef.current.dispose();
+      if (Array.isArray(completionProviderRef.current)) {
+        completionProviderRef.current.forEach((d: any) => d?.dispose());
+      } else {
+        completionProviderRef.current.dispose();
+      }
     }
-    completionProviderRef.current = monaco.languages.registerCompletionItemProvider('sql', {
+    const completionProviderConfig = {
       triggerCharacters: ['.', '`'],
       provideCompletionItems: (model: any, position: any) => {
         const lineContentBefore = model.getValueInRange({
@@ -914,7 +1049,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
         return { suggestions };
       },
-    });
+    };
+
+    completionProviderRef.current = [
+      monaco.languages.registerCompletionItemProvider('sql', completionProviderConfig),
+      monaco.languages.registerCompletionItemProvider('mysql', completionProviderConfig),
+    ];
   };
 
   const baseFontSize = 14;
@@ -1102,6 +1242,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             beforeMount={(monaco) => {
               monacoInstanceRef.current = monaco;
               registerAllMonacoThemes(monaco);
+              registerEnhancedSqlLanguage(monaco);
             }}
             onChange={handleEditorContentChange}
             onMount={handleEditorDidMount}

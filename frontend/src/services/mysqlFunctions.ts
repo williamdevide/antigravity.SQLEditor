@@ -1,6 +1,33 @@
 import alasql from 'alasql';
 
 /**
+ * Converte de forma segura strings de data/hora (inclusive formato YYYY-MM-DD sem hora)
+ * em instâncias Date no fuso horário local sem deslocamentos indesejados de UTC.
+ */
+export function parseSqlDate(val: any): Date {
+  if (val instanceof Date) return val;
+  if (typeof val === 'number') return new Date(val);
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return new Date(NaN);
+    if (trimmed.toLowerCase() === 'now' || trimmed === 'CURRENT_TIMESTAMP') return new Date();
+    const m = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (m) {
+      const year = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10) - 1;
+      const day = parseInt(m[3], 10);
+      const hour = m[4] ? parseInt(m[4], 10) : 0;
+      const minute = m[5] ? parseInt(m[5], 10) : 0;
+      const second = m[6] ? parseInt(m[6], 10) : 0;
+      return new Date(year, month, day, hour, minute, second);
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date(val);
+}
+
+/**
  * Formata um valor de data conforme a especificação de DATE_FORMAT do MySQL.
  * Suporta os principais especificadores de formatação MySQL.
  */
@@ -9,7 +36,7 @@ export function formatMySQLDate(dateVal: any, formatStr?: string): string {
     return '';
   }
 
-  const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+  const d = parseSqlDate(dateVal);
   if (isNaN(d.getTime())) {
     // Se não for uma data válida, retorna o valor original como string
     return String(dateVal);
@@ -83,11 +110,64 @@ export const KNOWN_SQL_FUNCTIONS = new Set<string>([
   'round', 'floor', 'ceil', 'ceiling', 'abs', 'coalesce', 'nullif', 'concat', 'concat_ws',
   // MySQL Registradas
   'date_format', 'now', 'curdate', 'current_date', 'curtime', 'current_time',
-  'datediff', 'timediff', 'year', 'month', 'day', 'hour', 'minute', 'second',
+  'datediff', 'timediff', 'timestampdiff', 'year', 'month', 'day', 'hour', 'minute', 'second',
   'ifnull', 'str_to_date', 'trim', 'ltrim', 'rtrim', 'reverse', 'lpad', 'rpad',
   'mod', 'dayname', 'monthname', 'dayofweek', 'weekday', 'dayofyear', 'week', 'quarter',
   'left', 'right', 'replace'
 ]);
+
+/**
+ * Calcula a diferença entre duas datas segundo a unidade especificada,
+ * idêntico ao TIMESTAMPDIFF(unit, datetime_expr1, datetime_expr2) do MySQL.
+ * Retorna (datetime_expr2 - datetime_expr1) convertido na unidade especificada.
+ */
+export function calculateTimestampDiff(unit: any, d1Val: any, d2Val: any): number | null {
+  const d1 = parseSqlDate(d1Val);
+  const d2 = parseSqlDate(d2Val);
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
+
+  const u = String(unit).toLowerCase().trim().replace(/['"`]/g, '');
+  const diffMs = d2.getTime() - d1.getTime();
+
+  if (u === 'year' || u === 'sql_tsi_year') {
+    let years = d2.getFullYear() - d1.getFullYear();
+    const mDiff = d2.getMonth() - d1.getMonth();
+    if (mDiff < 0 || (mDiff === 0 && d2.getDate() < d1.getDate())) {
+      years--;
+    }
+    return years;
+  }
+  if (u === 'quarter' || u === 'sql_tsi_quarter') {
+    const months = calculateTimestampDiff('month', d1, d2);
+    return months !== null ? Math.floor(months / 3) : null;
+  }
+  if (u === 'month' || u === 'sql_tsi_month') {
+    let months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    if (d2.getDate() < d1.getDate()) {
+      months--;
+    }
+    return months;
+  }
+  if (u === 'week' || u === 'sql_tsi_week') {
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24 * 7));
+  }
+  if (u === 'day' || u === 'sql_tsi_day') {
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  }
+  if (u === 'hour' || u === 'sql_tsi_hour') {
+    return Math.floor(diffMs / (1000 * 60 * 60));
+  }
+  if (u === 'minute' || u === 'sql_tsi_minute') {
+    return Math.floor(diffMs / (1000 * 60));
+  }
+  if (u === 'second' || u === 'sql_tsi_second') {
+    return Math.floor(diffMs / 1000);
+  }
+  if (u === 'microsecond' || u === 'sql_tsi_microsecond') {
+    return Math.floor(diffMs * 1000);
+  }
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
 
 /**
  * Pré-processa uma instrução SQL para traduzir funções MySQL incompatíveis com o parser rígido do AlaSQL
@@ -121,6 +201,8 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.DATE_FORMAT = dateFn;
   engineFn.date_format = dateFn;
   engineFn.DateFormat = dateFn;
+  engineStdfn.DATE_FORMAT = dateFn;
+  engineStdfn.date_format = dateFn;
 
   // 2. NOW / CURRENT_TIMESTAMP
   const nowFn = () => {
@@ -129,6 +211,8 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   };
   engineFn.NOW = nowFn;
   engineFn.now = nowFn;
+  engineStdfn.NOW = nowFn;
+  engineStdfn.now = nowFn;
 
   // 3. CURDATE / CURRENT_DATE
   const curdateFn = () => {
@@ -139,6 +223,10 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.curdate = curdateFn;
   engineFn.CURRENT_DATE = curdateFn;
   engineFn.current_date = curdateFn;
+  engineStdfn.CURDATE = curdateFn;
+  engineStdfn.curdate = curdateFn;
+  engineStdfn.CURRENT_DATE = curdateFn;
+  engineStdfn.current_date = curdateFn;
 
   // 4. CURTIME / CURRENT_TIME
   const curtimeFn = () => {
@@ -149,21 +237,20 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.curtime = curtimeFn;
   engineFn.CURRENT_TIME = curtimeFn;
   engineFn.current_time = curtimeFn;
+  engineStdfn.CURTIME = curtimeFn;
+  engineStdfn.curtime = curtimeFn;
 
-  // 5. DATEDIFF / MYSQL_DATEDIFF
+  // 5. DATEDIFF / MYSQL_DATEDIFF & TIMESTAMPDIFF
   // Suporta tanto 2 parâmetros (MySQL: d1 - d2 em dias) quanto 3 parâmetros (unit, d1, d2)
   const datediffFn = (arg1: any, arg2: any, arg3?: any) => {
     if (arg3 !== undefined) {
       // 3 argumentos: (unit, d1, d2)
-      const d1 = new Date(arg2);
-      const d2 = new Date(arg3);
-      if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
-      return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+      return calculateTimestampDiff(arg1, arg2, arg3);
     }
     // 2 argumentos MySQL padrão: DATEDIFF(d1, d2) -> d1 - d2
     if (arg1 === null || arg1 === undefined || arg2 === null || arg2 === undefined) return null;
-    const date1 = new Date(arg1);
-    const date2 = new Date(arg2);
+    const date1 = parseSqlDate(arg1);
+    const date2 = parseSqlDate(arg2);
     if (isNaN(date1.getTime()) || isNaN(date2.getTime())) return null;
     const diffTime = date1.getTime() - date2.getTime();
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -174,6 +261,12 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineFn.mysql_datediff = datediffFn;
   engineStdfn.DATEDIFF = datediffFn;
   engineStdfn.datediff = datediffFn;
+
+  // 5.1 TIMESTAMPDIFF
+  engineFn.TIMESTAMPDIFF = calculateTimestampDiff;
+  engineFn.timestampdiff = calculateTimestampDiff;
+  engineStdfn.TIMESTAMPDIFF = calculateTimestampDiff;
+  engineStdfn.timestampdiff = calculateTimestampDiff;
 
   // 6. LENGTH / CHAR_LENGTH / LEN
   const lengthFn = (val: any) => {
@@ -218,6 +311,52 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   engineStdfn.CONCAT_WS = concatWsFn;
   engineStdfn.concat_ws = concatWsFn;
 
+  // 7.1 UPPER & LOWER / UCASE & LCASE
+  const upperFn = (val: any) => (val === null || val === undefined ? null : String(val).toUpperCase());
+  const lowerFn = (val: any) => (val === null || val === undefined ? null : String(val).toLowerCase());
+  engineFn.UPPER = upperFn;
+  engineFn.upper = upperFn;
+  engineFn.UCASE = upperFn;
+  engineFn.ucase = upperFn;
+  engineStdfn.UPPER = upperFn;
+  engineStdfn.upper = upperFn;
+  engineStdfn.UCASE = upperFn;
+  engineStdfn.ucase = upperFn;
+
+  engineFn.LOWER = lowerFn;
+  engineFn.lower = lowerFn;
+  engineFn.LCASE = lowerFn;
+  engineFn.lcase = lowerFn;
+  engineStdfn.LOWER = lowerFn;
+  engineStdfn.lower = lowerFn;
+  engineStdfn.LCASE = lowerFn;
+  engineStdfn.lcase = lowerFn;
+
+  // 7.2 SUBSTRING / SUBSTR / MID (com indexação 1-based MySQL)
+  const substringFn = (str: any, pos: any, len?: any) => {
+    if (str === null || str === undefined) return null;
+    const s = String(str);
+    const p = Number(pos) || 1;
+    const start = p > 0 ? p - 1 : (p < 0 ? s.length + p : 0);
+    if (len !== undefined) {
+      const l = Number(len) || 0;
+      return s.substr(start, Math.max(0, l));
+    }
+    return s.substr(start);
+  };
+  engineFn.SUBSTRING = substringFn;
+  engineFn.substring = substringFn;
+  engineFn.SUBSTR = substringFn;
+  engineFn.substr = substringFn;
+  engineFn.MID = substringFn;
+  engineFn.mid = substringFn;
+  engineStdfn.SUBSTRING = substringFn;
+  engineStdfn.substring = substringFn;
+  engineStdfn.SUBSTR = substringFn;
+  engineStdfn.substr = substringFn;
+  engineStdfn.MID = substringFn;
+  engineStdfn.mid = substringFn;
+
   // 8. LEFT & RIGHT
   const leftFn = (str: any, len: any) => {
     if (str === null || str === undefined) return null;
@@ -258,21 +397,37 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
   };
   engineFn.mod = engineFn.MOD;
 
-  engineFn.ROUND = (val: any, decimals: any = 0) => {
+  const roundFn = (val: any, decimals: any = 0) => {
     const num = Number(val);
     if (isNaN(num)) return null;
     const factor = Math.pow(10, Number(decimals) || 0);
     return Math.round(num * factor) / factor;
   };
-  engineFn.round = engineFn.ROUND;
-  engineFn.FLOOR = (val: any) => (isNaN(Number(val)) ? null : Math.floor(Number(val)));
-  engineFn.floor = engineFn.FLOOR;
-  engineFn.CEIL = (val: any) => (isNaN(Number(val)) ? null : Math.ceil(Number(val)));
-  engineFn.ceil = engineFn.CEIL;
-  engineFn.CEILING = engineFn.CEIL;
-  engineFn.ceiling = engineFn.CEIL;
+  engineFn.ROUND = roundFn;
+  engineFn.round = roundFn;
+  engineStdfn.ROUND = roundFn;
+  engineStdfn.round = roundFn;
+
+  const floorFn = (val: any) => (isNaN(Number(val)) ? null : Math.floor(Number(val)));
+  engineFn.FLOOR = floorFn;
+  engineFn.floor = floorFn;
+  engineStdfn.FLOOR = floorFn;
+  engineStdfn.floor = floorFn;
+
+  const ceilFn = (val: any) => (isNaN(Number(val)) ? null : Math.ceil(Number(val)));
+  engineFn.CEIL = ceilFn;
+  engineFn.ceil = ceilFn;
+  engineFn.CEILING = ceilFn;
+  engineFn.ceiling = ceilFn;
+  engineStdfn.CEIL = ceilFn;
+  engineStdfn.ceil = ceilFn;
+  engineStdfn.CEILING = ceilFn;
+  engineStdfn.ceiling = ceilFn;
+
   engineFn.ABS = (val: any) => (isNaN(Number(val)) ? null : Math.abs(Number(val)));
   engineFn.abs = engineFn.ABS;
+  engineStdfn.ABS = engineFn.ABS;
+  engineStdfn.abs = engineFn.ABS;
 
   // 11. DAYNAME, MONTHNAME, DAYOFWEEK, WEEKDAY
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -329,7 +484,7 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
 
   // 13. Funções de Componentes de Data
   const getPart = (d: any, part: 'year' | 'month' | 'day' | 'hour' | 'min' | 'sec') => {
-    const date = new Date(d);
+    const date = parseSqlDate(d);
     if (isNaN(date.getTime())) return null;
     if (part === 'year') return date.getFullYear();
     if (part === 'month') return date.getMonth() + 1;
@@ -339,18 +494,41 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
     if (part === 'sec') return date.getSeconds();
     return null;
   };
-  engineFn.YEAR = (d: any) => getPart(d, 'year');
-  engineFn.year = (d: any) => getPart(d, 'year');
-  engineFn.MONTH = (d: any) => getPart(d, 'month');
-  engineFn.month = (d: any) => getPart(d, 'month');
-  engineFn.DAY = (d: any) => getPart(d, 'day');
-  engineFn.day = (d: any) => getPart(d, 'day');
-  engineFn.HOUR = (d: any) => getPart(d, 'hour');
-  engineFn.hour = (d: any) => getPart(d, 'hour');
-  engineFn.MINUTE = (d: any) => getPart(d, 'min');
-  engineFn.minute = (d: any) => getPart(d, 'min');
-  engineFn.SECOND = (d: any) => getPart(d, 'sec');
-  engineFn.second = (d: any) => getPart(d, 'sec');
+  const yearPartFn = (d: any) => getPart(d, 'year');
+  engineFn.YEAR = yearPartFn;
+  engineFn.year = yearPartFn;
+  engineStdfn.YEAR = yearPartFn;
+  engineStdfn.year = yearPartFn;
+
+  const monthPartFn = (d: any) => getPart(d, 'month');
+  engineFn.MONTH = monthPartFn;
+  engineFn.month = monthPartFn;
+  engineStdfn.MONTH = monthPartFn;
+  engineStdfn.month = monthPartFn;
+
+  const dayPartFn = (d: any) => getPart(d, 'day');
+  engineFn.DAY = dayPartFn;
+  engineFn.day = dayPartFn;
+  engineStdfn.DAY = dayPartFn;
+  engineStdfn.day = dayPartFn;
+
+  const hourPartFn = (d: any) => getPart(d, 'hour');
+  engineFn.HOUR = hourPartFn;
+  engineFn.hour = hourPartFn;
+  engineStdfn.HOUR = hourPartFn;
+  engineStdfn.hour = hourPartFn;
+
+  const minPartFn = (d: any) => getPart(d, 'min');
+  engineFn.MINUTE = minPartFn;
+  engineFn.minute = minPartFn;
+  engineStdfn.MINUTE = minPartFn;
+  engineStdfn.minute = minPartFn;
+
+  const secPartFn = (d: any) => getPart(d, 'sec');
+  engineFn.SECOND = secPartFn;
+  engineFn.second = secPartFn;
+  engineStdfn.SECOND = secPartFn;
+  engineStdfn.second = secPartFn;
 
   // 14. IFNULL
   const ifnullFn = (val: any, defaultVal: any) => (val === null || val === undefined ? defaultVal : val);

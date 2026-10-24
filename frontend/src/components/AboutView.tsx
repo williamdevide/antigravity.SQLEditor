@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { APP_VERSION } from '../config/version';
 
 interface AboutViewProps {
   onBackToWorkspace: () => void;
@@ -84,7 +85,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   Sobre o SQLEditor
                 </h1>
                 <span className="px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30">
-                  v3.1.15
+                  v{APP_VERSION}
                 </span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">

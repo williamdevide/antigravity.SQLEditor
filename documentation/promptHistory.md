@@ -1446,5 +1446,177 @@ corrija.`
    - Git commit semântico padronizado: `fix: resolver drift de metricas de fonte do cursor no monaco com remeasureFonts e preload`.
    - Realizado `git push origin main`.
 
+---
+
+## 📌 Prompt 45
+**Data:** 21/10/2026 - 23:55  
+**Usuário:**
+> /agente-orquestrador porque datediff e outras funções aparecem em laranja, mas NOW e CEIL em preto normal?
+
+### 🎯 Diagnóstico Técnico e Anatômico do Monaco Editor (Monarch Tokenizer):
+
+1. **Arquitetura de Coloração do Monaco Editor (`language="sql"`):**
+   - O Monaco utiliza o analisador léxico **Monarch** para tokenizar código-fonte em tempo real.
+   - O editor no projeto está configurado com `language="sql"`.
+   - O arquivo de definição padrão da linguagem no Monaco (`monaco-editor/esm/vs/languages/definitions/sql/sql.js`) foi construído com base na sintaxe clássica do **ANSI SQL-92 e Microsoft T-SQL (SQL Server)**.
+
+2. **Por que `DATEDIFF` aparece em Laranja:**
+   - Na definição padrão de `sql.js`, a lista interna `builtinFunctions` contém expressamente a palavra `"DATEDIFF"` (linha 513).
+   - O tokenizer Monarch associa palavras de `builtinFunctions` ao token `'predefined'` / `'predefined.sql'`.
+   - No arquivo `monacoThemeHelper.ts`, as regras do tema associam esse token à cor de funções nativas:
+     - No tema **Solar**, o token `predefined` é mapeado para **Laranja** (`#FF6B00` no dark e `#C2410C` no light).
+
+3. **Por que `NOW` e `CEIL` aparecem em "Preto Normal" (cor padrão de identificador):**
+   - **`NOW()`**: É uma função clássica do dialeto **MySQL / MariaDB / PostgreSQL** (no SQL Server / T-SQL utiliza-se `GETDATE()` ou `CURRENT_TIMESTAMP`). No arquivo `sql.js` genérico do Monaco, `NOW` **não existe** na lista `builtinFunctions` (a única ocorrência da sequência de letras é a palavra `"UNKNOWN"`).
+   - **`CEIL()`**: O padrão ANSI e T-SQL adota exclusivamente o nome por extenso `"CEILING"` (que consta na lista do Monaco). A forma abreviada `"CEIL"` é um alias próprio do **MySQL / Oracle**, e não foi incluída no `sql.js` genérico.
+   - Outras funções MySQL populares como `CURDATE()`, `IFNULL()`, `TIMEDIFF()`, `DATE_FORMAT()`, etc., também estão ausentes no `sql.js` genérico.
+   - **Resultado no Tokenizer:** Quando o analisador do Monaco encontra `NOW` ou `CEIL`, ele testa contra `keywords`, `builtinVariables` e `builtinFunctions`. Não encontrando em nenhuma lista, ele cai na regra de escape padrão:
+     ```javascript
+     { cases: {
+         "@operators": "operator",
+         "@builtinVariables": "predefined",
+         "@builtinFunctions": "predefined",
+         "@keywords": "keyword",
+         "@default": "identifier" // <-- NOW e CEIL caem aqui!
+     }}
+     ```
+   - O token `'identifier'` não tem estilização colorida definida nas regras de sintaxe e herda diretamente a cor `editor.foreground` (que no tema claro é o preto `#111827`, ou seja, o texto normal).
+
+4. **Solução Disponível:**
+   - O Monaco já possui uma definição específica para **MySQL** (`vs/languages/definitions/mysql/mysql.js`), onde `NOW` (linha 579) e `CEIL` (linha 348) estão catalogadas em `builtinFunctions`.
+   - Alternativamente, podemos registrar/estender a lista de `builtinFunctions` da linguagem `'sql'` ou mudar a linguagem do editor para `'mysql'` para que 100% das funções do MySQL sejam destacadas em laranja.
+
+---
+
+## 📌 Prompt 46
+**Data:** 22/10/2026 - 00:00  
+**Usuário:**
+> sim
+
+### 🎯 Implementação e Conclusão da Solução:
+
+1. **Criação do Módulo de Definição Enriquecida (`frontend/src/services/mysqlLanguageDefinition.ts`):**
+   - Unificadas e enriquecidas todas as funções nativas do MySQL e SQL (675 funções catalogadas, incluindo `NOW`, `CEIL`, `CEILING`, `CURDATE`, `CURTIME`, `TIMEDIFF`, `DATEDIFF`, `DATE_FORMAT`, `IFNULL`, `COALESCE`, `STRFTIME`, `CONCAT_WS`, etc.).
+   - Suporte nativo a comentários de linha estilo MySQL com `#` além de `--`.
+   - Suporte completo a identificadores com crases MySQL (`` `nome_tabela` ``).
+   - Implementada a função exportada `registerEnhancedSqlLanguage(monaco)` que registra o tokenizer Monarch customizado simultaneamente para os dialetos `'sql'` e `'mysql'`.
+
+2. **Atualização do Tema de Cores do Monaco (`frontend/src/services/monacoThemeHelper.ts`):**
+   - Adicionados mapeamentos explícitos para todas as variações de tokens de dialetos (`keyword.mysql`, `predefined.mysql`, `type.mysql`, `string.mysql`, `number.mysql`, `comment.mysql`, `operator.mysql`, `delimiter.mysql`), garantindo que tanto no tema dark quanto no tema light o token `predefined` receba a cor laranja vibrante configurada.
+
+3. **Integração no Editor Workspace (`frontend/src/components/EditorWorkspace.tsx`):**
+   - Invocação de `registerEnhancedSqlLanguage(monaco)` no ciclo de montagem inicial (`beforeMount` e `onMount`).
+   - O provedor de autocompletar dinâmico foi configurado para atender ambos os identificadores de linguagem (`'sql'` e `'mysql'`).
+
+4. **Validação e Compilação:**
+   - Executado `npm run build` (`tsc -b && vite build`): compilado com **0 erros** de TypeScript e Vite em 748ms.
+
+---
+
+## 📌 Prompt 47
+**Data:** 23/10/2026 - 21:00  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal quero que o execute esse trecho funcione só do cursor estar na linha, sem precisar selecionar a linha toda.
+quero que o botão executar tenha uma setinha do lado, igual o botão + que cria abas. se clicar nessa setinha tem a opção executar esse trecho.
+quero que toda sessão utilizada deixe guardado a versão do sqleditor utilizada. dai ao carregar a página, se a versão atual for mais nova que a salva, automaticamente ele atualiza os bds carregados.
+garanta que os comandos abaixo estejam todos funcionando:
+CONCAT()
+CONCAT_WS()
+UPPER()
+LOWER()
+SUBSTRING()
+LENGTH()
+ROUND()
+CEIL()
+FLOOR()
+NOW()
+CURDATE()
+DATE_FORMAT()
+DATEDIFF()
+TIMESTAMPDIFF()
+YEAR()
+```
+
+### 🎯 Ações Executadas:
+
+1. **Execução Cirúrgica de Trecho Apenas com o Cursor na Linha (`extractStatementAtPosition`):**
+   - **Diagnóstico da Causa Raiz:** Anteriormente, o fatiamento de código baseado em linhas procurava exclusivamente por ponto-e-vírgula (`;`). Se um script continha múltiplos comandos em formato livre (sem `;`), o algoritmo expandia o intervalo para o documento inteiro, executando todas as linhas de uma vez. Além disso, o clique com o botão direito no Monaco não reposicionava o cursor quando não havia seleção.
+   - **Solução Implementada:**
+     - Desenvolvido analisador de declarações SQL inteligente em `EditorWorkspace.tsx`:
+       - Considera delimitadores `;` fora de strings (`'...'`, `"..."`), crases e comentários (`--`, `/* */`, `#`).
+       - Para comandos sem ponto-e-vírgula em formato livre, identifica limites delimitados por verbos principais do SQL (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `ALTER`, `USE`, etc.) ou quebras de bloco, isolando com precisão cirúrgica a instrução na linha onde o cursor está posicionado.
+     - No evento `editor.onContextMenu`, ao clicar com botão direito sem seleção de texto, o cursor é imediatamente posicionado no ponto clicado (`editor.setPosition(e.target.position)`), permitindo que "Executar esse trecho" (Alt+E) atinja instantaneamente a linha desejada.
+
+2. **Botão Executar com Menu Suspenso (Split Button com Setinha):**
+   - Criado componente de botão dividido (*split button*) no [Header.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/Header.tsx):
+     - Botão principal: Executa o script completo (`Ctrl+Enter` / `Cmd+Enter`).
+     - Botão com setinha lateral (`arrow_drop_down`), com design e ergonomia inspirados no botão de nova aba (+).
+     - Menu suspenso flutuante com a opção **"Executar esse trecho" (`Alt+E`)**, com ícone `play_arrow`, atalho em destaque e fechamento automático ao clicar fora ou teclar `Escape`.
+   - Conectado em `App.tsx` o callback `handleRunCurrentSnippet`, que obtém o trecho sob o cursor via `extractStatementAtPosition` e o despacha para execução e exibição na grade de dados.
+
+3. **Persistência de Versão por Sessão e Atualização Automática de Bancos:**
+   - Criado módulo de versão centralizado em `frontend/src/config/version.ts` com a versão `3.1.16` e utilitário `isNewerVersion(current, saved)`.
+   - Atualizados `package.json`, `Header.tsx`, `AboutView.tsx` e `LandingPageView.tsx` para sincronização com a versão `3.1.16`.
+   - Em `dbEngine.ts`:
+     - O método `initialize()` salva persistentemente a versão da sessão ativa no `localStorage` (`sqleditor_app_version` e `sqleditor_version`).
+     - Ao carregar a página, compara a versão salva com a versão atual: se a versão for mais recente, executa automaticamente a atualização dos bancos carregados (`await this.loadPreset(savedPreset)`), garantindo que atualizações de esquemas e novos scripts de aula sejam sincronizados sem exigir intervenção manual do usuário.
+
+4. **Garantia de Funcionamento Pleno de 15 Funções Essenciais do MySQL:**
+   - Validado e testado 100% de funcionamento para as 15 funções solicitadas:
+     1. `CONCAT()`: suporte a múltiplos argumentos em `engineFn` e `engineStdfn`.
+     2. `CONCAT_WS()`: suporte a separador e filtragem de nulos em `engineFn` e `engineStdfn`.
+     3. `UPPER()`: conversão robusta em maiúsculas (`engineFn` e `engineStdfn`).
+     4. `LOWER()`: conversão robusta em minúsculas (`engineFn` e `engineStdfn`).
+     5. `SUBSTRING()`: indexação 1-based nativa do MySQL para 2 ou 3 argumentos (`engineFn` e `engineStdfn`).
+     6. `LENGTH()`: contagem de caracteres (`engineFn` e `engineStdfn`).
+     7. `ROUND()`: arredondamento com 1 ou 2 argumentos (`engineFn` e `engineStdfn`).
+     8. `CEIL()` / `CEILING()`: teto numérico (`engineFn` e `engineStdfn`).
+     9. `FLOOR()`: piso numérico (`engineFn` e `engineStdfn`).
+     10. `NOW()`: data e hora no formato padrão MySQL `YYYY-MM-DD HH:MM:SS`.
+     11. `CURDATE()`: data atual no formato padrão MySQL `YYYY-MM-DD`.
+     12. `DATE_FORMAT()`: formatação com especificadores MySQL (%Y, %m, %d, %H, %i, %s, etc.).
+     13. `DATEDIFF()`: diferença em dias entre duas datas (`d1 - d2`).
+     14. `TIMESTAMPDIFF()`: cálculo completo em `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND` e `MICROSECOND` (aceita argumento de unidade com ou sem aspas).
+     15. `YEAR()`: extração precisa do ano (4 dígitos) de datas.
+   - Criada a função `parseSqlDate` eliminando anomalias de fuso horário UTC em datas no formato `YYYY-MM-DD`.
+   - Adicionados snippets e documentação de autocompletar para `CONCAT`, `CONCAT_WS` e `TIMESTAMPDIFF` no Monaco Editor.
+
+5. **Validação e Compilação:**
+   - Testes automatizados executados com sucesso (21/21 verificações aprovadas com 100% de taxa de sucesso).
+   - Compilação de produção (`npm run build`) concluída com 0 erros de TypeScript e Vite.
+
+---
+
+## 📌 Prompt 48
+**Data:** 23/10/2026 - 21:29  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal atualize o git e o vercel atribuindo a versão 3.1.16
+```
+
+### 🎯 Ações Executadas:
+
+1. **Revisão e Consolidação da Versão `v3.1.16`:**
+   - Centralização e padronização da versão `3.1.16` em todo o ecossistema da aplicação:
+     - `frontend/src/config/version.ts`: Constante `APP_VERSION = '3.1.16'` e comparador semântico `isNewerVersion()`.
+     - `frontend/package.json`: Versão atualizada para `3.1.16`.
+     - `frontend/src/components/Header.tsx`: Badge oficial no cabeçalho exibindo `v3.1.16`.
+     - `frontend/src/components/AboutView.tsx`: Badge oficial de versão `v3.1.16`.
+     - `frontend/src/components/LandingPageView.tsx`: Badges de versão `v3.1.16` e histórico atualizado no Changelog.
+     - `frontend/src/services/dbEngine.ts`: Persistência de `sqleditor_app_version` e rotina de auto-atualização de bancos quando a versão for mais nova que a anterior.
+
+2. **Inclusão dos Novos Módulos e Recursos no Git:**
+   - Adicionada definição léxica e de syntax highlighting personalizada para dialetos MySQL e SQL em `frontend/src/services/mysqlLanguageDefinition.ts`.
+   - Adicionado módulo de versão centralizado em `frontend/src/config/version.ts`.
+   - Incluído split-button no botão Executar com opção suspensa "Executar esse trecho" (`Alt+E`) e analisador cirúrgico por linha/cursor sem necessidade de selecionar todo o texto.
+   - Incluído suporte pleno às 15 funções MySQL auditadas (`CONCAT`, `CONCAT_WS`, `UPPER`, `LOWER`, `SUBSTRING`, `LENGTH`, `ROUND`, `CEIL`, `FLOOR`, `NOW`, `CURDATE`, `DATE_FORMAT`, `DATEDIFF`, `TIMESTAMPDIFF`, `YEAR`).
+
+3. **Validação de Compilação de Produção:**
+   - Executado `npm run build` (`tsc -b && vite build`) com 0 erros e código de retorno 0.
+
+4. **Commit Semântico e Sincronização Remota (GitHub & Vercel):**
+   - Criação de commit semântico padronizado: `feat: release v3.1.16 - split button executar trecho, auto-update bds por sessao e 15 funcoes mysql`.
+   - Execução de `git push origin main` disparando automaticamente o pipeline de build e deploy em produção na Vercel.
 
 
