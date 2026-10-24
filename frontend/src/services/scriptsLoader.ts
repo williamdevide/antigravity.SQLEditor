@@ -136,6 +136,18 @@ export function splitSqlStatements(sql: string): string[] {
       }
     }
 
+    // Trata quebra de linha após comando USE sem ponto e vírgula
+    if ((char === '\n' || char === '\r') && !inSingleQuote && !inDoubleQuote && !inBacktick && !inBlockComment) {
+      const cleanCurrent = current.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      if (/^USE\s+[`'"]?[\w-]+[`'"]?$/i.test(cleanCurrent)) {
+        if (current.trim()) {
+          statements.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+    }
+
     // Ponto e vírgula delimitador fora de qualquer delimitador ou comentário
     if (char === ';' && !inSingleQuote && !inDoubleQuote && !inBacktick && !inLineComment && !inBlockComment) {
       if (current.trim()) {

@@ -20,11 +20,25 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.18',
+    date: '23/10/2026',
+    title: 'Chaveamento Automático de Banco de Dados via Comando USE e Sincronização Dinâmica por Cursor',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Chaveamento automático no motor de execução: comandos USE database alteram imediatamente o banco ativo interno e do AlaSQL, garantindo que os comandos subsequentes operem estritamente no banco selecionado.',
+      'Suporte a múltiplos comandos USE encadeados: transição fluida entre bancos no mesmo script (ex: USE db1; ... USE db2;), com isolamento e persistência completa das tabelas criadas em cada banco.',
+      'Divisão inteligente de statements com ou sem ponto e vírgula: parser reconhece comandos USE em sua própria linha mesmo quando omitido o delimitador ";" antes da quebra de linha.',
+      'Sincronização contextual na UI por posição do cursor: movimentar o cursor no Monaco Editor detecta a seção do USE precedente e atualiza o cabeçalho, Schema Explorer e autocomplete em tempo real.',
+      'Execução de trecho pontual contextualizada (Alt+E): comandos isolados executam no banco ativo correspondente ao USE precedente mais próximo do script.',
+    ],
+  },
+  {
     version: 'v3.1.17',
     date: '23/10/2026',
     title: 'Split Button Nova Aba, Confirmação ao Fechar Todas, Recarga Completa de Bancos e Badges de Constraints (PK, FK, NN, UQ)',
-    isLatest: true,
-    tag: 'Lançamento Atual',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Split button em "+ Nova Aba": o botão principal cria imediatamente uma aba em branco, enquanto a setinha lateral abre o menu de opções existentes (soluções de aula).',
       'Confirmação padronizada em "Fechar Todas": o botão "X Fechar Todas" da barra de abas e do menu de contexto agora exige confirmação do usuário, prevenindo fechamentos acidentais.',
@@ -224,9 +238,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.17 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.18 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.17': true,
+    'v3.1.18': true,
   });
 
   const toggleVersion = (version: string) => {

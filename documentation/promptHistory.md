@@ -1674,5 +1674,62 @@ faça tudo isso, mude a versão para 3.1.17 e atualize o github e o vercel
    - Build de produção (`npm run build`) concluído com código 0 e 0 erros em 752ms.
    - Sincronização via `git commit` e `git push origin main`.
 
+---
 
+## 📌 Prompt 50
+**Data:** 23/10/2026 - 22:10  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal sempre que um script possuir um comando USE database o bd ativo deve ser mudado automaticamente. assim se em um script eu começar com um USE db1; esse db já fica ativo e os proximos comandos usam esse db, depois se existir outro USE db2; ele muda automaticamente para o db2 e os comandos seguintes interagem com esse db.
+```
 
+### 🎯 Ações Executadas:
+
+1. **Parser e Divisão Inteligente de Statements (`scriptsLoader.ts`):**
+   - Aprimorada a rotina `splitSqlStatements`: além de delimitar por ponto e vírgula (`;`), identifica quebras de linha (`\n` ou `\r`) imediatas após declarações de `USE <db>` mesmo quando o usuário omitir o ponto e vírgula final, evitando fusão indevida de comandos e garantindo que o `USE` seja sempre tratado como uma instrução isolada.
+
+2. **Chaveamento e Isolamento Dinâmico de Banco no Motor de Execução (`dbEngine.ts`):**
+   - **Remoção Prévia de Comentários:** Adicionado `cleanStmt` para descartar comentários de linha (`--`, `#`) e de bloco (`/* ... */`) antes de analisar sintaticamente declarações de `USE` e `CREATE DATABASE`. Isso elimina falhas quando o comando `USE` é precedido por comentários descritivos no script.
+   - **Case-Insensitivity & Backticks:** O nome do banco informado em `USE <db>` é buscado de forma case-insensitive na lista de bancos do AlaSQL (`alasql.databases`) e envolvido com backticks seguros (`` `USE \`${targetDb}\`;` ``), permitindo nomes de banco com hífens ou caracteres especiais sem erros de sintaxe.
+   - **Auto-criação e Atualização Imediata:** Se o banco especificado no `USE` ainda não existir no motor, ele é criado sob demanda. A propriedade interna `this.activeDatabase` é imediatamente atualizada para esse banco.
+   - **Encadeamento de Múltiplos USE:** Todos os comandos subsequentes ao primeiro `USE db1;` executam estritamente no contexto de `db1`. Ao atingir um novo comando `USE db2;` mais abaixo no mesmo script, o motor muda automaticamente para `db2`, e os comandos seguintes passam a interagir com `db2`.
+
+3. **Detecção Contextual do Banco Ativo por Posição do Cursor (`EditorWorkspace.tsx`):**
+   - Desenvolvida e exportada a função `findActiveDatabaseAtPosition(fullText, position)`: analisa as linhas do script do topo até a posição do cursor, ignorando blocos de comentários, e retorna o comando `USE` precedente mais próximo.
+   - Adicionada prop `onSelectDatabase?: (dbName: string) => void` no componente `EditorWorkspace`.
+   - Adicionado listener `editor.onDidChangeCursorPosition` com debounce de 120ms: quando o cursor do usuário transita entre seções do código que utilizam bancos diferentes (ex: de uma seção `USE db1` para uma seção `USE db2`), a UI do SQLEditor (Header, Schema Explorer e autocomplete do Monaco) é sincronizada automaticamente para o banco daquela seção.
+   - Na ação `sql-run-selection` (`Alt+E`): antes de disparar o snippet, o banco precedente é identificado e ativado no motor, garantindo que queries isoladas (ex: `SELECT * FROM tabela;`) executem no banco correto sem requerer novo `USE` na mesma linha.
+
+4. **Sincronização na Aplicação e Seleção de Abas (`App.tsx`):**
+   - Criado `handleSelectTab`: ao alternar abas de script, se o script da aba aberta contiver um comando `USE`, o banco ativo da aplicação é automaticamente ajustado para o banco daquele script.
+   - Atualizado `handleRunCurrentSnippet`: verifica `findActiveDatabaseAtPosition` no modelo do editor antes da execução para assegurar que trechos executados via botão do cabeçalho rodem no contexto do banco correto.
+   - Conectado `onSelectDatabase` em ambas as instâncias do `EditorWorkspace` (modo com console visível e modo tela cheia do editor), persistindo `dbEngine.setActiveDatabase(db)` e `setActiveDatabase(db)`.
+
+5. **Validação de Qualidade e Compilação:**
+   - Executado `npm run build` (`tsc -b && vite build`) no diretório `frontend`: compilado com 0 erros e código de saída 0.
+
+---
+
+## 📌 Prompt 51
+**Data:** 23/10/2026 - 22:38  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal atualize o git e vercel com 3.1.18
+```
+
+### 🎯 Ações Executadas:
+
+1. **Atualização da Versão Oficial do SQLEditor para `v3.1.18`:**
+   - `frontend/src/config/version.ts`: Constante `APP_VERSION` atualizada para `'3.1.18'` (single source of truth).
+   - `frontend/package.json`: Campo `version` sincronizado para `'3.1.18'`.
+   - `frontend/src/components/LandingPageView.tsx`:
+     - Nova entrada no histórico oficial do Changelog documentando o chaveamento automático de bancos de dados via comando `USE database` e sincronização dinâmica por cursor.
+     - Marcação da versão `v3.1.18` como "Lançamento Atual" (`isLatest: true`) e expansão padrão no acordeom.
+
+2. **Validação de Compilação de Produção:**
+   - Executado `npm run build` (`tsc -b && vite build`) com 0 erros e código de saída 0.
+
+3. **Sincronização com Git e Deploy Automático na Vercel:**
+   - Executado `git add .` com todas as alterações do recurso de `USE database` e atualização de versão.
+   - Criado commit semântico oficial: `feat: release v3.1.18 - auto-switch de banco por comando USE database e sincronizacao de cursor`.
+   - Executado `git push origin main`, disparando a esteira CI/CD de deploy em produção na Vercel.

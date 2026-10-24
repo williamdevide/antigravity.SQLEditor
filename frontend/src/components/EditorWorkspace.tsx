@@ -330,6 +330,86 @@ export function extractStatementAtPosition(fullText: string, position: { lineNum
   return trimmedLine || null;
 }
 
+/**
+ * Detecta qual é o banco de dados ativo na posição do cursor dentro de um script,
+ * inspecionando o comando USE mais recente que precede a linha atual.
+ */
+export function findActiveDatabaseAtPosition(
+  fullText: string,
+  position?: { lineNumber: number; column: number }
+): string | null {
+  if (!fullText || !fullText.trim()) return null;
+
+  const lines = fullText.split('\n');
+  const maxLine = position && position.lineNumber ? Math.min(position.lineNumber, lines.length) : lines.length;
+
+  let activeDb: string | null = null;
+  let inBlockComment = false;
+
+  for (let i = 0; i < maxLine; i++) {
+    const line = lines[i];
+
+    // Trata comentários de bloco multilinha e de linha (-- ou #)
+    let processedLine = '';
+    let j = 0;
+    while (j < line.length) {
+      if (inBlockComment) {
+        const endBlock = line.indexOf('*/', j);
+        if (endBlock === -1) {
+          j = line.length;
+        } else {
+          inBlockComment = false;
+          j = endBlock + 2;
+        }
+      } else {
+        const startBlock = line.indexOf('/*', j);
+        const lineComment = line.indexOf('--', j);
+        const hashComment = line.indexOf('#', j);
+
+        let firstComment = -1;
+        let commentType = '';
+        if (startBlock !== -1) {
+          firstComment = startBlock;
+          commentType = '/*';
+        }
+        if (lineComment !== -1 && (firstComment === -1 || lineComment < firstComment)) {
+          firstComment = lineComment;
+          commentType = '--';
+        }
+        if (hashComment !== -1 && (firstComment === -1 || hashComment < firstComment)) {
+          firstComment = hashComment;
+          commentType = '#';
+        }
+
+        if (firstComment === -1) {
+          processedLine += line.substring(j);
+          break;
+        } else if (commentType === '/*') {
+          processedLine += line.substring(j, firstComment);
+          inBlockComment = true;
+          j = firstComment + 2;
+        } else {
+          processedLine += line.substring(j, firstComment);
+          break;
+        }
+      }
+    }
+
+    const trimmed = processedLine.trim();
+    if (!trimmed) continue;
+
+    // Detecta comandos USE na linha
+    const useMatches = trimmed.matchAll(/\bUSE\s+([`'"]?[\w-]+[`'"]?)/gi);
+    for (const match of useMatches) {
+      if (match && match[1]) {
+        activeDb = match[1].replace(/[`'"]/g, '');
+      }
+    }
+  }
+
+  return activeDb;
+}
+
 interface EditorWorkspaceProps {
   tabs: TabItem[];
   activeTabId: string;
@@ -357,6 +437,7 @@ interface EditorWorkspaceProps {
   schemas: DatabaseSchema[];
   activeDatabase: string;
   editorRefOut?: React.MutableRefObject<any>;
+  onSelectDatabase?: (dbName: string) => void;
 }
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
@@ -386,10 +467,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   schemas,
   activeDatabase,
   editorRefOut,
+  onSelectDatabase,
 }) => {
   const editorRef = useRef<any>(null);
   const monacoInstanceRef = useRef<any>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const onSelectDatabaseRef = useRef(onSelectDatabase);
+  onSelectDatabaseRef.current = onSelectDatabase;
 
   // Estado e métodos para renomeação de abas (duplo clique ou F2)
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -749,6 +833,24 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }
     });
 
+    // Sincronização automática do Banco de Dados Ativo com base na posição do cursor no script
+    let cursorDbTimer: any = null;
+    editor.onDidChangeCursorPosition((e) => {
+      if (cursorDbTimer) clearTimeout(cursorDbTimer);
+      cursorDbTimer = setTimeout(() => {
+        const model = editor.getModel();
+        if (!model) return;
+        const detectedDb = findActiveDatabaseAtPosition(model.getValue(), e.position);
+        if (detectedDb && onSelectDatabaseRef.current) {
+          const matchedDb = (schemasRef.current || []).find(s => s.name.toLowerCase() === detectedDb.toLowerCase());
+          const finalDbName = matchedDb ? matchedDb.name : detectedDb;
+          if (finalDbName !== activeDatabaseRef.current) {
+            onSelectDatabaseRef.current(finalDbName);
+          }
+        }
+      }, 120);
+    });
+
     // Atalho global do editor: Ctrl+Enter / Cmd+Enter (Executar tudo)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       flushPendingContent();
@@ -764,6 +866,21 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       contextMenuOrder: 1,
       run: (ed) => {
         const selection = ed.getSelection();
+        const model = ed.getModel();
+        const pos = ed.getPosition();
+
+        // Se houver USE precedente no cursor, sincroniza o banco ativo antes de executar o snippet
+        if (model && pos && onSelectDatabaseRef.current) {
+          const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
+          if (detectedDb) {
+            const matchedDb = (schemasRef.current || []).find(s => s.name.toLowerCase() === detectedDb.toLowerCase());
+            const finalDbName = matchedDb ? matchedDb.name : detectedDb;
+            if (finalDbName !== activeDatabaseRef.current) {
+              onSelectDatabaseRef.current(finalDbName);
+            }
+          }
+        }
+
         if (selection && !selection.isEmpty()) {
           const text = ed.getModel()?.getValueInRange(selection);
           if (text && text.trim()) {
@@ -772,8 +889,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           }
         }
         // Se não houver seleção de texto, executa o comando onde o cursor está posicionado
-        const model = ed.getModel();
-        const pos = ed.getPosition();
         if (model && pos) {
           const stmt = extractStatementAtPosition(model.getValue(), pos);
           if (stmt && stmt.trim()) {

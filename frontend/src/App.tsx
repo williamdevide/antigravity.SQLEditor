@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { EditorWorkspace, extractStatementAtPosition } from './components/EditorWorkspace';
+import { EditorWorkspace, extractStatementAtPosition, findActiveDatabaseAtPosition } from './components/EditorWorkspace';
 import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
@@ -421,10 +421,41 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, activeDatabase]);
 
+  // Seleção de aba sincronizando banco ativo se houver comando USE no script
+  const handleSelectTab = useCallback((id: string) => {
+    setActiveTabId(id);
+    const targetTab = tabs.find(t => t.id === id);
+    if (targetTab && targetTab.content) {
+      const detectedDb = findActiveDatabaseAtPosition(targetTab.content);
+      if (detectedDb) {
+        const matchedDb = schemas.find(s => s.name.toLowerCase() === detectedDb.toLowerCase());
+        const finalDb = matchedDb ? matchedDb.name : detectedDb;
+        dbEngine.setActiveDatabase(finalDb);
+        setActiveDatabase(finalDb);
+      }
+    }
+  }, [tabs, schemas]);
+
   // Executar trecho onde o cursor está posicionado ou trecho selecionado
   const handleRunCurrentSnippet = useCallback(() => {
     const ed = editorRef.current;
     if (ed) {
+      const model = ed.getModel();
+      const pos = ed.getPosition();
+
+      // Sincroniza banco com USE precedente no script caso exista
+      if (model && pos) {
+        const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
+        if (detectedDb) {
+          const matchedDb = schemas.find(s => s.name.toLowerCase() === detectedDb.toLowerCase());
+          const finalDb = matchedDb ? matchedDb.name : detectedDb;
+          if (finalDb !== activeDatabase) {
+            dbEngine.setActiveDatabase(finalDb);
+            setActiveDatabase(finalDb);
+          }
+        }
+      }
+
       const sel = ed.getSelection();
       if (sel && !sel.isEmpty()) {
         const text = ed.getModel()?.getValueInRange(sel);
@@ -433,8 +464,6 @@ export const App: React.FC = () => {
           return;
         }
       }
-      const model = ed.getModel();
-      const pos = ed.getPosition();
       if (model && pos) {
         const stmt = extractStatementAtPosition(model.getValue(), pos);
         if (stmt && stmt.trim()) {
@@ -444,7 +473,7 @@ export const App: React.FC = () => {
       }
     }
     handleRunQuery();
-  }, [handleRunSnippet, handleRunQuery]);
+  }, [handleRunSnippet, handleRunQuery, schemas, activeDatabase]);
 
   // Revisar trecho selecionado (Alt+R) ou comando com erro no log
   const handleReviewSnippet = useCallback((snippet: string, runtimeError?: string) => {
@@ -982,7 +1011,7 @@ export const App: React.FC = () => {
                   <EditorWorkspace
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSelectTab={setActiveTabId}
+                    onSelectTab={handleSelectTab}
                     onCloseTab={handleCloseTab}
                     onNewBlankTab={handleNewBlankTab}
                     onOpenSolution={handleOpenSolution}
@@ -1012,6 +1041,10 @@ export const App: React.FC = () => {
                     schemas={schemas}
                     activeDatabase={activeDatabase}
                     editorRefOut={editorRef}
+                    onSelectDatabase={(db) => {
+                      dbEngine.setActiveDatabase(db);
+                      setActiveDatabase(db);
+                    }}
                   />
                 </div>
 
@@ -1060,7 +1093,7 @@ export const App: React.FC = () => {
                 <EditorWorkspace
                   tabs={tabs}
                   activeTabId={activeTabId}
-                  onSelectTab={setActiveTabId}
+                  onSelectTab={handleSelectTab}
                   onCloseTab={handleCloseTab}
                   onNewBlankTab={handleNewBlankTab}
                   onOpenSolution={handleOpenSolution}
@@ -1090,6 +1123,10 @@ export const App: React.FC = () => {
                   schemas={schemas}
                   activeDatabase={activeDatabase}
                   editorRefOut={editorRef}
+                  onSelectDatabase={(db) => {
+                    dbEngine.setActiveDatabase(db);
+                    setActiveDatabase(db);
+                  }}
                 />
               </div>
             ) : !visiblePanels.scripts && visiblePanels.info ? (

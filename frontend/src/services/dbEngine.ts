@@ -493,12 +493,22 @@ class DatabaseEngine {
       const startTime = performance.now();
       const timestamp = new Date().toLocaleTimeString('pt-BR');
 
+      // Limpa comentários do início para análise sintática de USE / CREATE DATABASE
+      const cleanStmt = stmt.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+
       // Detecta USE db
-      const useMatch = stmt.match(/^\s*USE\s+([`'"]?[\w-]+[`'"]?)/i);
+      const useMatch = cleanStmt.match(/^USE\s+([`'"]?[\w-]+[`'"]?)/i);
       if (useMatch) {
-        const targetDb = useMatch[1].replace(/[`'"]/g, '');
+        const rawDb = useMatch[1].replace(/[`'"]/g, '');
+        // Procura nome exato ou case-insensitive nos bancos do alasql
+        const targetDb = Object.keys(alasql.databases).find(d => d.toLowerCase() === rawDb.toLowerCase()) || rawDb;
+
         try {
-          alasql(`USE ${targetDb};`);
+          // Cria o banco se não existir ainda no alasql
+          if (!alasql.databases[targetDb]) {
+            alasql(`CREATE DATABASE \`${targetDb}\`;`);
+          }
+          alasql(`USE \`${targetDb}\`;`);
           this.activeDatabase = targetDb;
           const execTime = Math.round(performance.now() - startTime);
 
@@ -535,7 +545,7 @@ class DatabaseEngine {
 
       // Garante que o AlaSQL use o banco de dados ativo atual
       try {
-        if (this.activeDatabase) {
+        if (this.activeDatabase && alasql.databases[this.activeDatabase]) {
           alasql(`USE \`${this.activeDatabase}\`;`);
         }
       } catch (_) {}
@@ -547,9 +557,10 @@ class DatabaseEngine {
         const execTime = Math.round(performance.now() - startTime);
 
         // Se criou novo banco, sincroniza banco ativo
-        const createDbMatch = stmt.match(/^\s*CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"]?[\w-]+[`'"]?)/i);
+        const createDbMatch = cleanStmt.match(/^CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"]?[\w-]+[`'"]?)/i);
         if (createDbMatch) {
-          const newDb = createDbMatch[1].replace(/[`'"]/g, '');
+          const rawNewDb = createDbMatch[1].replace(/[`'"]/g, '');
+          const newDb = Object.keys(alasql.databases).find(d => d.toLowerCase() === rawNewDb.toLowerCase()) || rawNewDb;
           this.activeDatabase = newDb;
           try { alasql(`USE \`${newDb}\`;`); } catch (_) {}
         }
