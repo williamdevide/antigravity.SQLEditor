@@ -3,6 +3,8 @@
 // Qualquer arquivo .sql adicionado em frontend/src/data/bds/ ou frontend/src/data/solutions/
 // é automaticamente empacotado e disponibilizado pelo SQLEditor.
 
+import { parseSqlStatementsWithRanges } from './sqlStatementParser';
+
 export interface SolutionItem {
   id: string;
   fileName: string;
@@ -33,6 +35,7 @@ const TEMA_LABEL_MAP: Record<string, string> = {
   'pizzaria streaming': 'Pizzaria & Streaming',
   'escolaidiomas': 'Escola de Idiomas',
   'rh': 'Recursos Humanos (RH)',
+  'ecommerce': 'E-Commerce',
 };
 
 /**
@@ -88,82 +91,11 @@ export interface ClassroomDatabaseGroup {
 }
 
 /**
- * Divide script SQL em declarações individuais separadas por ';',
+ * Divide script SQL em declarações individuais separadas por ';' ou limites de comandos de nível superior,
  * respeitando aspas simples, duplas, backticks e comentários de linha/bloco.
  */
 export function splitSqlStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let current = '';
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    const prev = i > 0 ? sql[i - 1] : '';
-    const next = i + 1 < sql.length ? sql[i + 1] : '';
-
-    // Trata comentários de linha (-- ou #)
-    if (!inSingleQuote && !inDoubleQuote && !inBacktick && !inBlockComment) {
-      if (!inLineComment && ((char === '-' && next === '-') || char === '#')) {
-        inLineComment = true;
-      } else if (inLineComment && (char === '\n' || char === '\r')) {
-        inLineComment = false;
-      }
-    }
-
-    // Trata comentários de bloco (/* ... */)
-    if (!inSingleQuote && !inDoubleQuote && !inBacktick && !inLineComment) {
-      if (!inBlockComment && char === '/' && next === '*') {
-        inBlockComment = true;
-      } else if (inBlockComment && prev === '*' && char === '/') {
-        inBlockComment = false;
-        current += char;
-        continue;
-      }
-    }
-
-    // Trata strings com aspas simples, duplas e backticks (fora de comentários)
-    if (!inLineComment && !inBlockComment) {
-      if (char === "'" && prev !== '\\' && !inDoubleQuote && !inBacktick) {
-        inSingleQuote = !inSingleQuote;
-      } else if (char === '"' && prev !== '\\' && !inSingleQuote && !inBacktick) {
-        inDoubleQuote = !inDoubleQuote;
-      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
-        inBacktick = !inBacktick;
-      }
-    }
-
-    // Trata quebra de linha após comando USE sem ponto e vírgula
-    if ((char === '\n' || char === '\r') && !inSingleQuote && !inDoubleQuote && !inBacktick && !inBlockComment) {
-      const cleanCurrent = current.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
-      if (/^USE\s+[`'"]?[\w-]+[`'"]?$/i.test(cleanCurrent)) {
-        if (current.trim()) {
-          statements.push(current.trim());
-        }
-        current = '';
-        continue;
-      }
-    }
-
-    // Ponto e vírgula delimitador fora de qualquer delimitador ou comentário
-    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inBacktick && !inLineComment && !inBlockComment) {
-      if (current.trim()) {
-        statements.push(current.trim());
-      }
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  if (current.trim()) {
-    statements.push(current.trim());
-  }
-
-  return statements;
+  return parseSqlStatementsWithRanges(sql).map(s => s.text);
 }
 
 /**

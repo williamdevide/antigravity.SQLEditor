@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { EditorWorkspace, extractStatementAtPosition, findActiveDatabaseAtPosition } from './components/EditorWorkspace';
+import { EditorWorkspace, extractStatementAtPosition, extractStatementAtCursor, findActiveDatabaseAtPosition } from './components/EditorWorkspace';
 import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
@@ -108,6 +108,8 @@ export const App: React.FC = () => {
   const [tabs, setTabs] = useState<TabItem[]>(INITIAL_TABS);
   const [activeTabId, setActiveTabId] = useState<string>('tab-1');
   const [results, setResults] = useState<QueryResult[]>([]);
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number>(0);
+  const [executedTabId, setExecutedTabId] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
@@ -343,19 +345,21 @@ export const App: React.FC = () => {
     }
   }, [schemas, activeDatabase, selectedTable, handleSelectTable]);
 
-  // Executar query completa
+  // Executar query completa (executa todos os comandos em sequência e exibe o último no Retorno)
   const handleRunQuery = useCallback(async () => {
     const activeCode = editorRef.current ? editorRef.current.getValue() : (tabs.find(t => t.id === activeTabId)?.content || '');
     if (!activeCode.trim()) return;
 
     setIsExecuting(true);
     try {
-      const res = await dbEngine.executeScript(activeCode);
+      const res = await dbEngine.executeScript(activeCode, 1);
       setResults(res);
+      setExecutedTabId(activeTabId);
+      setSelectedResultIndex(Math.max(0, res.length - 1));
       await refreshSchemas();
       setActiveConsoleTab('grid');
 
-      // Confetti se foi sucesso
+      // Confetti se todos os comandos tiveram sucesso
       if (res.length > 0 && res.every(r => r.status === 'success')) {
         confetti({
           particleCount: 25,
@@ -368,29 +372,35 @@ export const App: React.FC = () => {
       setResults([
         {
           statement: activeCode,
-          columns: ['Erro'],
+          columns: [],
           rows: [],
           executionTimeMs: 0,
           status: 'error',
           errorMessage: err?.message || String(err),
           timestamp: new Date().toLocaleTimeString('pt-BR'),
           database: activeDatabase,
+          commandIndex: 0,
+          startLine: 1,
         },
       ]);
-      setActiveConsoleTab('log');
+      setExecutedTabId(activeTabId);
+      setSelectedResultIndex(0);
+      setActiveConsoleTab('grid');
     } finally {
       setIsExecuting(false);
     }
   }, [tabs, activeTabId, activeDatabase, refreshSchemas]);
 
-  // Executar somente trecho selecionado (Alt+E)
-  const handleRunSnippet = useCallback(async (snippet: string) => {
+  // Executar somente trecho selecionado ou comando na linha do cursor (Alt+E)
+  const handleRunSnippet = useCallback(async (snippet: string, baseStartLine: number = 1) => {
     if (!snippet.trim()) return;
 
     setIsExecuting(true);
     try {
-      const res = await dbEngine.executeScript(snippet);
+      const res = await dbEngine.executeScript(snippet, baseStartLine);
       setResults(res);
+      setExecutedTabId(activeTabId);
+      setSelectedResultIndex(Math.max(0, res.length - 1));
       await refreshSchemas();
       setActiveConsoleTab('grid');
 
@@ -406,20 +416,24 @@ export const App: React.FC = () => {
       setResults([
         {
           statement: snippet,
-          columns: ['Erro'],
+          columns: [],
           rows: [],
           executionTimeMs: 0,
           status: 'error',
           errorMessage: err?.message || String(err),
           timestamp: new Date().toLocaleTimeString('pt-BR'),
           database: activeDatabase,
+          commandIndex: 0,
+          startLine: baseStartLine,
         },
       ]);
-      setActiveConsoleTab('log');
+      setExecutedTabId(activeTabId);
+      setSelectedResultIndex(0);
+      setActiveConsoleTab('grid');
     } finally {
       setIsExecuting(false);
     }
-  }, [refreshSchemas, activeDatabase]);
+  }, [refreshSchemas, activeDatabase, activeTabId]);
 
   // Seleção de aba sincronizando banco ativo se houver comando USE no script
   const handleSelectTab = useCallback((id: string) => {
@@ -436,7 +450,7 @@ export const App: React.FC = () => {
     }
   }, [tabs, schemas]);
 
-  // Executar trecho onde o cursor está posicionado ou trecho selecionado
+  // Executar trecho onde o cursor está posicionado ou trecho selecionado (sem exigir seleção)
   const handleRunCurrentSnippet = useCallback(() => {
     const ed = editorRef.current;
     if (ed) {
@@ -458,22 +472,40 @@ export const App: React.FC = () => {
 
       const sel = ed.getSelection();
       if (sel && !sel.isEmpty()) {
-        const text = ed.getModel()?.getValueInRange(sel);
+        const text = model?.getValueInRange(sel);
         if (text && text.trim()) {
-          handleRunSnippet(text.trim());
+          handleRunSnippet(text.trim(), sel.startLineNumber);
           return;
         }
       }
       if (model && pos) {
-        const stmt = extractStatementAtPosition(model.getValue(), pos);
-        if (stmt && stmt.trim()) {
-          handleRunSnippet(stmt.trim());
+        const extracted = extractStatementAtCursor(model.getValue(), pos);
+        if (extracted && extracted.statement.trim()) {
+          handleRunSnippet(extracted.statement.trim(), extracted.startLine);
           return;
         }
       }
     }
     handleRunQuery();
   }, [handleRunSnippet, handleRunQuery, schemas, activeDatabase]);
+
+  // Sincronização bidirecional de inspeção de comandos (Editor <-> Retorno)
+  const handleEditorSelectResultIndex = useCallback((index: number, fromGutterClick?: boolean) => {
+    setSelectedResultIndex(index);
+    if (fromGutterClick) {
+      setActiveConsoleTab('grid');
+    }
+  }, []);
+
+  const handleConsoleSelectResultIndex = useCallback((index: number, revealInEditor?: boolean) => {
+    setSelectedResultIndex(index);
+    if (revealInEditor && editorRef.current && activeTabId === executedTabId) {
+      const targetLine = results[index]?.startLine;
+      if (targetLine) {
+        editorRef.current.revealLineInCenterIfOutsideViewport(targetLine);
+      }
+    }
+  }, [results, activeTabId, executedTabId]);
 
   // Revisar trecho selecionado (Alt+R) ou comando com erro no log
   const handleReviewSnippet = useCallback((snippet: string, runtimeError?: string) => {
@@ -588,6 +620,8 @@ export const App: React.FC = () => {
         database: newActiveDb,
       },
     ]);
+    setSelectedResultIndex(0);
+    setExecutedTabId('');
     setActiveConsoleTab('grid');
     setIsExecuting(false);
 
@@ -671,6 +705,8 @@ export const App: React.FC = () => {
           database: newActiveDb,
         },
       ]);
+      setSelectedResultIndex(0);
+      setExecutedTabId('');
       setActiveConsoleTab('grid');
       setIsExecuting(false);
 
@@ -776,7 +812,10 @@ export const App: React.FC = () => {
         return;
       }
 
+      const isInsideMonaco = Boolean((e.target as HTMLElement | null)?.closest?.('.monaco-editor'));
+
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        if (isInsideMonaco) return;
         e.preventDefault();
         handleRunQuery();
       }
@@ -784,32 +823,14 @@ export const App: React.FC = () => {
         e.preventDefault();
         handleNewTab();
       }
-      // Atalhos Alt+E e Alt+R para seleção do editor
+      // Atalhos Alt+E e Alt+R fora do foco direto do Monaco (dentro do Monaco as actions nativas executam 1x sem duplicidade)
       if (e.altKey && (e.key === 'e' || e.key === 'E')) {
+        if (isInsideMonaco) return;
         e.preventDefault();
-        if (editorRef.current) {
-          const ed = editorRef.current;
-          const selection = ed.getSelection();
-          if (selection && !selection.isEmpty()) {
-            const selectedText = ed.getModel()?.getValueInRange(selection);
-            if (selectedText && selectedText.trim()) {
-              handleRunSnippet(selectedText.trim());
-              return;
-            }
-          }
-          const model = ed.getModel();
-          const pos = ed.getPosition();
-          if (model && pos) {
-            const stmt = extractStatementAtPosition(model.getValue(), pos);
-            if (stmt && stmt.trim()) {
-              handleRunSnippet(stmt.trim());
-              return;
-            }
-          }
-          handleRunQuery();
-        }
+        handleRunCurrentSnippet();
       }
       if (e.altKey && (e.key === 'r' || e.key === 'R')) {
+        if (isInsideMonaco) return;
         e.preventDefault();
         if (editorRef.current) {
           const ed = editorRef.current;
@@ -835,7 +856,7 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleRunQuery, handleNewTab, handleRunSnippet, handleReviewSnippet, handleToggleTheme, handleToggleFontTheme, handleExportScript]);
+  }, [handleRunQuery, handleNewTab, handleRunCurrentSnippet, handleReviewSnippet, handleToggleTheme, handleToggleFontTheme, handleExportScript]);
 
   // Redimensionamento de Painéis (Mouse Listeners)
   useEffect(() => {
@@ -1045,6 +1066,10 @@ export const App: React.FC = () => {
                       dbEngine.setActiveDatabase(db);
                       setActiveDatabase(db);
                     }}
+                    results={results}
+                    executedTabId={executedTabId}
+                    selectedResultIndex={selectedResultIndex}
+                    onSelectResultIndex={handleEditorSelectResultIndex}
                   />
                 </div>
 
@@ -1084,6 +1109,8 @@ export const App: React.FC = () => {
                     schemas={schemas}
                     onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
                     onReviewSnippet={handleReviewSnippet}
+                    selectedResultIndex={selectedResultIndex}
+                    onSelectResultIndex={handleConsoleSelectResultIndex}
                   />
                 </div>
               </>
@@ -1127,6 +1154,10 @@ export const App: React.FC = () => {
                     dbEngine.setActiveDatabase(db);
                     setActiveDatabase(db);
                   }}
+                  results={results}
+                  executedTabId={executedTabId}
+                  selectedResultIndex={selectedResultIndex}
+                  onSelectResultIndex={handleEditorSelectResultIndex}
                 />
               </div>
             ) : !visiblePanels.scripts && visiblePanels.info ? (
@@ -1154,6 +1185,8 @@ export const App: React.FC = () => {
                   schemas={schemas}
                   onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
                   onReviewSnippet={handleReviewSnippet}
+                  selectedResultIndex={selectedResultIndex}
+                  onSelectResultIndex={handleConsoleSelectResultIndex}
                 />
               </div>
             ) : (

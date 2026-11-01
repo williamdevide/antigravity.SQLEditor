@@ -1733,3 +1733,98 @@ faça tudo isso, mude a versão para 3.1.17 e atualize o github e o vercel
    - Executado `git add .` com todas as alterações do recurso de `USE database` e atualização de versão.
    - Criado commit semântico oficial: `feat: release v3.1.18 - auto-switch de banco por comando USE database e sincronizacao de cursor`.
    - Executado `git push origin main`, disparando a esteira CI/CD de deploy em produção na Vercel.
+
+
+---
+
+## 📌 Prompt 52 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 10:40  
+**Usuário:**
+```text
+/migrate-workflows migrate my existing workflows to skills
+```
+
+### 🎯 Ações Executadas:
+
+1. **Varredura Completa de Workflows Legados (Global e Workspace):**
+   - Verificados diretórios globais (`%USERPROFILE%\.gemini\config\global_workflows`, `%USERPROFILE%\.gemini\config\workflows`, `workflows.json`) e diretórios de workspace (`.agents\workflows`, `_agents\workflows`, `.agent\workflows`, `_agent\workflows`, `workflows.json`).
+   - Encontrados **14 workflows legados** no total (1 global + 13 no workspace `.agents\workflows\`).
+
+2. **Conversão Idempotente para Skills Modernas (`SKILL.md`):**
+   - **Escopo Global:** Criado `%USERPROFILE%\.gemini\config\skills\agente-orquestrador\SKILL.md` preservando integralmente as diretrizes da Arquitetura de 3 Camadas.
+   - **Escopo do Workspace (`.agents\skills\<nome>\SKILL.md`):** Criadas as 13 skills correspondentes (`brainstorm`, `coordinate`, `create`, `debug`, `deploy`, `enhance`, `orchestrate`, `plan`, `preview`, `remember`, `status`, `test`, `verify`) com frontmatter compatível tanto com o padrão nativo do Google Antigravity (`name`, `description`) quanto com o contrato de validação SemVer do AG Kit (`when_to_use`, `allowed-tools`, `version`).
+
+3. **Arquivamento Seguro e Sincronização do Registro AG Kit:**
+   - Todos os 14 arquivos `.md` originais foram renomeados com segurança para `.md.bak` sem exclusão destrutiva.
+   - Atualizado o inventário em `.agents\ARCHITECTURE.md` e regenerados `manifest.json`, `manifest.lock.json` e `DEPENDENCY_GRAPH.md`, validados com `validate_kit.py` (0 erros, 0 alertas).
+
+
+---
+
+## 📌 Prompt 53 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 11:52  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal copiei novos arquivos em bds e solutions, incrporeos ao projeto.
+correções:
+- quero que quando o aluno rodar um script com varios comandos separados, todos sejam executados e seja exibido somente o ultimo na guia embaixo, mas se o ultimo der erro ou for vazio, exiba dessa forma. pois agora esta exibindo o ultimo que fosse correto.
+- se o cursor estiver em uma linha de um comando, e eu der o comando para executar trecho, já deve funcionar, sem precisar selecionar o trecho inteiro.
+- se um comando select começa sem que o anterior tenha finalizado com ponto e virgula, já aparecer automaticamente no comando anterior.
+- quero uma ideia de recurso, para quando rodo um script com varios comandos, e ele só exibe o resultado do ultimo, que de alguma forma, se eu clicar em algum dos comandos antes já veja o resultado dele.
+```
+
+### Prompt 54 (Resposta do Usuário no Grill-me - Visualização de Comandos Anteriores)
+```text
+(Recommended) Sincronização pelo Cursor + Pílulas de Comandos no Retorno + Indicador na Margem: exibe o último comando por padrão, mostra ícones discretos (✓/✖) ao lado de cada comando executado no editor e, ao clicar em qualquer comando anterior no editor (ou nas pílulas #1, #2... no topo do Retorno / item do Log), exibe imediatamente o resultado dele
+```
+
+### Prompt 55 (Resposta do Usuário no Grill-me - Auto-inserção de Ponto e Vírgula)
+```text
+(Recommended) Para SELECT e demais comandos principais de topo (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, USE, TRUNCATE, SHOW, DESCRIBE) ao digitar a palavra + espaço/Enter, com proteção inteligente contra subqueries "( SELECT", "UNION SELECT", "AS SELECT" e "INSERT ... SELECT"
+```
+
+### Prompt 56 (Resposta do Usuário no Grill-me - Exibição de Erro e Vazio no Retorno)
+```text
+(Recommended) Manter o foco na guia "Retorno" em ambos os casos: se for vazio (0 linhas), exibir o cabeçalho das colunas da consulta com a mensagem "0 registros retornados"; se der erro, exibir diretamente na guia "Retorno" o card do erro (com botões Copiar Erro e Revisar SQL), além de registrar tudo no Log
+```
+
+### Prompt 57 (Resposta do Usuário no Grill-me - Versionamento e Publicação)
+```text
+(Recommended) Atualizar a versão para v3.1.19 (ativando o auto-reload do novo BD db_ecommerce nos navegadores dos alunos) e manter as alterações apenas localmente por enquanto (sem git push)
+```
+
+
+### 🎯 Ações Executadas (Release `v3.1.19`):
+
+1. **Incorporação e Validação dos Novos Bancos e Soluções (`db_ecommerce` e Semana 08):**
+   - Copiados para as pastas oficiais do frontend:
+     - `frontend/src/data/bds/semana09-01-dados-(ecommerce).sql` (5 tabelas: `tb_clientes` com 60 linhas, `tb_clientes_antigos` com 30, `tb_produtos` com 18, `tb_pedidos` com 400 e `tb_itens_pedido` com 789 — totalizando 1.297 registros).
+     - `frontend/src/data/solutions/semana08-03-exercicios-(pizzaria-streaming).sql`.
+     - `frontend/src/data/solutions/semana08-04-exercicios-(escolaidiomas).sql`.
+   - Adicionado rótulo `'ecommerce': 'E-Commerce'` em `TEMA_LABEL_MAP` no `scriptsLoader.ts`.
+   - Normalizada sintaxe `CREATE DATABASE <db> IF NOT EXISTS` / `DROP TABLE <tbl> IF EXISTS` em `mysqlFunctions.ts` (`preprocessSqlQuery`) e `dbEngine.ts` (`loadPreset`), garantindo 100% de compatibilidade com o parser do AlaSQL.
+
+2. **Parser Léxico/Estrutural SQL Unificado e Execução na Linha do Cursor (`sqlStatementParser.ts` + `EditorWorkspace.tsx`):**
+   - Criado `frontend/src/services/sqlStatementParser.ts` com tokenizador SQL completo (`tokenizeSql`), divisão estrutural com rastreamento exato de linhas de código (`parseSqlStatementsWithRanges`) e extração cirúrgica por cursor (`extractStatementAtCursor`), tratando cursor no início, meio, após o `;` e espaços em branco na mesma linha, em linhas de comentário e em scripts sem `;`.
+   - Corrigidos closures estáticos em `EditorWorkspace.tsx` utilizando referências reativas (`onRunQueryRef`, `onRunSnippetRef`, `onReviewSnippetRef`) e posicionamento automático do cursor no clique com o botão direito (`editor.getTargetAtClientPoint`) antes de abrir o menu de contexto.
+   - Eliminada duplicidade de execução em `Alt+E` / `Ctrl+Enter` no listener global de `App.tsx` quando o foco já está dentro do `.monaco-editor`.
+
+3. **Auto-Inserção Inteligente de Ponto e Vírgula (`;`):**
+   - Implementada `detectMissingPreviousSemicolon` em `sqlStatementParser.ts` integrada ao `onDidChangeModelContent` de `EditorWorkspace.tsx`.
+   - Ao iniciar um novo comando principal (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `ALTER`, `USE`, `TRUNCATE`, `SHOW`, `DESCRIBE`) seguido de espaço/quebra de linha (ou via autocomplete multi-palavra como `INSERT INTO`), insere automaticamente `;` ao final do último token de código do comando anterior (antes de comentários), preservando a coluna exata do cursor.
+   - Proteção completa contra falsos positivos em subqueries `( SELECT`, `UNION [ALL] SELECT`, `CREATE VIEW/TABLE ... AS SELECT`, CTEs `WITH ... SELECT`, `INSERT ... SELECT`, `FOR/ON UPDATE`, `ON DELETE`, `ALTER TABLE ... DROP`, `SHOW CREATE`, strings e comentários (`isOffsetInsideCommentOrString`).
+
+4. **Exibição Fiel do Último Comando no Retorno (Vazio com Cabeçalhos e Card de Erro):**
+   - Atualizado `ConsoleResults.tsx` e `App.tsx` para sempre focar na guia **Retorno** (`grid`) e selecionar por padrão o último comando executado (`results.length - 1`), sem retroceder para comandos anteriores quando o último retorna 0 linhas ou falha.
+   - Implementado `inferColumnsForEmptySelect` em `dbEngine.ts` para inferir os cabeçalhos reais de colunas (`*`, `alias.*`, `AS alias`, expressões e catálogo do AlaSQL) quando um `SELECT` retorna 0 registros, exibindo a grade com cabeçalhos e `"0 registros retornados"`.
+   - Adicionado Card de Erro detalhado diretamente dentro da guia **Retorno** (com linha do erro, banco ativo, tempo de execução, **"Copiar Erro"** e **"Revisar SQL"**), mantendo também o registro completo no **Log de Execução**.
+
+5. **Inspeção Interativa de Comandos Anteriores (Sincronização pelo Cursor + Gutter + Pills):**
+   - Adicionados marcadores visuais na margem (`glyphMargin`) do Monaco Editor (`✓` verde para sucesso e `✖` vermelho para erro) ao lado da linha inicial de cada comando executado e barra lateral destacando o comando atualmente inspecionado (`index.css` + `EditorWorkspace.tsx`).
+   - Clicar ou posicionar o cursor em qualquer comando anterior no editor alterna instantaneamente a guia **Retorno** para exibir o resultado daquele comando.
+   - Adicionada barra seletora de comandos (`#1`, `#2`, ... com navegação `<` / `>`, verbo SQL, contagem de linhas/`ERRO` e badge `Último`) no topo da guia **Retorno**, além do botão **"Ver no Retorno"** em cada item do **Log de Execução**.
+
+6. **Versionamento `v3.1.19` e Validação Completa (Mantido Localmente):**
+   - Versão atualizada para `3.1.19` em `frontend/src/config/version.ts`, `frontend/package.json` e `frontend/src/components/LandingPageView.tsx` (disparando auto-reload dos BDs da aula com `db_ecommerce`).
+   - Suíte automatizada verificou **1.111 statements** dos 4 arquivos de BDs de aula + **140 statements** dos 6 arquivos de soluções + testes unitários do parser, cursor, auto-semicolon e inferência de colunas (**32/32 verificações aprovadas, 0 erros**).
+   - `npm run lint` (`oxlint`) e `npm run build` (`tsc -b && vite build`) aprovados com **0 erros**. Alterações mantidas exclusivamente no ambiente local conforme solicitado.

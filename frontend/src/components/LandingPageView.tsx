@@ -20,11 +20,25 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.19',
+    date: '01/11/2026',
+    title: 'Inspeção Multi-Comando Sincronizada ao Cursor, Ponto e Vírgula Automático, Retorno Fiel do Último Comando e BD E-Commerce (Semana 09)',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Novos bancos e soluções de aula incorporados: banco db_ecommerce (Semana 09) e soluções de exercícios da Semana 08 (Pizzaria/Streaming e Escola de Idiomas) 100% compatíveis com o motor local.',
+      'Retorno fiel do último comando executado: ao rodar múltiplos comandos, todos são executados em sequência e a guia Retorno exibe estritamente o último comando — inclusive com cabeçalhos preservados ("0 registros retornados") ou card detalhado de Erro SQL.',
+      'Inspeção interativa de resultados anteriores: marcadores ✓/✖ na margem do Monaco Editor, barra de pills (#1, #2...) no Retorno e sincronização instantânea ao clicar em qualquer comando anterior do script.',
+      'Execução imediata na linha do cursor (Alt+E e botão direito): "Executar esse trecho" posiciona e extrai o comando completo da linha sem exigir seleção de texto.',
+      'Inserção inteligente de ponto e vírgula (;): ao iniciar um novo comando principal (SELECT, INSERT, UPDATE, DELETE, CREATE, etc.), o comando anterior não finalizado recebe ";" automaticamente sem afetar subqueries, UNION, CTEs ou cláusulas.',
+    ],
+  },
+  {
     version: 'v3.1.18',
     date: '23/10/2026',
     title: 'Chaveamento Automático de Banco de Dados via Comando USE e Sincronização Dinâmica por Cursor',
-    isLatest: true,
-    tag: 'Lançamento Atual',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Chaveamento automático no motor de execução: comandos USE database alteram imediatamente o banco ativo interno e do AlaSQL, garantindo que os comandos subsequentes operem estritamente no banco selecionado.',
       'Suporte a múltiplos comandos USE encadeados: transição fluida entre bancos no mesmo script (ex: USE db1; ... USE db2;), com isolamento e persistência completa das tabelas criadas em cada banco.',
@@ -238,9 +252,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.18 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.19 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.18': true,
+    'v3.1.19': true,
   });
 
   const toggleVersion = (version: string) => {

@@ -309,3 +309,65 @@ body {
 .monaco-menu .action-item[aria-label*="Paste" i] {
   display: none !important;
 }
+
+/* Marcadores de execução multi-comando no Gutter do Monaco Editor (✓ Sucesso / ✖ Erro) */
+.sql-gutter-marker {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 9999px;
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  margin-left: 3px;
+}
+
+.sql-gutter-marker:hover {
+  transform: scale(1.18);
+}
+
+.sql-gutter-success::before {
+  content: '✓';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  background: rgba(0, 230, 118, 0.18);
+  color: var(--status-success);
+  border: 1px solid var(--status-success);
+  box-shadow: 0 0 6px var(--glow-success);
+}
+
+.sql-gutter-error::before {
+  content: '✖';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  background: rgba(255, 51, 102, 0.2);
+  color: var(--status-error);
+  border: 1px solid var(--status-error);
+  box-shadow: 0 0 6px rgba(255, 51, 102, 0.35);
+}
+
+/* Destaque sutil no editor para o comando atualmente inspecionado na aba Retorno */
+.sql-active-result-block {
+  background: rgba(255, 107, 0, 0.07);
+}
+
+html.light .sql-active-result-block,
+html.beige .sql-active-result-block {
+  background: rgba(255, 107, 0, 0.09);
+}
+
+.sql-active-result-bar {
+  border-left: 3px solid var(--accent-orange) !important;
+  margin-left: 2px;
+}

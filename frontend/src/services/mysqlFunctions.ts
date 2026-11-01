@@ -178,8 +178,19 @@ export function calculateTimestampDiff(unit: any, d1Val: any, d2Val: any): numbe
 export function preprocessSqlQuery(sql: string): string {
   if (!sql) return sql;
 
+  // 0. Normaliza sintaxe invertida de IF [NOT] EXISTS após o nome do banco/tabela
+  // Ex: 'CREATE DATABASE db_ecommerce IF NOT EXISTS' -> 'CREATE DATABASE IF NOT EXISTS db_ecommerce'
+  let res = sql.replace(
+    /\bCREATE\s+(DATABASE|SCHEMA|TABLE)\s+([`'"\w-]+)\s+IF\s+NOT\s+EXISTS\b/gi,
+    'CREATE $1 IF NOT EXISTS $2'
+  );
+  res = res.replace(
+    /\bDROP\s+(DATABASE|SCHEMA|TABLE|VIEW)\s+([`'"\w-]+)\s+IF\s+EXISTS\b/gi,
+    'DROP $1 IF EXISTS $2'
+  );
+
   // 1. Substitui DATEDIFF(...) por MYSQL_DATEDIFF(...)
-  let res = sql.replace(/\bDATEDIFF\s*\(/gi, 'MYSQL_DATEDIFF(');
+  res = res.replace(/\bDATEDIFF\s*\(/gi, 'MYSQL_DATEDIFF(');
 
   // 2. Substitui chamadas de função LEFT( por MYSQL_LEFT( e RIGHT( por MYSQL_RIGHT(
   // Somente quando seguidas por parênteses (chamada de função, e não cláusulas JOIN)

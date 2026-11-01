@@ -1,6 +1,7 @@
 import alasql from 'alasql';
 import { dbStorage } from './storage';
-import { getClassroomDatabases, splitSqlStatements } from './scriptsLoader';
+import { getClassroomDatabases } from './scriptsLoader';
+import { parseSqlStatementsWithRanges, tokenizeSql } from './sqlStatementParser';
 import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
 import { registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
@@ -382,8 +383,10 @@ class DatabaseEngine {
           const stmt = group.statements[i];
           if (!stmt.trim()) continue;
 
+          const cleanLoadStmt = stmt.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+
           // Detecta CREATE DATABASE para não lançar erro se já existir no AlaSQL
-          const createDbMatch = stmt.match(/^CREATE\s+DATABASE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i);
+          const createDbMatch = cleanLoadStmt.match(/^CREATE\s+DATABASE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`'"]?([a-zA-Z0-9_-]+)[`'"]?/i);
           if (createDbMatch) {
             const dbN = createDbMatch[1];
             if (!alasql.databases[dbN]) {
@@ -393,13 +396,13 @@ class DatabaseEngine {
           }
 
           // Detecta nome da tabela para feedback visual do progresso
-          const tableMatch = stmt.match(/(?:INSERT\s+INTO|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i);
+          const tableMatch = cleanLoadStmt.match(/(?:INSERT\s+INTO|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i);
           if (tableMatch) {
             progressMap[group.dbName].currentTable = tableMatch[1];
           }
 
           try {
-            alasql(stmt);
+            alasql(preprocessSqlQuery(stmt));
           } catch (e: any) {
             console.warn(`Aviso no banco ${group.dbName} (stmt ${i}):`, e);
           }
@@ -480,15 +483,275 @@ class DatabaseEngine {
     }
   }
 
-  public async executeScript(script: string): Promise<QueryResult[]> {
+  /**
+   * Infere os cabeçalhos das colunas de uma consulta SELECT / SHOW / DESCRIBE que retornou 0 linhas,
+   * permitindo exibir a estrutura da tabela vazia na guia Retorno ("0 registros retornados").
+   */
+  private inferColumnsForEmptySelect(sql: string, activeDbName: string): string[] {
+    const stripDelimiters = (raw: string) => raw.replace(/^[`'"\[]|[`'"\]]$/g, '');
+
+    const getTableColumns = (dbName: string, tableName: string): string[] => {
+      const cleanDb = stripDelimiters(dbName);
+      const cleanTbl = stripDelimiters(tableName);
+      const matchedDbKey = Object.keys(alasql.databases).find(
+        d => d.toLowerCase() === cleanDb.toLowerCase()
+      );
+      if (!matchedDbKey) return [];
+      const dbObj = alasql.databases[matchedDbKey];
+      if (!dbObj || !dbObj.tables) return [];
+      const matchedTblKey = Object.keys(dbObj.tables).find(
+        t => t.toLowerCase() === cleanTbl.toLowerCase()
+      );
+      if (!matchedTblKey) return [];
+      const tObj: any = dbObj.tables[matchedTblKey];
+      if (Array.isArray(tObj?.columns) && tObj.columns.length > 0) {
+        return tObj.columns.map((c: any) => c.columnid || c.name).filter(Boolean);
+      }
+      if (Array.isArray(tObj?.data) && tObj.data.length > 0 && typeof tObj.data[0] === 'object') {
+        return Object.keys(tObj.data[0]);
+      }
+      return [];
+    };
+
+    try {
+      const tokens = tokenizeSql(sql).filter(t => t.type !== 'semicolon');
+      if (tokens.length === 0) return [];
+
+      const firstUpper = tokens[0].upper;
+      if (firstUpper === 'SHOW') {
+        if (tokens[1]?.upper === 'DATABASES' || tokens[1]?.upper === 'SCHEMAS') return ['Database'];
+        return ['Tables'];
+      }
+      if (firstUpper === 'DESCRIBE' || firstUpper === 'DESC') {
+        return ['Field', 'Type', 'Null', 'Key', 'Default', 'Extra'];
+      }
+
+      // Localiza o SELECT principal no nível superior (parenDepth === 0)
+      let selectIdx = -1;
+      let depth = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.type === 'symbol' && t.value === '(') depth++;
+        else if (t.type === 'symbol' && t.value === ')') depth = Math.max(0, depth - 1);
+        else if (depth === 0 && t.type === 'word' && t.upper === 'SELECT') {
+          selectIdx = i;
+          break;
+        }
+      }
+      if (selectIdx === -1) return [];
+
+      let projStart = selectIdx + 1;
+      while (
+        projStart < tokens.length &&
+        tokens[projStart].type === 'word' &&
+        (tokens[projStart].upper === 'DISTINCT' || tokens[projStart].upper === 'ALL')
+      ) {
+        projStart++;
+      }
+
+      // Localiza o fim da lista de projeção no nível 0 (FROM ou fim da query)
+      let projEnd = tokens.length;
+      let fromIdx = -1;
+      depth = 0;
+      const STOP_PROJECTION_WORDS = new Set(['FROM', 'WHERE', 'GROUP', 'HAVING', 'ORDER', 'LIMIT', 'UNION', 'INTO']);
+      for (let i = projStart; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (t.type === 'symbol' && t.value === '(') depth++;
+        else if (t.type === 'symbol' && t.value === ')') depth = Math.max(0, depth - 1);
+        else if (depth === 0 && t.type === 'word' && STOP_PROJECTION_WORDS.has(t.upper)) {
+          projEnd = i;
+          if (t.upper === 'FROM') fromIdx = i;
+          break;
+        }
+      }
+
+      // Coleta tabelas e aliases de FROM / JOIN no nível 0 para expandir '*' ou 'alias.*'
+      const tableRefs: Array<{ db: string; table: string; alias: string }> = [];
+      if (fromIdx !== -1) {
+        const STOP_FROM_WORDS = new Set(['WHERE', 'GROUP', 'HAVING', 'ORDER', 'LIMIT', 'OFFSET', 'UNION']);
+        const NON_ALIAS_WORDS = new Set([
+          ...STOP_FROM_WORDS,
+          'ON', 'USING', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'NATURAL', 'SET',
+        ]);
+        depth = 0;
+        for (let i = fromIdx; i < tokens.length; i++) {
+          const t = tokens[i];
+          if (t.type === 'symbol' && t.value === '(') {
+            depth++;
+            continue;
+          }
+          if (t.type === 'symbol' && t.value === ')') {
+            depth = Math.max(0, depth - 1);
+            continue;
+          }
+          if (depth > 0) continue;
+          if (t.type === 'word' && STOP_FROM_WORDS.has(t.upper)) break;
+
+          const isFromOrJoin =
+            (t.type === 'word' && (t.upper === 'FROM' || t.upper === 'JOIN')) ||
+            (t.type === 'symbol' && t.value === ',');
+
+          if (isFromOrJoin && i + 1 < tokens.length) {
+            const next = tokens[i + 1];
+            if (next.type === 'word' || next.type === 'identifier') {
+              let dbPart = activeDbName;
+              let tblPart = stripDelimiters(next.value);
+              let cursor = i + 2;
+
+              if (
+                cursor + 1 <= tokens.length &&
+                tokens[cursor]?.value === '.' &&
+                (tokens[cursor + 1]?.type === 'word' || tokens[cursor + 1]?.type === 'identifier')
+              ) {
+                dbPart = tblPart;
+                tblPart = stripDelimiters(tokens[cursor + 1].value);
+                cursor += 2;
+              }
+
+              let aliasPart = '';
+              if (cursor < tokens.length) {
+                if (tokens[cursor].type === 'word' && tokens[cursor].upper === 'AS' && cursor + 1 < tokens.length) {
+                  aliasPart = stripDelimiters(tokens[cursor + 1].value);
+                } else if (
+                  (tokens[cursor].type === 'word' && !NON_ALIAS_WORDS.has(tokens[cursor].upper)) ||
+                  tokens[cursor].type === 'identifier'
+                ) {
+                  aliasPart = stripDelimiters(tokens[cursor].value);
+                }
+              }
+
+              tableRefs.push({ db: dbPart, table: tblPart, alias: aliasPart });
+            }
+          }
+        }
+      }
+
+      // Divide itens da projeção por ',' no nível 0
+      const projItems: Array<typeof tokens> = [];
+      let currentItem: typeof tokens = [];
+      depth = 0;
+      for (let i = projStart; i < projEnd; i++) {
+        const t = tokens[i];
+        if (t.type === 'symbol' && t.value === '(') depth++;
+        else if (t.type === 'symbol' && t.value === ')') depth = Math.max(0, depth - 1);
+
+        if (depth === 0 && t.type === 'symbol' && t.value === ',') {
+          if (currentItem.length > 0) projItems.push(currentItem);
+          currentItem = [];
+        } else {
+          currentItem.push(t);
+        }
+      }
+      if (currentItem.length > 0) projItems.push(currentItem);
+
+      const inferredCols: string[] = [];
+      const NON_TRAILING_ALIAS = new Set(['END', 'NULL', 'TRUE', 'FALSE', 'ASC', 'DESC', 'AND', 'OR', 'NOT']);
+
+      for (const item of projItems) {
+        if (item.length === 0) continue;
+
+        // 1. SELECT *
+        if (item.length === 1 && item[0].value === '*') {
+          let added = 0;
+          for (const ref of tableRefs) {
+            const cols = getTableColumns(ref.db, ref.table);
+            if (cols.length > 0) {
+              inferredCols.push(...cols);
+              added += cols.length;
+            }
+          }
+          if (added === 0) inferredCols.push('*');
+          continue;
+        }
+
+        // 2. SELECT alias.* ou tabela.*
+        if (item.length === 3 && item[1].value === '.' && item[2].value === '*') {
+          const qual = stripDelimiters(item[0].value).toLowerCase();
+          const matchedRef = tableRefs.find(
+            r => r.alias.toLowerCase() === qual || r.table.toLowerCase() === qual
+          );
+          const cols = matchedRef
+            ? getTableColumns(matchedRef.db, matchedRef.table)
+            : getTableColumns(activeDbName, item[0].value);
+          if (cols.length > 0) {
+            inferredCols.push(...cols);
+          } else {
+            inferredCols.push(`${stripDelimiters(item[0].value)}.*`);
+          }
+          continue;
+        }
+
+        // 3. Verifica alias explícito no nível 0: '... AS alias_col'
+        let itemDepth = 0;
+        let topLevelAsIdx = -1;
+        for (let k = 0; k < item.length; k++) {
+          if (item[k].type === 'symbol' && item[k].value === '(') itemDepth++;
+          else if (item[k].type === 'symbol' && item[k].value === ')') itemDepth = Math.max(0, itemDepth - 1);
+          else if (itemDepth === 0 && item[k].type === 'word' && item[k].upper === 'AS') {
+            topLevelAsIdx = k;
+          }
+        }
+        if (topLevelAsIdx !== -1 && topLevelAsIdx === item.length - 2) {
+          inferredCols.push(stripDelimiters(item[item.length - 1].value));
+          continue;
+        }
+
+        // 4. Coluna simples 'col'
+        if (item.length === 1) {
+          inferredCols.push(stripDelimiters(item[0].value));
+          continue;
+        }
+
+        // 5. Coluna qualificada 't.col'
+        if (item.length === 3 && item[1].value === '.') {
+          inferredCols.push(stripDelimiters(item[2].value));
+          continue;
+        }
+
+        // 6. Alias implícito ao final no nível 0 (ex: 'UPPER(nome) nome_maiusculo' ou 't.col apelido')
+        const lastTok = item[item.length - 1];
+        const prevTok = item[item.length - 2];
+        if (
+          itemDepth === 0 &&
+          (lastTok.type === 'word' || lastTok.type === 'identifier' || lastTok.type === 'string') &&
+          !(lastTok.type === 'word' && NON_TRAILING_ALIAS.has(lastTok.upper)) &&
+          !(prevTok.type === 'symbol' && prevTok.value !== ')')
+        ) {
+          inferredCols.push(stripDelimiters(lastTok.value));
+          continue;
+        }
+
+        // 7. Expressão bruta sem alias (ex: 'COUNT(*)', 'UPPER(nome)')
+        const exprText = sql.slice(item[0].startOffset, lastTok.endOffset).trim();
+        inferredCols.push(exprText || 'Resultado');
+      }
+
+      return inferredCols;
+    } catch {
+      return [];
+    }
+  }
+
+  public async executeScript(script: string, baseStartLine: number = 1): Promise<QueryResult[]> {
     await this.initialize();
 
-    // Divide em statements separados por ; (ignorando dentro de strings)
-    const statements = this.splitSqlStatements(script);
+    // Divide em statements estruturados com rastreamento exato de linhas (com ou sem ';')
+    const parsedStatements = parseSqlStatementsWithRanges(script);
     const results: QueryResult[] = [];
 
-    for (const stmt of statements) {
+    for (const parsed of parsedStatements) {
+      const stmt = parsed.text;
       if (!stmt.trim()) continue;
+
+      const commandIndex = results.length;
+      const startLine = baseStartLine + parsed.codeStartLine - 1;
+      const endLine = baseStartLine + parsed.codeEndLine - 1;
+      const isSelectQuery =
+        parsed.firstKeyword === 'SELECT' ||
+        parsed.firstKeyword === 'WITH' ||
+        parsed.firstKeyword === 'SHOW' ||
+        parsed.firstKeyword === 'DESCRIBE' ||
+        parsed.firstKeyword === 'DESC';
 
       const startTime = performance.now();
       const timestamp = new Date().toLocaleTimeString('pt-BR');
@@ -520,7 +783,11 @@ class DatabaseEngine {
             executionTimeMs: execTime,
             status: 'success',
             timestamp,
-            database: this.activeDatabase
+            database: this.activeDatabase,
+            commandIndex,
+            startLine,
+            endLine,
+            isSelectQuery: false,
           });
 
           await this.saveHistory(stmt, 'success', execTime, 0);
@@ -536,7 +803,11 @@ class DatabaseEngine {
             status: 'error',
             errorMessage: errMsg,
             timestamp,
-            database: this.activeDatabase
+            database: this.activeDatabase,
+            commandIndex,
+            startLine,
+            endLine,
+            isSelectQuery: false,
           });
           await this.saveHistory(stmt, 'error', execTime, 0, errMsg);
           continue;
@@ -571,8 +842,10 @@ class DatabaseEngine {
 
         if (Array.isArray(res)) {
           rows = res;
-          if (rows.length > 0 && typeof rows[0] === 'object') {
+          if (rows.length > 0 && typeof rows[0] === 'object' && rows[0] !== null) {
             columns = Object.keys(rows[0]);
+          } else if (rows.length === 0) {
+            columns = this.inferColumnsForEmptySelect(stmt, this.activeDatabase);
           }
           affectedRows = rows.length;
         } else if (typeof res === 'number') {
@@ -592,13 +865,17 @@ class DatabaseEngine {
           executionTimeMs: execTime,
           status: 'success',
           timestamp,
-          database: this.activeDatabase
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery: isSelectQuery || Array.isArray(res),
         });
 
         await this.saveHistory(stmt, 'success', execTime, affectedRows);
 
         // Se for DDL/DML que altera estrutura ou dados, persiste no IndexedDB
-        if (/^\s*(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)/i.test(stmt)) {
+        if (/^\s*(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)/i.test(cleanStmt)) {
           await this.persistAllDatabases();
         }
       } catch (err: any) {
@@ -613,7 +890,11 @@ class DatabaseEngine {
           status: 'error',
           errorMessage: errMsg,
           timestamp,
-          database: this.activeDatabase
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery,
         });
 
         await this.saveHistory(stmt, 'error', execTime, 0, errMsg);
@@ -1073,10 +1354,6 @@ class DatabaseEngine {
       };
       await dbStorage.history.add(item);
     } catch (_) {}
-  }
-
-  private splitSqlStatements(sql: string): string[] {
-    return splitSqlStatements(sql);
   }
 }
 

@@ -39,6 +39,10 @@ export interface QueryResult {
   errorMessage?: string;
   timestamp: string;
   database: string;
+  commandIndex?: number;
+  startLine?: number;
+  endLine?: number;
+  isSelectQuery?: boolean;
 }
 
 export interface QueryHistoryItem {

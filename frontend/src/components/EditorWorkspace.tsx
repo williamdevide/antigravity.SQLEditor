@@ -2,10 +2,16 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
-import type { TabItem, ThemeMode, FontTheme, DatabaseSchema } from '../types';
+import type { TabItem, ThemeMode, FontTheme, DatabaseSchema, QueryResult } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 import { registerEnhancedSqlLanguage } from '../services/mysqlLanguageDefinition';
+import {
+  extractStatementAtCursor,
+  detectMissingPreviousSemicolon,
+  isOffsetInsideCommentOrString,
+  AUTO_SEMICOLON_VERBS,
+} from '../services/sqlStatementParser';
 
 // Dicionário de auto-correção de palavras-chave para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
 const SQL_KEYWORDS_MAP: Record<string, string> = {
@@ -175,159 +181,18 @@ const SQL_FUNCTIONS_LIST = [
   { name: 'DATETIME', snippet: "DATETIME(${1:'now'})", doc: 'Retorna data e hora' },
 ];
 
-const MAJOR_SQL_VERBS = /^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|USE|SHOW|DESCRIBE|DESC|SET|WITH|TRUNCATE)\b/i;
+export { extractStatementAtCursor };
 
 /**
  * Extrai a instrução SQL que envolve a posição atual do cursor,
- * funcionando perfeitamente apenas de o cursor estar na linha, sem precisar selecionar a linha toda.
+ * funcionando perfeitamente apenas de o cursor estar na linha, sem precisar selecionar o trecho inteiro.
  */
-export function extractStatementAtPosition(fullText: string, position: { lineNumber: number; column: number }): string | null {
-  if (!fullText || !fullText.trim()) return null;
-  const lines = fullText.split('\n');
-  const lineIdx = position.lineNumber - 1;
-  if (lineIdx < 0 || lineIdx >= lines.length) return null;
-
-  // Calcula o offset de caractere absoluto da posição do cursor
-  let cursorOffset = 0;
-  for (let i = 0; i < lineIdx; i++) {
-    cursorOffset += lines[i].length + 1;
-  }
-  cursorOffset += Math.max(0, (position.column || 1) - 1);
-
-  // Varredura identificando os limites reais de cada declaração SQL
-  // considerando strings ('...', "..."), crases (`...`), comentários (-- e /* */) e ponto-e-vírgula (;)
-  const statements: Array<{ start: number; end: number; text: string; hasSemicolon: boolean }> = [];
-  let stmtStart = 0;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-  let inLineComment = false;
-  let inBlockComment = false;
-
-  for (let i = 0; i < fullText.length; i++) {
-    const ch = fullText[i];
-    const next = i + 1 < fullText.length ? fullText[i + 1] : '';
-
-    if (inLineComment) {
-      if (ch === '\n') inLineComment = false;
-      continue;
-    }
-    if (inBlockComment) {
-      if (ch === '*' && next === '/') {
-        inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-    if (inSingleQuote) {
-      if (ch === '\\') { i++; continue; }
-      if (ch === "'") {
-        if (next === "'") { i++; continue; }
-        inSingleQuote = false;
-      }
-      continue;
-    }
-    if (inDoubleQuote) {
-      if (ch === '\\') { i++; continue; }
-      if (ch === '"') {
-        if (next === '"') { i++; continue; }
-        inDoubleQuote = false;
-      }
-      continue;
-    }
-    if (inBacktick) {
-      if (ch === '`') inBacktick = false;
-      continue;
-    }
-
-    // Início de comentários
-    if (ch === '-' && next === '-') {
-      inLineComment = true;
-      i++;
-      continue;
-    }
-    if (ch === '#' && (i === 0 || fullText[i - 1] === '\n' || /\s/.test(fullText[i - 1]))) {
-      inLineComment = true;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    // Início de strings
-    if (ch === "'") { inSingleQuote = true; continue; }
-    if (ch === '"') { inDoubleQuote = true; continue; }
-    if (ch === '`') { inBacktick = true; continue; }
-
-    // Delimitador de declaração explícito ';'
-    if (ch === ';') {
-      statements.push({
-        start: stmtStart,
-        end: i + 1,
-        text: fullText.substring(stmtStart, i + 1),
-        hasSemicolon: true,
-      });
-      stmtStart = i + 1;
-    }
-  }
-
-  // Trecho restante após o último ';'
-  if (stmtStart < fullText.length) {
-    const remaining = fullText.substring(stmtStart);
-    if (remaining.trim().length > 0) {
-      statements.push({
-        start: stmtStart,
-        end: fullText.length,
-        text: remaining,
-        hasSemicolon: false,
-      });
-    }
-  }
-
-  // 1. Se encontramos declaração com ponto-e-vírgula contendo o cursor, retorna-a
-  if (statements.length > 0) {
-    for (const stmt of statements) {
-      if (cursorOffset >= stmt.start && cursorOffset <= stmt.end) {
-        const trimmed = stmt.text.trim();
-        if (stmt.hasSemicolon && trimmed) {
-          return trimmed;
-        }
-      }
-    }
-  }
-
-  // 2. Se a declaração não possui ponto-e-vírgula ou é um script em formato livre:
-  const currentLine = lines[lineIdx];
-  const trimmedLine = currentLine.trim();
-
-  if (trimmedLine && !trimmedLine.startsWith('--') && !trimmedLine.startsWith('#')) {
-    let blockStart = lineIdx;
-    while (
-      blockStart > 0 &&
-      lines[blockStart - 1].trim().length > 0 &&
-      !lines[blockStart - 1].trim().endsWith(';') &&
-      !MAJOR_SQL_VERBS.test(lines[blockStart].trim())
-    ) {
-      blockStart--;
-    }
-
-    let blockEnd = lineIdx;
-    while (
-      blockEnd < lines.length - 1 &&
-      lines[blockEnd + 1].trim().length > 0 &&
-      !lines[blockEnd].trim().endsWith(';') &&
-      !MAJOR_SQL_VERBS.test(lines[blockEnd + 1].trim())
-    ) {
-      blockEnd++;
-    }
-
-    const block = lines.slice(blockStart, blockEnd + 1).join('\n').trim();
-    if (block) return block;
-  }
-
-  return trimmedLine || null;
+export function extractStatementAtPosition(
+  fullText: string,
+  position: { lineNumber: number; column: number }
+): string | null {
+  const extracted = extractStatementAtCursor(fullText, position);
+  return extracted ? extracted.statement : null;
 }
 
 /**
@@ -422,7 +287,7 @@ interface EditorWorkspaceProps {
   solutions: SolutionItem[];
   onUpdateContent: (id: string, content: string) => void;
   onRunQuery: () => void;
-  onRunSnippet: (snippet: string) => void;
+  onRunSnippet: (snippet: string, baseStartLine?: number) => void;
   onReviewSnippet: (snippet: string) => void;
   zoomLevel: number;
   onZoomIn: () => void;
@@ -438,6 +303,10 @@ interface EditorWorkspaceProps {
   activeDatabase: string;
   editorRefOut?: React.MutableRefObject<any>;
   onSelectDatabase?: (dbName: string) => void;
+  results?: QueryResult[];
+  executedTabId?: string;
+  selectedResultIndex?: number;
+  onSelectResultIndex?: (index: number, fromGutterClick?: boolean) => void;
 }
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
@@ -468,12 +337,36 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   activeDatabase,
   editorRefOut,
   onSelectDatabase,
+  results = [],
+  executedTabId = '',
+  selectedResultIndex = 0,
+  onSelectResultIndex,
 }) => {
   const editorRef = useRef<any>(null);
   const monacoInstanceRef = useRef<any>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const onSelectDatabaseRef = useRef(onSelectDatabase);
   onSelectDatabaseRef.current = onSelectDatabase;
+  const onRunQueryRef = useRef(onRunQuery);
+  onRunQueryRef.current = onRunQuery;
+  const onRunSnippetRef = useRef(onRunSnippet);
+  onRunSnippetRef.current = onRunSnippet;
+  const onReviewSnippetRef = useRef(onReviewSnippet);
+  onReviewSnippetRef.current = onReviewSnippet;
+  const onExportScriptRef = useRef(onExportScript);
+  onExportScriptRef.current = onExportScript;
+  const resultsRef = useRef<QueryResult[]>(results);
+  resultsRef.current = results;
+  const executedTabIdRef = useRef<string>(executedTabId);
+  executedTabIdRef.current = executedTabId;
+  const selectedResultIndexRef = useRef<number>(selectedResultIndex);
+  selectedResultIndexRef.current = selectedResultIndex;
+  const onSelectResultIndexRef = useRef(onSelectResultIndex);
+  onSelectResultIndexRef.current = onSelectResultIndex;
+
+  // Decorações do Monaco para marcadores ✓/✖ no gutter e rastreamento de intervalos dos comandos executados
+  const visualDecorationIdsRef = useRef<string[]>([]);
+  const trackedRangeDecorationIdsRef = useRef<string[]>([]);
 
   // Estado e métodos para renomeação de abas (duplo clique ou F2)
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -703,6 +596,184 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     URL.revokeObjectURL(url);
   }, [tabs, activeTab]);
 
+  // Executa de forma unificada o trecho selecionado ou o comando na linha do cursor (Alt+E / Menu de Contexto)
+  const runCurrentSnippetFromEditor = useCallback(() => {
+    flushPendingContent();
+    const ed = editorRef.current;
+    if (ed) {
+      const selection = ed.getSelection();
+      const model = ed.getModel();
+      const pos = ed.getPosition();
+
+      // Sincroniza banco ativo caso haja comando USE precedente no script
+      if (model && pos && onSelectDatabaseRef.current) {
+        const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
+        if (detectedDb) {
+          const matchedDb = (schemasRef.current || []).find(
+            s => s.name.toLowerCase() === detectedDb.toLowerCase()
+          );
+          const finalDbName = matchedDb ? matchedDb.name : detectedDb;
+          if (finalDbName !== activeDatabaseRef.current) {
+            onSelectDatabaseRef.current(finalDbName);
+          }
+        }
+      }
+
+      if (selection && !selection.isEmpty()) {
+        const text = model?.getValueInRange(selection);
+        if (text && text.trim()) {
+          onRunSnippetRef.current(text.trim(), selection.startLineNumber);
+          return;
+        }
+      }
+
+      if (model && pos) {
+        const extracted = extractStatementAtCursor(model.getValue(), pos);
+        if (extracted && extracted.statement.trim()) {
+          onRunSnippetRef.current(extracted.statement.trim(), extracted.startLine);
+          return;
+        }
+      }
+    }
+    onRunQueryRef.current();
+  }, [flushPendingContent]);
+
+  // Revisa de forma unificada o trecho selecionado ou o comando na linha do cursor (Alt+R / Menu de Contexto)
+  const reviewCurrentSnippetFromEditor = useCallback(() => {
+    flushPendingContent();
+    const ed = editorRef.current;
+    let codeToReview = '';
+    if (ed) {
+      const selection = ed.getSelection();
+      const model = ed.getModel();
+      const pos = ed.getPosition();
+      if (selection && !selection.isEmpty()) {
+        codeToReview = model?.getValueInRange(selection) || '';
+      } else if (model && pos) {
+        codeToReview = extractStatementAtCursor(model.getValue(), pos)?.statement || '';
+      }
+      if (!codeToReview.trim()) {
+        codeToReview = ed.getValue();
+      }
+    }
+    if (codeToReview.trim()) {
+      onReviewSnippetRef.current(codeToReview.trim());
+    }
+  }, [flushPendingContent]);
+
+  // Localiza qual resultado executado corresponde a uma linha do editor (usando ranges rastreados pelo Monaco)
+  const findExecutedResultAtLine = useCallback((lineNumber: number): number => {
+    const ed = editorRef.current;
+    const model = ed?.getModel();
+    const currentResults = resultsRef.current || [];
+    if (!model || currentTabIdRef.current !== executedTabIdRef.current || currentResults.length === 0) {
+      return -1;
+    }
+
+    const trackedIds = trackedRangeDecorationIdsRef.current;
+    for (let i = 0; i < currentResults.length; i++) {
+      const decId = trackedIds[i];
+      const trackedRange = decId ? model.getDecorationRange(decId) : null;
+      const startL = trackedRange ? trackedRange.startLineNumber : currentResults[i].startLine;
+      const endL = trackedRange ? trackedRange.endLineNumber : (currentResults[i].endLine || startL);
+      if (startL && endL && lineNumber >= startL && lineNumber <= endL) {
+        return i;
+      }
+    }
+    return -1;
+  }, []);
+
+  // 1. Cria decorações invisíveis de rastreamento de range sempre que uma nova execução (results) ocorre
+  useEffect(() => {
+    const ed = editorRef.current;
+    const monaco = monacoInstanceRef.current;
+    if (!ed || !monaco) return;
+    const model = ed.getModel();
+    if (!model) return;
+
+    if (!executedTabId || activeTabId !== executedTabId || results.length === 0) {
+      trackedRangeDecorationIdsRef.current = ed.deltaDecorations(trackedRangeDecorationIdsRef.current, []);
+      return;
+    }
+
+    const lineCount = model.getLineCount();
+    const rangeDecs = results.map(res => {
+      const sLine = Math.max(1, Math.min(res.startLine || 1, lineCount));
+      const eLine = Math.max(sLine, Math.min(res.endLine || sLine, lineCount));
+      const eCol = model.getLineMaxColumn(eLine);
+      return {
+        range: new monaco.Range(sLine, 1, eLine, eCol),
+        options: {
+          stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        },
+      };
+    });
+
+    trackedRangeDecorationIdsRef.current = ed.deltaDecorations(trackedRangeDecorationIdsRef.current, rangeDecs);
+  }, [results, executedTabId, activeTabId]);
+
+  // 2. Renderiza os ícones ✓/✖ no gutter e o destaque visual do comando atualmente inspecionado na aba Retorno
+  useEffect(() => {
+    const ed = editorRef.current;
+    const monaco = monacoInstanceRef.current;
+    if (!ed || !monaco) return;
+    const model = ed.getModel();
+    if (!model) return;
+
+    if (!executedTabId || activeTabId !== executedTabId || results.length === 0) {
+      visualDecorationIdsRef.current = ed.deltaDecorations(visualDecorationIdsRef.current, []);
+      return;
+    }
+
+    const lineCount = model.getLineCount();
+    const newVisualDecs: any[] = [];
+    const trackedIds = trackedRangeDecorationIdsRef.current;
+
+    results.forEach((res, idx) => {
+      const trackedRange = trackedIds[idx] ? model.getDecorationRange(trackedIds[idx]) : null;
+      const sLine = Math.max(
+        1,
+        Math.min(trackedRange ? trackedRange.startLineNumber : (res.startLine || 1), lineCount)
+      );
+      const eLine = Math.max(
+        sLine,
+        Math.min(trackedRange ? trackedRange.endLineNumber : (res.endLine || sLine), lineCount)
+      );
+
+      const isSuccess = res.status === 'success';
+      const summaryLabel = isSuccess
+        ? `${res.rows.length} registro(s) • ${res.executionTimeMs}ms`
+        : `Erro: ${res.errorMessage || 'Falha na execução'}`;
+
+      newVisualDecs.push({
+        range: new monaco.Range(sLine, 1, sLine, 1),
+        options: {
+          glyphMarginClassName: isSuccess
+            ? 'sql-gutter-marker sql-gutter-success'
+            : 'sql-gutter-marker sql-gutter-error',
+          glyphMarginHoverMessage: {
+            value: `**Comando #${idx + 1}** (${isSuccess ? 'Sucesso' : 'Falha'}) — ${summaryLabel}${
+              results.length > 1 ? '\n\n*Clique para inspecionar este retorno*' : ''
+            }`,
+          },
+        },
+      });
+
+      if (results.length > 1 && idx === selectedResultIndex) {
+        newVisualDecs.push({
+          range: new monaco.Range(sLine, 1, eLine, 1),
+          options: {
+            isWholeLine: true,
+            className: 'sql-active-result-block',
+            linesDecorationsClassName: 'sql-active-result-bar',
+          },
+        });
+      }
+    });
+
+    visualDecorationIdsRef.current = ed.deltaDecorations(visualDecorationIdsRef.current, newVisualDecs);
+  }, [results, executedTabId, activeTabId, selectedResultIndex]);
+
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoInstanceRef.current = monaco;
@@ -756,39 +827,80 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       });
     }
 
-    // Auto-correção em tempo real de palavras-chave SQL para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
+    // Auto-capitalização em tempo real + Auto-inserção inteligente de ';' no comando anterior não finalizado
     editor.onDidChangeModelContent((e) => {
       if (isAutoCapitalizingRef.current) return;
       if (!e.changes || e.changes.length === 0) return;
 
+      const model = editor.getModel();
+      if (!model) return;
+
       for (const change of e.changes) {
-        // Se for inserção em lote (ex: colagem grande), não processa tecla por tecla
+        const lineNumber = change.range.startLineNumber;
+
+        // Caso A: Autocomplete de palavra-chave composta (ex: 'INSERT INTO', 'DELETE FROM', 'CREATE TABLE')
+        const multiWordAutocompleteMatch = change.text.match(
+          /^(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|USE|TRUNCATE|SHOW|DESCRIBE)\s+[A-Z_]+$/i
+        );
+        if (multiWordAutocompleteMatch && change.text.length <= 25) {
+          const verbUpper = multiWordAutocompleteMatch[1].toUpperCase();
+          const sqlBefore = model.getValueInRange(
+            new monaco.Range(1, 1, lineNumber, change.range.startColumn)
+          );
+          if (!isOffsetInsideCommentOrString(sqlBefore)) {
+            const semiOffset = detectMissingPreviousSemicolon(sqlBefore, verbUpper, lineNumber);
+            if (semiOffset !== null) {
+              const semiPos = model.getPositionAt(semiOffset);
+              queueMicrotask(() => {
+                if (model.isDisposed()) return;
+                const charAfter = model.getValueInRange(
+                  new monaco.Range(semiPos.lineNumber, semiPos.column, semiPos.lineNumber, semiPos.column + 1)
+                );
+                if (charAfter === ';') return;
+                const currentSelections = editor.getSelections() || [];
+                isAutoCapitalizingRef.current = true;
+                try {
+                  model.pushEditOperations(
+                    currentSelections,
+                    [
+                      {
+                        range: new monaco.Range(
+                          semiPos.lineNumber,
+                          semiPos.column,
+                          semiPos.lineNumber,
+                          semiPos.column
+                        ),
+                        text: ';',
+                      },
+                    ],
+                    () => {
+                      if (currentSelections.length === 0) return null;
+                      return currentSelections.map((sel: any) => {
+                        let sCol = sel.startColumn;
+                        let eCol = sel.endColumn;
+                        if (semiPos.lineNumber === sel.startLineNumber && semiPos.column <= sel.startColumn) sCol += 1;
+                        if (semiPos.lineNumber === sel.endLineNumber && semiPos.column <= sel.endColumn) eCol += 1;
+                        return new monaco.Selection(sel.startLineNumber, sCol, sel.endLineNumber, eCol);
+                      });
+                    }
+                  );
+                } finally {
+                  isAutoCapitalizingRef.current = false;
+                }
+              });
+            }
+          }
+          continue;
+        }
+
+        // Caso B: Digitação tecla por tecla (ignora colagens grandes)
         if (change.text.length > 5) continue;
 
         // Dispara quando o usuário digita delimitadores como espaço, quebra de linha, parênteses, vírgula ou ponto-e-vírgula
         if (!/[\s\(\,\;\)\n\t]/.test(change.text)) continue;
 
-        const model = editor.getModel();
-        if (!model) continue;
-
-        const lineNumber = change.range.startLineNumber;
         const lineContent = model.getLineContent(lineNumber);
         const textBeforeChange = lineContent.substring(0, change.range.startColumn - 1);
-
-        // Ignora comentários de linha (--)
-        const commentIndex = textBeforeChange.indexOf('--');
-        if (commentIndex !== -1) {
-          const beforeComment = textBeforeChange.substring(0, commentIndex);
-          const singleQ = (beforeComment.match(/'/g) || []).length;
-          const doubleQ = (beforeComment.match(/"/g) || []).length;
-          if (singleQ % 2 === 0 && doubleQ % 2 === 0) continue;
-        }
-
-        // Ignora strings ou identificadores em aspas ou crases
-        const singleQuotes = (textBeforeChange.match(/'/g) || []).length;
-        const doubleQuotes = (textBeforeChange.match(/"/g) || []).length;
-        const backticks = (textBeforeChange.match(/`/g) || []).length;
-        if (singleQuotes % 2 !== 0 || doubleQuotes % 2 !== 0 || backticks % 2 !== 0) continue;
 
         // Extrai a palavra imediatamente anterior ao delimitador digitado
         const match = textBeforeChange.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/);
@@ -797,45 +909,154 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         const rawWord = match[1];
         const lowerWord = rawWord.toLowerCase();
 
-        // Se for acesso de propriedade/coluna precedido por ponto (ex: tb.from ou tabela.campo), não capitaliza
+        // Se for acesso de propriedade/coluna precedido por ponto (ex: tb.from ou tabela.campo), ignora
         const charBeforeWord = textBeforeChange.charAt(textBeforeChange.length - rawWord.length - 1);
         if (charBeforeWord === '.') continue;
 
-        const upperWord = SQL_KEYWORDS_MAP[lowerWord];
-        if (upperWord && rawWord !== upperWord) {
-          const wordStartCol = (change.range.startColumn - 1) - rawWord.length + 1;
-          const wordEndCol = change.range.startColumn;
-          const wordRange = new monaco.Range(lineNumber, wordStartCol, lineNumber, wordEndCol);
+        const wordStartCol = (change.range.startColumn - 1) - rawWord.length + 1;
+        const wordEndCol = change.range.startColumn;
 
-          // Executa a substituição em microtask sem interromper o loop de digitação nem deslocar o cursor
-          queueMicrotask(() => {
-            if (model.isDisposed()) return;
+        // Verifica o prefixo completo desde o início do arquivo para ignorar comentários /* ... */, --, # e strings
+        const sqlBeforeWord = model.getValueInRange(
+          new monaco.Range(1, 1, lineNumber, wordStartCol)
+        );
+        if (isOffsetInsideCommentOrString(sqlBeforeWord)) continue;
+
+        const mappedKeyword = SQL_KEYWORDS_MAP[lowerWord];
+        const needsCapitalize = Boolean(mappedKeyword && rawWord !== mappedKeyword);
+        const candidateVerbUpper = mappedKeyword || rawWord.toUpperCase();
+
+        // Auto-inserção de ';' dispara apenas quando o delimitador digitado após o verbo primário é espaço/Enter/Tab
+        const isWhitespaceDelimiter = /\s/.test(change.text);
+        let semiPos: { lineNumber: number; column: number } | null = null;
+        if (isWhitespaceDelimiter && AUTO_SEMICOLON_VERBS.has(candidateVerbUpper)) {
+          const semiOffset = detectMissingPreviousSemicolon(
+            sqlBeforeWord,
+            candidateVerbUpper,
+            lineNumber
+          );
+          if (semiOffset !== null) {
+            semiPos = model.getPositionAt(semiOffset);
+          }
+        }
+
+        if (!needsCapitalize && !semiPos) continue;
+
+        const wordRange = new monaco.Range(lineNumber, wordStartCol, lineNumber, wordEndCol);
+
+        // Executa as edições de forma atômica em microtask sem interromper a digitação nem deslocar o cursor
+        queueMicrotask(() => {
+          if (model.isDisposed()) return;
+          const edits: Array<{ range: any; text: string }> = [];
+          let resolvedSemiPos: { lineNumber: number; column: number } | null = null;
+
+          if (semiPos) {
+            const charAfter = model.getValueInRange(
+              new monaco.Range(
+                semiPos.lineNumber,
+                semiPos.column,
+                semiPos.lineNumber,
+                semiPos.column + 1
+              )
+            );
+            if (charAfter !== ';') {
+              resolvedSemiPos = semiPos;
+              edits.push({
+                range: new monaco.Range(
+                  semiPos.lineNumber,
+                  semiPos.column,
+                  semiPos.lineNumber,
+                  semiPos.column
+                ),
+                text: ';',
+              });
+            }
+          }
+
+          if (needsCapitalize && mappedKeyword) {
             const currentWord = model.getValueInRange(wordRange);
             if (currentWord === rawWord) {
-              isAutoCapitalizingRef.current = true;
-              try {
-                model.pushEditOperations(
-                  [],
-                  [
-                    {
-                      range: wordRange,
-                      text: upperWord,
-                    },
-                  ],
-                  () => null
-                );
-              } finally {
-                isAutoCapitalizingRef.current = false;
-              }
+              edits.push({
+                range: wordRange,
+                text: mappedKeyword,
+              });
             }
-          });
-        }
+          }
+
+          if (edits.length === 0) return;
+
+          const currentSelections = editor.getSelections() || [];
+          isAutoCapitalizingRef.current = true;
+          try {
+            model.pushEditOperations(
+              currentSelections,
+              edits,
+              () => {
+                if (currentSelections.length === 0) return null;
+                return currentSelections.map((sel: any) => {
+                  let sCol = sel.startColumn;
+                  let eCol = sel.endColumn;
+                  if (
+                    resolvedSemiPos &&
+                    resolvedSemiPos.lineNumber === sel.startLineNumber &&
+                    resolvedSemiPos.column <= sel.startColumn
+                  ) {
+                    sCol += 1;
+                  }
+                  if (
+                    resolvedSemiPos &&
+                    resolvedSemiPos.lineNumber === sel.endLineNumber &&
+                    resolvedSemiPos.column <= sel.endColumn
+                  ) {
+                    eCol += 1;
+                  }
+                  return new monaco.Selection(sel.startLineNumber, sCol, sel.endLineNumber, eCol);
+                });
+              }
+            );
+          } finally {
+            isAutoCapitalizingRef.current = false;
+          }
+        });
       }
     });
 
-    // Sincronização automática do Banco de Dados Ativo com base na posição do cursor no script
+    // Clique do mouse em qualquer comando executado (ou no ícone ✓/✖ do gutter) exibe seu resultado na aba Retorno
+    editor.onMouseDown((e: any) => {
+      if (e.event?.rightButton) return;
+      const clickedLine = e.target?.position?.lineNumber;
+      if (!clickedLine) return;
+
+      const currentResults = resultsRef.current || [];
+      if (currentTabIdRef.current !== executedTabIdRef.current || currentResults.length === 0) return;
+
+      const matchedIdx = findExecutedResultAtLine(clickedLine);
+      if (matchedIdx === -1) return;
+
+      const isGutterClick =
+        e.target?.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+        e.target?.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS;
+
+      if (isGutterClick || (currentResults.length > 1 && matchedIdx !== selectedResultIndexRef.current)) {
+        onSelectResultIndexRef.current?.(matchedIdx, isGutterClick);
+      }
+    });
+
+    // Sincronização automática do Banco de Dados Ativo e navegação por teclado entre comandos executados
     let cursorDbTimer: any = null;
     editor.onDidChangeCursorPosition((e) => {
+      // Se o aluno navegou com as setas do teclado entre comandos já executados, sincroniza o comando ativo no Retorno
+      if (
+        e.source === 'keyboard' &&
+        currentTabIdRef.current === executedTabIdRef.current &&
+        (resultsRef.current?.length || 0) > 1
+      ) {
+        const matchedIdx = findExecutedResultAtLine(e.position.lineNumber);
+        if (matchedIdx !== -1 && matchedIdx !== selectedResultIndexRef.current) {
+          onSelectResultIndexRef.current?.(matchedIdx, false);
+        }
+      }
+
       if (cursorDbTimer) clearTimeout(cursorDbTimer);
       cursorDbTimer = setTimeout(() => {
         const model = editor.getModel();
@@ -854,7 +1075,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     // Atalho global do editor: Ctrl+Enter / Cmd+Enter (Executar tudo)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       flushPendingContent();
-      onRunQuery();
+      onRunQueryRef.current();
     });
 
     // 1. Executar esse trecho (Alt+E)
@@ -864,39 +1085,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyE],
       contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 1,
-      run: (ed) => {
-        const selection = ed.getSelection();
-        const model = ed.getModel();
-        const pos = ed.getPosition();
-
-        // Se houver USE precedente no cursor, sincroniza o banco ativo antes de executar o snippet
-        if (model && pos && onSelectDatabaseRef.current) {
-          const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
-          if (detectedDb) {
-            const matchedDb = (schemasRef.current || []).find(s => s.name.toLowerCase() === detectedDb.toLowerCase());
-            const finalDbName = matchedDb ? matchedDb.name : detectedDb;
-            if (finalDbName !== activeDatabaseRef.current) {
-              onSelectDatabaseRef.current(finalDbName);
-            }
-          }
-        }
-
-        if (selection && !selection.isEmpty()) {
-          const text = ed.getModel()?.getValueInRange(selection);
-          if (text && text.trim()) {
-            onRunSnippet(text.trim());
-            return;
-          }
-        }
-        // Se não houver seleção de texto, executa o comando onde o cursor está posicionado
-        if (model && pos) {
-          const stmt = extractStatementAtPosition(model.getValue(), pos);
-          if (stmt && stmt.trim()) {
-            onRunSnippet(stmt.trim());
-            return;
-          }
-        }
-        onRunQuery();
+      run: () => {
+        runCurrentSnippetFromEditor();
       },
     });
 
@@ -907,24 +1097,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyR],
       contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 2,
-      run: (ed) => {
-        const selection = ed.getSelection();
-        let codeToReview = '';
-        if (selection && !selection.isEmpty()) {
-          codeToReview = ed.getModel()?.getValueInRange(selection) || '';
-        } else {
-          const model = ed.getModel();
-          const pos = ed.getPosition();
-          if (model && pos) {
-            codeToReview = extractStatementAtPosition(model.getValue(), pos) || '';
-          }
-        }
-        if (!codeToReview.trim()) {
-          codeToReview = ed.getValue();
-        }
-        if (codeToReview.trim()) {
-          onReviewSnippet(codeToReview.trim());
-        }
+      run: () => {
+        reviewCurrentSnippetFromEditor();
       },
     });
 
@@ -936,8 +1110,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 3,
       run: () => {
-        if (onExportScript) {
-          onExportScript();
+        if (onExportScriptRef.current) {
+          onExportScriptRef.current();
         } else {
           handleExportCurrentScript();
         }
@@ -976,7 +1150,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }
     });
 
-    // Intercepta e abre o menu de contexto customizado, garantindo 0 opções indesejadas
+    // Intercepta e abre o menu de contexto customizado, garantindo posicionamento do cursor na linha clicada
     editor.onContextMenu((e: any) => {
       e.event?.preventDefault();
       e.event?.stopPropagation();
@@ -994,6 +1168,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       domNode.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        const sel = editor.getSelection();
+        if (!sel || sel.isEmpty()) {
+          const target = editor.getTargetAtClientPoint(e.clientX, e.clientY);
+          if (target?.position) {
+            editor.setPosition(target.position);
+          }
+        }
         handleOpenContextMenu(e.clientX, e.clientY);
       }, true);
     }
@@ -1365,6 +1546,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onMount={handleEditorDidMount}
             options={{
               contextmenu: false,
+              glyphMargin: true,
               fontSize: currentFontSize,
               fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
               fontLigatures: false,
@@ -1453,27 +1635,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             <button
               onClick={() => {
                 handleCloseContextMenu();
-                const ed = editorRef.current;
-                if (ed) {
-                  const sel = ed.getSelection();
-                  if (sel && !sel.isEmpty()) {
-                    const text = ed.getModel()?.getValueInRange(sel);
-                    if (text && text.trim()) {
-                      onRunSnippet(text.trim());
-                      return;
-                    }
-                  }
-                  const model = ed.getModel();
-                  const pos = ed.getPosition();
-                  if (model && pos) {
-                    const stmt = extractStatementAtPosition(model.getValue(), pos);
-                    if (stmt && stmt.trim()) {
-                      onRunSnippet(stmt.trim());
-                      return;
-                    }
-                  }
-                }
-                onRunQuery();
+                runCurrentSnippetFromEditor();
               }}
               className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
               type="button"
@@ -1493,26 +1655,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             <button
               onClick={() => {
                 handleCloseContextMenu();
-                const ed = editorRef.current;
-                let toReview = '';
-                if (ed) {
-                  const sel = ed.getSelection();
-                  if (sel && !sel.isEmpty()) {
-                    toReview = ed.getModel()?.getValueInRange(sel) || '';
-                  } else {
-                    const model = ed.getModel();
-                    const pos = ed.getPosition();
-                    if (model && pos) {
-                      toReview = extractStatementAtPosition(model.getValue(), pos) || '';
-                    }
-                  }
-                  if (!toReview.trim()) {
-                    toReview = ed.getValue();
-                  }
-                }
-                if (toReview.trim()) {
-                  onReviewSnippet(toReview.trim());
-                }
+                reviewCurrentSnippetFromEditor();
               }}
               className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
               type="button"

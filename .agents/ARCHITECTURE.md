@@ -367,8 +367,8 @@ For command details and prerequisites, see [scripts/README.md](scripts/README.md
 | Metric              | Value                             |
 | ------------------- | --------------------------------- |
 | **Total Agents**    | 20 (1 major upgrade in 2026.5.13) |
-| **Total Skills**    | 47                                |
-| **Total Workflows** | 13 (+2 new in 2026.5.13)          |
+| **Total Skills**    | 60 (47 core + 13 migrated workflows) |
+| **Total Workflows** | 0 (13 migrated to skills)         |
 | **Toolkit Utilities** | 7 user-facing + 2 internal modules |
 | **Antigravity Utilities** | 4 runtime utilities              |
 | **Total Skill Scripts** | 18                              |
