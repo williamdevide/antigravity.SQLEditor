@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ZoomControl } from './ZoomControl';
-import type { QueryResult, SqlReview, ConsoleTab, TablePreviewData, DatabaseSchema } from '../types';
+import type { QueryResult, SqlReview, ConsoleTab, TablePreviewData, DatabaseSchema, DataPreviewLimit } from '../types';
 
 interface ConsoleResultsProps {
   results: QueryResult[];
@@ -17,9 +17,11 @@ interface ConsoleResultsProps {
   onRefreshTablePreview?: () => void;
   schemas?: DatabaseSchema[];
   onSelectPreviewTable?: (dbName: string, tableName: string) => void;
-  onReviewSnippet?: (snippet: string, errorMessage?: string) => void;
+  onReviewSnippet?: (snippet: string, errorMessage?: string, hintStartLine?: number) => void;
   selectedResultIndex?: number;
   onSelectResultIndex?: (index: number, revealInEditor?: boolean) => void;
+  dataPreviewLimit?: DataPreviewLimit;
+  onCycleDataPreviewLimit?: () => void;
 }
 
 function getCommandShortVerb(statement: string): string {
@@ -50,6 +52,8 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
   onReviewSnippet,
   selectedResultIndex,
   onSelectResultIndex,
+  dataPreviewLimit = 30,
+  onCycleDataPreviewLimit,
 }) => {
   const [internalTab, setInternalTab] = useState<ConsoleTab>('data');
   
@@ -238,9 +242,10 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
     ).join('\n');
 
     const csvContent = `data:text/csv;charset=utf-8,${encodeURIComponent(headers + '\n' + rows)}`;
+    const limitSuffix = dataPreviewLimit === null ? 'total' : `limit${dataPreviewLimit}`;
     const link = document.createElement('a');
     link.setAttribute('href', csvContent);
-    link.setAttribute('download', `${tablePreviewData.tableName}_dados_limit30_${Date.now()}.csv`);
+    link.setAttribute('download', `${tablePreviewData.tableName}_dados_${limitSuffix}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -448,10 +453,22 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
                   </span>
                 )}
 
-                {/* Badge de LIMIT 30 */}
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FF8533]/15 text-[#FF8533] border border-[#FF8533]/30 tracking-wider">
-                  LIMIT 30
-                </span>
+                {/* Botão Alternador de Limite: Limit 30 -> Limit 100 -> Total -> Limit 30 */}
+                <button
+                  type="button"
+                  onClick={() => onCycleDataPreviewLimit?.()}
+                  title={
+                    dataPreviewLimit === 30
+                      ? 'Exibindo até 30 registros. Clique para alternar para Limit 100'
+                      : dataPreviewLimit === 100
+                      ? 'Exibindo até 100 registros. Clique para alternar para Total'
+                      : 'Exibindo todos os registros (Total). Clique para retornar para Limit 30'
+                  }
+                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#FF8533]/15 hover:bg-[#FF8533]/30 text-[#FF8533] border border-[#FF8533]/35 hover:border-[#FF8533] tracking-wider transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                >
+                  <span>{dataPreviewLimit === null ? 'Total' : `Limit ${dataPreviewLimit}`}</span>
+                  <span className="material-symbols-outlined text-[11px]">sync_alt</span>
+                </button>
 
                 {/* Botão de Atualizar dados */}
                 {onRefreshTablePreview && (
@@ -777,7 +794,7 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              onReviewSnippet(selectResult.statement, selectResult.errorMessage);
+                              onReviewSnippet(selectResult.statement, selectResult.errorMessage, selectResult.startLine);
                               setTab('review');
                             }}
                             title="Analisar e corrigir este comando na aba Revisão SQL"
@@ -1001,7 +1018,7 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
                       {res.status === 'error' && onReviewSnippet && (
                         <button
                           onClick={() => {
-                            onReviewSnippet(res.statement, res.errorMessage);
+                            onReviewSnippet(res.statement, res.errorMessage, res.startLine);
                             setTab('review');
                           }}
                           title="Revisar este trecho com erro na aba Revisão SQL"
@@ -1068,7 +1085,16 @@ export const ConsoleResults: React.FC<ConsoleResultsProps> = ({
                 {/* 1. Comando Selecionado */}
                 <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
                   <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-1">
-                    <span className="font-semibold text-[var(--text-primary)]">1. Comando Selecionado:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[var(--text-primary)]">1. Comando Selecionado:</span>
+                      {review.targetRange?.startLine && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-primary)] text-[var(--accent-yellow)] border border-[var(--border-color)]">
+                          {review.targetRange.endLine > review.targetRange.startLine
+                            ? `Linhas ${review.targetRange.startLine}–${review.targetRange.endLine}`
+                            : `Linha ${review.targetRange.startLine}`}
+                        </span>
+                      )}
+                    </div>
                     <span>{review.timestamp}</span>
                   </div>
                   <pre className="p-2.5 rounded bg-[var(--bg-primary)] text-[var(--accent-yellow)] border border-[var(--border-color)] whitespace-pre-wrap">

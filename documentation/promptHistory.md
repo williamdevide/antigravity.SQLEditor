@@ -1828,3 +1828,58 @@ correções:
    - Versão atualizada para `3.1.19` em `frontend/src/config/version.ts`, `frontend/package.json` e `frontend/src/components/LandingPageView.tsx` (disparando auto-reload dos BDs da aula com `db_ecommerce`).
    - Suíte automatizada verificou **1.111 statements** dos 4 arquivos de BDs de aula + **140 statements** dos 6 arquivos de soluções + testes unitários do parser, cursor, auto-semicolon e inferência de colunas (**32/32 verificações aprovadas, 0 erros**).
    - `npm run lint` (`oxlint`) e `npm run build` (`tsc -b && vite build`) aprovados com **0 erros**. Alterações mantidas exclusivamente no ambiente local conforme solicitado.
+
+
+---
+
+## 📌 Prompt 58 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 12:48  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal vamos agora a uma sequencia de pequenas alterações:
+- na aba dados por padrão exibe os 30 primeiros registros da tabela, quero que ao climcar em Limit 30, alterne para Limit 100 e depois Total, depois retorna para Limit 30.
+- no schema explorer a cor dos simbolos dos campos e de chave estrangeira, deve ser um cinza escuro quando estiver nos temas claros.
+- Botão Limpar deve pedir confirmação antes de limpar o script.
+- quando usar o revisão sql e pedir para aplicar no editor ele deve corrigir na propria linha do comando, e não sumir com os outros comandos
+```
+
+### Prompt 59 (Resposta do Usuário no Grill-me - Persistência do Limit na Aba Dados)
+```text
+(Recommended) Manter o limite escolhido (Limit 30, Limit 100 ou Total) ao clicar em outras tabelas durante a sessão, iniciando por padrão em Limit 30
+```
+
+### Prompt 60 (Resposta do Usuário no Grill-me - Correção Cirúrgica no Revisão SQL sem LIMIT 100 Forçado)
+```text
+(Recommended) Substituir apenas o comando revisado na própria linha/posição dele (preservando todo o restante do script e o Ctrl+Z), aplicando somente as correções de sintaxe/digitação/; sem injetar "LIMIT 100" forçado na query do aluno
+```
+
+### Prompt 61 (Resposta do Usuário no Grill-me - Versionamento v3.1.20 e Publicação GitHub/Vercel)
+```text
+Atualizar a versão para v3.1.20 e já realizar commit + git push para publicar no GitHub e Vercel
+```
+
+
+### 🎯 Ações Executadas (Release `v3.1.20`):
+
+1. **Ciclo Dinâmico de Registros na Aba `Dados` (`Limit 30` → `Limit 100` → `Total` → `Limit 30`):**
+   - Adicionado tipo `DataPreviewLimit = 30 | 100 | null` em `frontend/src/types/index.ts`.
+   - Atualizado `dbEngine.getTablePreviewData(dbName, tableName, limit)` em `frontend/src/services/dbEngine.ts` para aceitar `null` (`Total`, executando `SELECT * FROM \`tableName\`;` sem cláusula `LIMIT`).
+   - Substituído o badge estático `LIMIT 30` em `frontend/src/components/ConsoleResults.tsx` por um botão interativo que alterna `Limit 30` → `Limit 100` → `Total` → `Limit 30` e ajusta o sufixo do arquivo CSV exportado (`limit30`, `limit100`, `total`).
+   - Persistida a escolha do limite durante toda a sessão ao clicar e alternar entre diferentes tabelas em `frontend/src/App.tsx` (`dataPreviewLimit` + `dataPreviewLimitRef`).
+
+2. **Contraste de Ícones em Cinza Escuro nos Temas Claros (`Schema Explorer`):**
+   - Criadas variáveis CSS semânticas `--schema-icon-color` e `--schema-icon-muted` em `frontend/src/index.css`: branco (`#FFFFFF` / `rgba(255,255,255,0.90)`) nos temas escuros (`dark` e `graphite`), cinza escuro (`#374151` / `#4B5563`) em `html.light` e cinza escuro quente (`#3F3733` / `#524742`) em `html.beige`.
+   - Atualizado `frontend/src/components/Sidebar.tsx` para consumir `text-[var(--schema-icon-color)]` nas chaves estrangeiras (`key`) e `text-[var(--schema-icon-muted)]` nos campos normais (`view_column`).
+
+3. **Confirmação no Botão `Limpar` com Preservação do `Ctrl+Z`:**
+   - Atualizado `handleClearEditor` em `frontend/src/App.tsx` para exibir `window.confirm('Tem certeza que deseja limpar todo o conteúdo do script atual?')` antes de limpar abas não vazias, utilizando `ed.executeEdits('clear-editor', ...)` + `pushUndoStop()` no Monaco Editor para preservar o desfazer (`Ctrl+Z`), além de atualizar o `title` em `frontend/src/components/Header.tsx`.
+
+4. **Correção Cirúrgica In-Place na `Revisão SQL` ("Aplicar no Editor"):**
+   - Estendido `extractStatementAtCursor` em `frontend/src/services/sqlStatementParser.ts` para retornar colunas e offsets exatos (`startColumn`, `endColumn`, `codeStartOffset`, `endOffset`) e adicionado `ReviewTargetRange` em `SqlReview`.
+   - Atualizado `frontend/src/services/sqlReviewer.ts` com `transformCodeSegments` (preservando literais string e comentários ao corrigir typos/capitalizar keywords), remoção da injeção forçada de `LIMIT 100` em `suggestedQuery` (mantendo apenas como recomendação textual), `resolveReviewTargetRange` e `applySuggestedSqlToScript` (substituindo estritamente o comando revisado na própria linha/faixa, com re-localização automática caso linhas acima tenham sido editadas e prevenção contra `;;` duplicado).
+   - Integrado `ReviewTargetRange` em `EditorWorkspace.tsx` (seleção aparada e cursor sem seleção), `ConsoleResults.tsx` (Card de Erro no Retorno, Log de Execução e badge `Linha X` / `Linhas X–Y` na Revisão SQL) e `App.tsx` (`handleApplyReviewSuggestion` via `ed.executeEdits('review-apply', ...)` preservando todos os demais comandos e o `Ctrl+Z`).
+
+5. **Versionamento `v3.1.20`, Validação Automatizada e Publicação GitHub/Vercel:**
+   - Versão atualizada para `3.1.20` em `frontend/src/config/version.ts`, `frontend/package.json` e changelog de `frontend/src/components/LandingPageView.tsx`.
+   - Suíte automatizada aprovada com **40/40 verificações e 0 falhas**; `npm run lint` e `npm run build` aprovados com **0 erros**.
+   - Realizado `git commit` e `git push origin main` para publicação automática no GitHub e Vercel.

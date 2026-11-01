@@ -508,14 +508,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                           </span>
                                         ) : isFk ? (
                                           <span
-                                            className="material-symbols-outlined text-[11px] text-white shrink-0"
+                                            className="material-symbols-outlined text-[11px] text-[var(--schema-icon-color)] shrink-0"
                                             title="Chave Estrangeira (FK)"
                                           >
                                             key
                                           </span>
                                         ) : (
                                           <span
-                                            className="material-symbols-outlined text-[11px] text-white/90 shrink-0"
+                                            className="material-symbols-outlined text-[11px] text-[var(--schema-icon-muted)] shrink-0"
                                             title="Campo Normal"
                                           >
                                             view_column

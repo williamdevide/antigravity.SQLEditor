@@ -801,6 +801,17 @@ export function parseSqlStatementsWithRanges(sql: string): ParsedSqlStatement[] 
   return statements;
 }
 
+export interface ExtractedCursorStatement {
+  statement: string;
+  startLine: number;
+  endLine: number;
+  startColumn: number;
+  endColumn: number;
+  codeStartOffset: number;
+  endOffset: number;
+  statementIndex: number;
+}
+
 /**
  * Extrai a declaração SQL exata na posição atual do cursor no editor,
  * sem exigir seleção de texto. Suporta cursor no início, meio, após o ';' na mesma linha,
@@ -809,11 +820,22 @@ export function parseSqlStatementsWithRanges(sql: string): ParsedSqlStatement[] 
 export function extractStatementAtCursor(
   fullText: string,
   position: { lineNumber: number; column: number }
-): { statement: string; startLine: number; endLine: number; statementIndex: number } | null {
+): ExtractedCursorStatement | null {
   if (!fullText || !fullText.trim()) return null;
 
   const statements = parseSqlStatementsWithRanges(fullText);
   if (statements.length === 0) return null;
+
+  const toExtracted = (stmt: ParsedSqlStatement, index: number): ExtractedCursorStatement => ({
+    statement: stmt.text,
+    startLine: stmt.codeStartLine,
+    endLine: stmt.codeEndLine,
+    startColumn: stmt.codeStartCol,
+    endColumn: stmt.codeEndCol,
+    codeStartOffset: stmt.codeStartOffset,
+    endOffset: stmt.endOffset,
+    statementIndex: index,
+  });
 
   const lines = fullText.split('\n');
   const lineIdx = Math.max(0, Math.min(position.lineNumber - 1, lines.length - 1));
@@ -831,71 +853,39 @@ export function extractStatementAtCursor(
     .filter(({ stmt }) => targetLine >= stmt.codeStartLine && targetLine <= stmt.codeEndLine);
 
   if (onCodeLine.length === 1) {
-    const { stmt, index } = onCodeLine[0];
-    return {
-      statement: stmt.text,
-      startLine: stmt.codeStartLine,
-      endLine: stmt.codeEndLine,
-      statementIndex: index,
-    };
+    return toExtracted(onCodeLine[0].stmt, onCodeLine[0].index);
   }
 
   if (onCodeLine.length > 1) {
     // Múltiplos comandos na mesma linha (ex: 'SELECT 1; SELECT 2;')
     for (const { stmt, index } of onCodeLine) {
       if (cursorOffset >= stmt.codeStartOffset && cursorOffset <= stmt.endOffset) {
-        return {
-          statement: stmt.text,
-          startLine: stmt.codeStartLine,
-          endLine: stmt.codeEndLine,
-          statementIndex: index,
-        };
+        return toExtracted(stmt, index);
       }
     }
     // Se o cursor está em espaço após o último ';' da linha, pega o último comando daquela linha
     const lastOnLine = onCodeLine[onCodeLine.length - 1];
-    return {
-      statement: lastOnLine.stmt.text,
-      startLine: lastOnLine.stmt.codeStartLine,
-      endLine: lastOnLine.stmt.codeEndLine,
-      statementIndex: lastOnLine.index,
-    };
+    return toExtracted(lastOnLine.stmt, lastOnLine.index);
   }
 
   // 2. Cursor posicionado em linha de comentário pertencente ao cabeçalho de uma declaração
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (targetLine >= stmt.rawStartLine && targetLine <= stmt.rawEndLine) {
-      return {
-        statement: stmt.text,
-        startLine: stmt.codeStartLine,
-        endLine: stmt.codeEndLine,
-        statementIndex: i,
-      };
+      return toExtracted(stmt, i);
     }
   }
 
-  // 3. Cursor em linha em branco entre declarações: se estiver logo abaixo ou acima, associa ao comando mais próximo se não houver ambiguidade?
-  // Para evitar executar o arquivo inteiro por acidente no Alt+E, se estiver colado imediatamente após um comando (linha seguinte) ou antes, pega o comando adjacente.
+  // 3. Cursor em linha em branco entre declarações: associa ao comando adjacente
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (targetLine < stmt.codeStartLine) {
-      return {
-        statement: stmt.text,
-        startLine: stmt.codeStartLine,
-        endLine: stmt.codeEndLine,
-        statementIndex: i,
-      };
+      return toExtracted(stmt, i);
     }
   }
 
   const lastIdx = statements.length - 1;
-  return {
-    statement: statements[lastIdx].text,
-    startLine: statements[lastIdx].codeStartLine,
-    endLine: statements[lastIdx].codeEndLine,
-    statementIndex: lastIdx,
-  };
+  return toExtracted(statements[lastIdx], lastIdx);
 }
 
 /**

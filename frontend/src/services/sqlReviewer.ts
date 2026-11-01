@@ -1,6 +1,7 @@
 import alasql from 'alasql';
 import { KNOWN_SQL_FUNCTIONS, registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
-import type { DatabaseSchema, SqlReview } from '../types';
+import { parseSqlStatementsWithRanges, extractStatementAtCursor } from './sqlStatementParser';
+import type { DatabaseSchema, SqlReview, ReviewTargetRange } from '../types';
 
 // Garante que as funções MySQL estejam registradas no motor AlaSQL
 registerMySQLFunctions(alasql);
@@ -130,6 +131,26 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
+// Aplica transformações apenas em trechos de código SQL real, preservando literais de string, crases e comentários
+function transformCodeSegments(sql: string, transformFn: (codeSegment: string) => string): string {
+  const tokenPattern = /('(?:''|\\'|[^'])*'|"(?:""|\\"|[^"])*"|`[^`]*`|--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)/g;
+  let result = '';
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(sql)) !== null) {
+    if (match.index > lastIdx) {
+      result += transformFn(sql.slice(lastIdx, match.index));
+    }
+    result += match[0];
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < sql.length) {
+    result += transformFn(sql.slice(lastIdx));
+  }
+  return result;
+}
+
 export function reviewSqlQuery(
   query: string,
   activeDatabase: string,
@@ -201,27 +222,30 @@ export function reviewSqlQuery(
     }
   }
 
-  // Varredura de outras palavras para substituição por KEYWORD_TYPO_MAP
-  const words = correctedQuery.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
-  for (const w of words) {
-    const wLower = w.toLowerCase();
-    // Não corrige palavras que coincidem com nomes de tabelas ou colunas do banco
-    if (knownTables.has(wLower) || knownColumns.has(wLower)) {
-      continue;
-    }
+  // Varredura de outras palavras para substituição por KEYWORD_TYPO_MAP (preservando strings e comentários)
+  correctedQuery = transformCodeSegments(correctedQuery, (segment) => {
+    let updatedSegment = segment;
+    const words = updatedSegment.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
+    for (const w of words) {
+      const wLower = w.toLowerCase();
+      if (knownTables.has(wLower) || knownColumns.has(wLower)) {
+        continue;
+      }
 
-    if (KEYWORD_TYPO_MAP[wLower]) {
-      const properKeyword = KEYWORD_TYPO_MAP[wLower];
-      if (!fixedTypos.some(f => f.original.toLowerCase() === wLower)) {
+      if (KEYWORD_TYPO_MAP[wLower]) {
+        const properKeyword = KEYWORD_TYPO_MAP[wLower];
         const reg = new RegExp(`\\b${w}\\b`, 'g');
-        correctedQuery = correctedQuery.replace(reg, properKeyword);
-        fixedTypos.push({ original: w, corrected: properKeyword });
-        errorsDetected.push(
-          `Erro de Digitação: Palavra-chave '${w}' corrigida para '${properKeyword}'.`
-        );
+        updatedSegment = updatedSegment.replace(reg, properKeyword);
+        if (!fixedTypos.some(f => f.original.toLowerCase() === wLower)) {
+          fixedTypos.push({ original: w, corrected: properKeyword });
+          errorsDetected.push(
+            `Erro de Digitação: Palavra-chave '${w}' corrigida para '${properKeyword}'.`
+          );
+        }
       }
     }
-  }
+    return updatedSegment;
+  });
 
   // 2. Validação Sintática com AlaSQL (no código original pré-processado para MySQL)
   let rawSyntaxError: string | null = null;
@@ -344,7 +368,7 @@ export function reviewSqlQuery(
   // 8. Geração de Sugestão Formatada e Validada
   let suggested = correctedQuery;
 
-  // Formata palavras-chave comuns para MAIÚSCULAS
+  // Formata palavras-chave comuns para MAIÚSCULAS (sem alterar conteúdo de strings ou comentários)
   const sqlKeywords = [
     'select', 'from', 'where', 'and', 'or', 'insert', 'into', 'values',
     'update', 'set', 'delete', 'create', 'table', 'database', 'drop', 'alter',
@@ -353,10 +377,14 @@ export function reviewSqlQuery(
     'asc', 'desc', 'primary key', 'foreign key'
   ];
 
-  for (const kw of sqlKeywords) {
-    const regex = new RegExp(`\\b${kw}\\b`, 'gi');
-    suggested = suggested.replace(regex, kw.toUpperCase());
-  }
+  suggested = transformCodeSegments(suggested, (segment) => {
+    let out = segment;
+    for (const kw of sqlKeywords) {
+      const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+      out = out.replace(regex, kw.toUpperCase());
+    }
+    return out;
+  });
 
   // Adiciona WHERE id = 1 se for UPDATE/DELETE sem WHERE
   if (isDelete && !hasWhere) {
@@ -365,20 +393,18 @@ export function reviewSqlQuery(
     suggested = suggested.replace(/;?$/, ' WHERE id = 1;');
   }
 
-  // Adiciona LIMIT 100 se for SELECT sem LIMIT
-  if (isSelect && !hasLimit) {
-    suggested = suggested.replace(/;?$/, ' LIMIT 100;');
-  } else if (!suggested.endsWith(';')) {
-    suggested += ';';
+  // Garante ponto e vírgula ao final sem injetar LIMIT 100 forçado na query do aluno
+  if (!suggested.trimEnd().endsWith(';')) {
+    suggested = `${suggested.trimEnd()};`;
   }
 
   // 9. Validação Final da Sugestão Gerada
   try {
-    alasql.parse(suggested);
+    alasql.parse(preprocessSqlQuery(suggested));
     if (errorsDetected.length > 0) {
       recommendations.unshift('✓ A consulta sugerida corrigiu os erros detectados e agora compila com sucesso no motor SQL!');
     }
-  } catch (err: any) {
+  } catch {
     // Se ainda não parseou, mantém como está
   }
 
@@ -388,5 +414,211 @@ export function reviewSqlQuery(
     suggestedQuery: suggested,
     recommendations,
     timestamp: new Date().toLocaleTimeString('pt-BR'),
+  };
+}
+
+function lineColToOffset(text: string, targetLine: number, targetCol: number): number {
+  let line = 1;
+  let i = 0;
+  while (i < text.length && line < targetLine) {
+    if (text[i] === '\n') line++;
+    i++;
+  }
+  let col = 1;
+  while (i < text.length && text[i] !== '\n' && text[i] !== '\r' && col < targetCol) {
+    i++;
+    col++;
+  }
+  return i;
+}
+
+function offsetToLineCol(text: string, targetOffset: number): { line: number; column: number } {
+  const clamped = Math.max(0, Math.min(targetOffset, text.length));
+  let line = 1;
+  let lineStart = 0;
+  for (let i = 0; i < clamped; i++) {
+    if (text[i] === '\n') {
+      line++;
+      lineStart = i + 1;
+    }
+  }
+  return { line, column: clamped - lineStart + 1 };
+}
+
+/**
+ * Localiza a faixa exata (linha/coluna inicial e final) de um comando SQL dentro do script completo,
+ * usando `hintStartLine` para desambiguar caso existam dois comandos idênticos no mesmo arquivo.
+ */
+export function resolveReviewTargetRange(
+  fullText: string,
+  snippet: string,
+  tabId: string,
+  hintStartLine?: number
+): ReviewTargetRange | undefined {
+  const trimmedSnippet = snippet.trim();
+  if (!fullText || !trimmedSnippet) return undefined;
+
+  const normSnippet = trimmedSnippet.replace(/;\s*$/, '').trim();
+  const statements = parseSqlStatementsWithRanges(fullText);
+
+  const matchingStmts = statements.filter((s) => {
+    const sTrim = s.text.trim();
+    const sNorm = sTrim.replace(/;\s*$/, '').trim();
+    return sTrim === trimmedSnippet || sNorm === normSnippet;
+  });
+
+  if (matchingStmts.length > 0) {
+    let best = matchingStmts[0];
+    if (hintStartLine !== undefined) {
+      for (const candidate of matchingStmts) {
+        if (Math.abs(candidate.codeStartLine - hintStartLine) < Math.abs(best.codeStartLine - hintStartLine)) {
+          best = candidate;
+        }
+      }
+    }
+    return {
+      tabId,
+      startLine: best.codeStartLine,
+      startColumn: best.codeStartCol,
+      endLine: best.codeEndLine,
+      endColumn: best.codeEndCol,
+    };
+  }
+
+  // Fallback por busca textual exata próxima à linha indicada
+  const occurrences: number[] = [];
+  let searchFrom = 0;
+  while (searchFrom < fullText.length) {
+    const idx = fullText.indexOf(trimmedSnippet, searchFrom);
+    if (idx === -1) break;
+    occurrences.push(idx);
+    searchFrom = idx + 1;
+  }
+
+  if (occurrences.length > 0) {
+    let bestOffset = occurrences[0];
+    if (hintStartLine !== undefined) {
+      for (const off of occurrences) {
+        const candLine = offsetToLineCol(fullText, off).line;
+        const bestLine = offsetToLineCol(fullText, bestOffset).line;
+        if (Math.abs(candLine - hintStartLine) < Math.abs(bestLine - hintStartLine)) {
+          bestOffset = off;
+        }
+      }
+    }
+    const startPos = offsetToLineCol(fullText, bestOffset);
+    const endPos = offsetToLineCol(fullText, bestOffset + trimmedSnippet.length);
+    return {
+      tabId,
+      startLine: startPos.line,
+      startColumn: startPos.column,
+      endLine: endPos.line,
+      endColumn: endPos.column,
+    };
+  }
+
+  return undefined;
+}
+
+export interface SurgicalReviewReplacement {
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  replacementText: string;
+  newFullText: string;
+}
+
+/**
+ * Aplica cirurgicamente `suggestedSql` apenas sobre o comando revisado (`originalQuery` / `targetRange`),
+ * preservando 100% dos demais comandos, indentação, linhas em branco e evitando ';;' duplicado.
+ */
+export function applySuggestedSqlToScript(
+  fullText: string,
+  originalQuery: string,
+  suggestedSql: string,
+  targetRange?: Pick<ReviewTargetRange, 'startLine' | 'startColumn' | 'endLine' | 'endColumn'>
+): SurgicalReviewReplacement | null {
+  const cleanSuggested = suggestedSql.trim();
+  if (!cleanSuggested) return null;
+
+  if (!fullText || !fullText.trim()) {
+    return {
+      startLine: 1,
+      startColumn: 1,
+      endLine: 1,
+      endColumn: 1,
+      replacementText: cleanSuggested,
+      newFullText: cleanSuggested,
+    };
+  }
+
+  const trimmedOriginal = originalQuery.trim();
+  const normOriginal = trimmedOriginal.replace(/;\s*$/, '').trim();
+  let replaceStart = -1;
+  let replaceEnd = -1;
+
+  // 1. Verifica se o targetRange salvo ainda aponta exatamente para o comando revisado
+  if (targetRange) {
+    const rawS = lineColToOffset(fullText, targetRange.startLine, targetRange.startColumn);
+    const rawE = lineColToOffset(fullText, targetRange.endLine, targetRange.endColumn);
+    if (rawE >= rawS) {
+      const slice = fullText.slice(rawS, rawE);
+      const lead = slice.length - slice.trimStart().length;
+      const trail = slice.length - slice.trimEnd().length;
+      const trimmedSlice = slice.trim();
+      const normSlice = trimmedSlice.replace(/;\s*$/, '').trim();
+      if (trimmedSlice && (trimmedSlice === trimmedOriginal || normSlice === normOriginal)) {
+        replaceStart = rawS + lead;
+        replaceEnd = rawE - trail;
+      }
+    }
+  }
+
+  // 2. Re-analisa os statements do script para encontrar o comando mesmo se linhas acima foram editadas
+  if (replaceStart === -1 && trimmedOriginal) {
+    const resolved = resolveReviewTargetRange(fullText, trimmedOriginal, '', targetRange?.startLine);
+    if (resolved) {
+      replaceStart = lineColToOffset(fullText, resolved.startLine, resolved.startColumn);
+      replaceEnd = lineColToOffset(fullText, resolved.endLine, resolved.endColumn);
+    }
+  }
+
+  // 3. Fallback: se o usuário editou levemente o próprio comando naquela linha após abrir a revisão
+  if (replaceStart === -1 && targetRange) {
+    const atLine = extractStatementAtCursor(fullText, {
+      lineNumber: targetRange.startLine,
+      column: Math.max(1, targetRange.startColumn),
+    });
+    if (atLine && atLine.startLine <= targetRange.endLine && atLine.endLine >= targetRange.startLine) {
+      replaceStart = atLine.codeStartOffset;
+      replaceEnd = atLine.endOffset;
+    }
+  }
+
+  if (replaceStart === -1 || replaceEnd < replaceStart) {
+    return null;
+  }
+
+  // Evita duplicar ';' caso exista um ';' logo após a seleção parcial na mesma linha
+  let look = replaceEnd;
+  while (look < fullText.length && (fullText[look] === ' ' || fullText[look] === '\t')) {
+    look++;
+  }
+  if (look < fullText.length && fullText[look] === ';' && cleanSuggested.endsWith(';')) {
+    replaceEnd = look + 1;
+  }
+
+  const startPos = offsetToLineCol(fullText, replaceStart);
+  const endPos = offsetToLineCol(fullText, replaceEnd);
+  const newFullText = fullText.slice(0, replaceStart) + cleanSuggested + fullText.slice(replaceEnd);
+
+  return {
+    startLine: startPos.line,
+    startColumn: startPos.column,
+    endLine: endPos.line,
+    endColumn: endPos.column,
+    replacementText: cleanSuggested,
+    newFullText,
   };
 }

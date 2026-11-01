@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import confetti from 'canvas-confetti';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { EditorWorkspace, extractStatementAtPosition, extractStatementAtCursor, findActiveDatabaseAtPosition } from './components/EditorWorkspace';
+import { EditorWorkspace, extractStatementAtCursor, findActiveDatabaseAtPosition } from './components/EditorWorkspace';
 import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
@@ -13,7 +13,7 @@ import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
 import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
 import { dbStorage } from './services/storage';
-import { reviewSqlQuery } from './services/sqlReviewer';
+import { reviewSqlQuery, resolveReviewTargetRange, applySuggestedSqlToScript } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
 import type { VisiblePanels } from './components/MainMenuDropdown';
 import type {
@@ -26,9 +26,11 @@ import type {
   FontTheme,
   ContextMenuTarget,
   SqlReview,
+  ReviewTargetRange,
   DatabasePreset,
   ConsoleTab,
   TablePreviewData,
+  DataPreviewLimit,
 } from './types';
 
 const INITIAL_TABS: TabItem[] = [
@@ -143,13 +145,18 @@ export const App: React.FC = () => {
   const [sqlReview, setSqlReview] = useState<SqlReview | null>(null);
   const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>('data');
 
-  // Tabela selecionada para visualização de Dados (LIMIT 30)
+  // Tabela selecionada e limite ativo de visualização na aba Dados (Limit 30 -> Limit 100 -> Total)
   const [selectedTable, setSelectedTable] = useState<{ dbName: string; tableName: string } | null>(null);
   const [tablePreviewData, setTablePreviewData] = useState<TablePreviewData | null>(null);
+  const [dataPreviewLimit, setDataPreviewLimit] = useState<DataPreviewLimit>(30);
+  const dataPreviewLimitRef = useRef<DataPreviewLimit>(30);
   const selectedTableRef = useRef<{ dbName: string; tableName: string } | null>(null);
   useEffect(() => {
     selectedTableRef.current = selectedTable;
   }, [selectedTable]);
+  useEffect(() => {
+    dataPreviewLimitRef.current = dataPreviewLimit;
+  }, [dataPreviewLimit]);
 
   // Referência do Monaco Editor
   const editorRef = useRef<any>(null);
@@ -260,8 +267,14 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [persistWorkspace]);
 
-  // Seleção e carregamento de dados da tabela (LIMIT 30)
-  const handleSelectTable = useCallback(async (dbName: string, tableName: string, switchToDataTab: boolean = true) => {
+  // Seleção e carregamento de dados da tabela respeitando o limite ativo (Limit 30, Limit 100 ou Total)
+  const handleSelectTable = useCallback(async (
+    dbName: string,
+    tableName: string,
+    switchToDataTab: boolean = true,
+    overrideLimit?: DataPreviewLimit
+  ) => {
+    const effectiveLimit = overrideLimit !== undefined ? overrideLimit : dataPreviewLimitRef.current;
     setSelectedTable({ dbName, tableName });
     if (switchToDataTab) {
       setActiveConsoleTab('data');
@@ -275,7 +288,7 @@ export const App: React.FC = () => {
       isLoading: true,
     }));
     try {
-      const preview = await dbEngine.getTablePreviewData(dbName, tableName, 30);
+      const preview = await dbEngine.getTablePreviewData(dbName, tableName, effectiveLimit);
       setTablePreviewData({
         dbName,
         tableName,
@@ -304,6 +317,19 @@ export const App: React.FC = () => {
     }
   }, [handleSelectTable]);
 
+  // Alterna ciclicamente na aba Dados: Limit 30 -> Limit 100 -> Total -> Limit 30
+  const handleCycleDataPreviewLimit = useCallback(async () => {
+    const current = dataPreviewLimitRef.current;
+    const nextLimit: DataPreviewLimit = current === 30 ? 100 : current === 100 ? null : 30;
+    dataPreviewLimitRef.current = nextLimit;
+    setDataPreviewLimit(nextLimit);
+
+    if (selectedTableRef.current) {
+      const { dbName, tableName } = selectedTableRef.current;
+      await handleSelectTable(dbName, tableName, false, nextLimit);
+    }
+  }, [handleSelectTable]);
+
   // Recarregar schemas
   const refreshSchemas = useCallback(async () => {
     const tree = await dbEngine.getSchemaTree();
@@ -313,14 +339,14 @@ export const App: React.FC = () => {
       setActiveDatabase(currentActive);
     }
 
-    // Se há tabela selecionada, atualiza seus dados na aba Dados
+    // Se há tabela selecionada, atualiza seus dados na aba Dados mantendo o limite escolhido
     if (selectedTableRef.current) {
       const { dbName, tableName } = selectedTableRef.current;
       const dbFound = tree.find(d => d.name.toLowerCase() === dbName.toLowerCase());
       const tableFound = dbFound?.tables.find(t => t.name.toLowerCase() === tableName.toLowerCase());
       if (tableFound) {
         try {
-          const preview = await dbEngine.getTablePreviewData(dbName, tableName, 30);
+          const preview = await dbEngine.getTablePreviewData(dbName, tableName, dataPreviewLimitRef.current);
           setTablePreviewData({
             dbName,
             tableName,
@@ -507,14 +533,6 @@ export const App: React.FC = () => {
     }
   }, [results, activeTabId, executedTabId]);
 
-  // Revisar trecho selecionado (Alt+R) ou comando com erro no log
-  const handleReviewSnippet = useCallback((snippet: string, runtimeError?: string) => {
-    if (!snippet.trim()) return;
-    const rev = reviewSqlQuery(snippet, activeDatabase, schemas, runtimeError);
-    setSqlReview(rev);
-    setActiveConsoleTab('review');
-  }, [activeDatabase, schemas]);
-
   // Atualizar Conteúdo da Aba
   const handleUpdateTabContent = useCallback((id: string, content: string) => {
     setTabs(prev =>
@@ -522,21 +540,99 @@ export const App: React.FC = () => {
     );
   }, []);
 
-  // Aplicar sugestão da revisão no Editor
-  const handleApplyReviewSuggestion = useCallback((suggestedSql: string) => {
-    if (editorRef.current) {
-      const ed = editorRef.current;
-      const selection = ed.getSelection();
-      if (selection && !selection.isEmpty()) {
-        ed.executeEdits('review-apply', [{ range: selection, text: suggestedSql }]);
-      } else {
-        handleUpdateTabContent(activeTabId, suggestedSql);
-      }
+  // Revisar trecho selecionado (Alt+R) ou comando com erro no Retorno/Log, rastreando a faixa exata no script
+  const handleReviewSnippet = useCallback((
+    snippet: string,
+    runtimeError?: string,
+    targetOrHintLine?: ReviewTargetRange | number
+  ) => {
+    if (!snippet.trim()) return;
+
+    let resolvedRange: ReviewTargetRange | undefined;
+    if (targetOrHintLine && typeof targetOrHintLine === 'object') {
+      resolvedRange = targetOrHintLine;
     } else {
-      handleUpdateTabContent(activeTabId, suggestedSql);
+      const targetTabId = executedTabId || activeTabId;
+      const fullText =
+        editorRef.current && targetTabId === activeTabId
+          ? editorRef.current.getValue()
+          : tabs.find(t => t.id === targetTabId)?.content || '';
+      const hintLine = typeof targetOrHintLine === 'number' ? targetOrHintLine : undefined;
+      resolvedRange = resolveReviewTargetRange(fullText, snippet, targetTabId, hintLine);
     }
-    setActiveConsoleTab('grid');
-  }, [activeTabId, handleUpdateTabContent]);
+
+    const rev = reviewSqlQuery(snippet, activeDatabase, schemas, runtimeError);
+    setSqlReview({
+      ...rev,
+      targetRange: resolvedRange,
+    });
+    setActiveConsoleTab('review');
+  }, [activeDatabase, schemas, executedTabId, activeTabId, tabs]);
+
+  // Aplicar sugestão da revisão cirurgicamente na própria linha/faixa do comando (preservando os demais comandos)
+  const handleApplyReviewSuggestion = useCallback((suggestedSql: string) => {
+    const cleanSuggested = suggestedSql.trim();
+    if (!cleanSuggested) return;
+
+    const targetTabId = sqlReview?.targetRange?.tabId || activeTabId;
+    const isCurrentTab = targetTabId === activeTabId;
+    const ed = isCurrentTab ? editorRef.current : null;
+    const model = ed?.getModel?.();
+
+    const fullText = model
+      ? model.getValue()
+      : tabs.find(t => t.id === targetTabId)?.content || '';
+
+    const originalQuery = sqlReview?.originalQuery || '';
+    const replacement = applySuggestedSqlToScript(
+      fullText,
+      originalQuery,
+      cleanSuggested,
+      sqlReview?.targetRange
+    );
+
+    if (replacement) {
+      if (ed && model) {
+        ed.pushUndoStop();
+        ed.executeEdits('review-apply', [
+          {
+            range: {
+              startLineNumber: replacement.startLine,
+              startColumn: replacement.startColumn,
+              endLineNumber: replacement.endLine,
+              endColumn: replacement.endColumn,
+            },
+            text: replacement.replacementText,
+            forceMoveMarkers: true,
+          },
+        ]);
+        ed.pushUndoStop();
+        const updatedValue = model.getValue();
+        handleUpdateTabContent(targetTabId, updatedValue);
+        ed.revealLineInCenterIfOutsideViewport(replacement.startLine);
+        ed.setPosition({
+          lineNumber: replacement.startLine,
+          column: replacement.startColumn + replacement.replacementText.length,
+        });
+        ed.focus();
+      } else {
+        handleUpdateTabContent(targetTabId, replacement.newFullText);
+        if (!isCurrentTab) {
+          setActiveTabId(targetTabId);
+        }
+      }
+    } else if (ed && model) {
+      // Fallback seguro: caso o comando original já tenha sido removido manualmente, substitui apenas a seleção/cursor atual sem apagar o script
+      const selection = ed.getSelection();
+      if (selection) {
+        ed.pushUndoStop();
+        ed.executeEdits('review-apply', [{ range: selection, text: cleanSuggested, forceMoveMarkers: true }]);
+        ed.pushUndoStop();
+        handleUpdateTabContent(activeTabId, model.getValue());
+        ed.focus();
+      }
+    }
+  }, [sqlReview, activeTabId, tabs, handleUpdateTabContent]);
 
   // Nova Aba
   const handleNewTab = useCallback((initialContent?: string, tabName?: string) => {
@@ -661,10 +757,30 @@ export const App: React.FC = () => {
     });
   }, [activeTabId]);
 
-  // Limpar Editor
+  // Limpar Editor (solicita confirmação antes de apagar o conteúdo do script atual e preserva Ctrl+Z)
   const handleClearEditor = useCallback(() => {
+    if (!activeTabId) return;
+    if (!window.confirm('Tem certeza que deseja limpar todo o conteúdo do script atual?')) {
+      return;
+    }
+
+    const ed = editorRef.current;
+    const model = ed?.getModel?.();
+    if (ed && model && model.getValue().length > 0) {
+      ed.pushUndoStop();
+      ed.executeEdits('clear-editor', [
+        {
+          range: model.getFullModelRange(),
+          text: '',
+          forceMoveMarkers: true,
+        },
+      ]);
+      ed.pushUndoStop();
+      ed.focus();
+    }
+
     setTabs(prev =>
-      prev.map(t => (t.id === activeTabId ? { ...t, content: '' } : t))
+      prev.map(t => (t.id === activeTabId ? { ...t, content: '', isDirty: true } : t))
     );
   }, [activeTabId]);
 
@@ -834,29 +950,57 @@ export const App: React.FC = () => {
         e.preventDefault();
         if (editorRef.current) {
           const ed = editorRef.current;
+          const model = ed.getModel();
           const selection = ed.getSelection();
           let toReview = '';
-          if (selection && !selection.isEmpty()) {
-            toReview = ed.getModel()?.getValueInRange(selection) || '';
-          } else {
-            const model = ed.getModel();
+          let targetRange: ReviewTargetRange | undefined;
+          if (selection && !selection.isEmpty() && model) {
+            const fullVal = model.getValue();
+            const sOff = model.getOffsetAt({ lineNumber: selection.startLineNumber, column: selection.startColumn });
+            const eOff = model.getOffsetAt({ lineNumber: selection.endLineNumber, column: selection.endColumn });
+            const rawSel = fullVal.slice(sOff, eOff);
+            const lead = rawSel.length - rawSel.trimStart().length;
+            const trail = rawSel.length - rawSel.trimEnd().length;
+            const sPos = model.getPositionAt(sOff + lead);
+            const ePos = model.getPositionAt(Math.max(sOff + lead, eOff - trail));
+            toReview = rawSel.trim();
+            if (toReview) {
+              targetRange = {
+                tabId: activeTabId,
+                startLine: sPos.lineNumber,
+                startColumn: sPos.column,
+                endLine: ePos.lineNumber,
+                endColumn: ePos.column,
+              };
+            }
+          } else if (model) {
             const pos = ed.getPosition();
-            if (model && pos) {
-              toReview = extractStatementAtPosition(model.getValue(), pos) || '';
+            if (pos) {
+              const extracted = extractStatementAtCursor(model.getValue(), pos);
+              if (extracted) {
+                toReview = extracted.statement;
+                targetRange = {
+                  tabId: activeTabId,
+                  startLine: extracted.startLine,
+                  startColumn: extracted.startColumn,
+                  endLine: extracted.endLine,
+                  endColumn: extracted.endColumn,
+                };
+              }
             }
           }
-          if (!toReview.trim()) {
-            toReview = ed.getValue();
+          if (!toReview.trim() && model) {
+            toReview = model.getValue();
           }
           if (toReview.trim()) {
-            handleReviewSnippet(toReview.trim());
+            handleReviewSnippet(toReview.trim(), undefined, targetRange);
           }
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleRunQuery, handleNewTab, handleRunCurrentSnippet, handleReviewSnippet, handleToggleTheme, handleToggleFontTheme, handleExportScript]);
+  }, [activeTabId, handleRunQuery, handleNewTab, handleRunCurrentSnippet, handleReviewSnippet, handleToggleTheme, handleToggleFontTheme, handleExportScript]);
 
   // Redimensionamento de Painéis (Mouse Listeners)
   useEffect(() => {
@@ -1111,6 +1255,8 @@ export const App: React.FC = () => {
                     onReviewSnippet={handleReviewSnippet}
                     selectedResultIndex={selectedResultIndex}
                     onSelectResultIndex={handleConsoleSelectResultIndex}
+                    dataPreviewLimit={dataPreviewLimit}
+                    onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
                   />
                 </div>
               </>
@@ -1187,6 +1333,8 @@ export const App: React.FC = () => {
                   onReviewSnippet={handleReviewSnippet}
                   selectedResultIndex={selectedResultIndex}
                   onSelectResultIndex={handleConsoleSelectResultIndex}
+                  dataPreviewLimit={dataPreviewLimit}
+                  onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
                 />
               </div>
             ) : (

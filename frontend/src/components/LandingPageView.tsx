@@ -20,11 +20,24 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.1.20',
+    date: '01/11/2026',
+    title: 'Ciclo Dinâmico de Registros (Limit 30 / 100 / Total), Revisão SQL Cirúrgica In-Place, Confirmação ao Limpar e Contraste de Ícones nos Temas Claros',
+    isLatest: true,
+    tag: 'Lançamento Atual',
+    items: [
+      'Alternância rápida na aba Dados: clique no badge de limite para alternar entre Limit 30 → Limit 100 → Total → Limit 30, mantendo a escolha ativa ao navegar entre tabelas na sessão.',
+      'Contraste aprimorado no Schema Explorer: símbolos de campos convencionais e de chave estrangeira (FK) exibidos em cinza escuro nos temas claros (Light e Bege).',
+      'Segurança contra perda acidental no editor: o botão "Limpar" agora solicita confirmação antes de esvaziar o script e preserva o histórico de Desfazer (Ctrl+Z).',
+      'Aplicação cirúrgica na Revisão SQL: o botão "Aplicar no Editor" substitui estritamente o comando revisado em sua própria linha/faixa, mantendo todos os demais comandos do script intactos e sem injetar LIMIT 100 forçado.',
+    ],
+  },
+  {
     version: 'v3.1.19',
     date: '01/11/2026',
     title: 'Inspeção Multi-Comando Sincronizada ao Cursor, Ponto e Vírgula Automático, Retorno Fiel do Último Comando e BD E-Commerce (Semana 09)',
-    isLatest: true,
-    tag: 'Lançamento Atual',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Novos bancos e soluções de aula incorporados: banco db_ecommerce (Semana 09) e soluções de exercícios da Semana 08 (Pizzaria/Streaming e Escola de Idiomas) 100% compatíveis com o motor local.',
       'Retorno fiel do último comando executado: ao rodar múltiplos comandos, todos são executados em sequência e a guia Retorno exibe estritamente o último comando — inclusive com cabeçalhos preservados ("0 registros retornados") ou card detalhado de Erro SQL.',
@@ -252,9 +265,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   
-  // Estado para acordeom do Changelog: por padrão v3.1.19 começa expandido
+  // Estado para acordeom do Changelog: por padrão v3.1.20 começa expandido
   const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.1.19': true,
+    'v3.1.20': true,
   });
 
   const toggleVersion = (version: string) => {

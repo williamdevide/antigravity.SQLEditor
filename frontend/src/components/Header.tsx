@@ -249,7 +249,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onClearEditor}
               className="hidden md:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer"
-              title="Limpar Conteúdo do Editor Atual"
+              title="Limpar Conteúdo do Editor Atual (com confirmação)"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px]">clear_all</span>

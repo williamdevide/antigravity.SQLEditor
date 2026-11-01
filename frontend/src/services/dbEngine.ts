@@ -1245,7 +1245,7 @@ class DatabaseEngine {
   public async getTablePreviewData(
     dbName: string,
     tableName: string,
-    limit: number = 30
+    limit: number | null = 30
   ): Promise<{ columns: string[]; rows: Record<string, any>[]; totalRows: number }> {
     await this.initialize();
     try {
@@ -1264,21 +1264,25 @@ class DatabaseEngine {
 
       const dbObj = alasql.databases[dbName];
       const tableObj = dbObj?.tables?.[tableName];
+      const hasFiniteLimit = typeof limit === 'number' && limit > 0;
 
-      // Busca dados via query SQL com LIMIT
+      // Busca dados via query SQL (com LIMIT ou Total sem LIMIT)
       try {
-        const queryRes = alasql(`SELECT * FROM \`${tableName}\` LIMIT ${limit};`);
+        const sqlQuery = hasFiniteLimit
+          ? `SELECT * FROM \`${tableName}\` LIMIT ${limit};`
+          : `SELECT * FROM \`${tableName}\`;`;
+        const queryRes = alasql(sqlQuery);
         if (Array.isArray(queryRes)) {
           rows = queryRes;
           if (rows.length > 0 && typeof rows[0] === 'object') {
             columns = Object.keys(rows[0]);
           }
         }
-      } catch (sqlErr) {
+      } catch {
         // Fallback para ler direto dos dados do objeto da tabela caso SELECT falhe
         if (tableObj && Array.isArray((tableObj as any).data)) {
           const allData = (tableObj as any).data;
-          rows = allData.slice(0, limit);
+          rows = hasFiniteLimit ? allData.slice(0, limit as number) : [...allData];
           if (rows.length > 0 && typeof rows[0] === 'object') {
             columns = Object.keys(rows[0]);
           }

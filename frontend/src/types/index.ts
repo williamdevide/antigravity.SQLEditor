@@ -156,15 +156,26 @@ export interface ContextMenuTarget {
   y: number;
 }
 
+export interface ReviewTargetRange {
+  tabId: string;
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+}
+
 export interface SqlReview {
   originalQuery: string;
   errorsDetected: string[];
   suggestedQuery: string;
   recommendations: string[];
   timestamp: string;
+  targetRange?: ReviewTargetRange;
 }
 
 export type ConsoleTab = 'data' | 'grid' | 'log' | 'review';
+
+export type DataPreviewLimit = 30 | 100 | null;
 
 export interface TablePreviewData {
   dbName: string;

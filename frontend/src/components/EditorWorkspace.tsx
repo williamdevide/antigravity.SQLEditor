@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
-import type { TabItem, ThemeMode, FontTheme, DatabaseSchema, QueryResult } from '../types';
+import type { TabItem, ThemeMode, FontTheme, DatabaseSchema, QueryResult, ReviewTargetRange } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 import { registerEnhancedSqlLanguage } from '../services/mysqlLanguageDefinition';
@@ -288,7 +288,7 @@ interface EditorWorkspaceProps {
   onUpdateContent: (id: string, content: string) => void;
   onRunQuery: () => void;
   onRunSnippet: (snippet: string, baseStartLine?: number) => void;
-  onReviewSnippet: (snippet: string) => void;
+  onReviewSnippet: (snippet: string, runtimeError?: string, targetRange?: ReviewTargetRange) => void;
   zoomLevel: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -643,21 +643,87 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     flushPendingContent();
     const ed = editorRef.current;
     let codeToReview = '';
+    let targetRange: ReviewTargetRange | undefined;
     if (ed) {
       const selection = ed.getSelection();
       const model = ed.getModel();
       const pos = ed.getPosition();
-      if (selection && !selection.isEmpty()) {
-        codeToReview = model?.getValueInRange(selection) || '';
-      } else if (model && pos) {
-        codeToReview = extractStatementAtCursor(model.getValue(), pos)?.statement || '';
+
+      // Sincroniza banco ativo caso haja comando USE precedente no script
+      if (model && pos && onSelectDatabaseRef.current) {
+        const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
+        if (detectedDb) {
+          const matchedDb = (schemasRef.current || []).find(
+            s => s.name.toLowerCase() === detectedDb.toLowerCase()
+          );
+          const finalDbName = matchedDb ? matchedDb.name : detectedDb;
+          if (finalDbName !== activeDatabaseRef.current) {
+            onSelectDatabaseRef.current(finalDbName);
+          }
+        }
       }
-      if (!codeToReview.trim()) {
-        codeToReview = ed.getValue();
+
+      if (selection && !selection.isEmpty() && model) {
+        const fullVal = model.getValue();
+        const startOffset = model.getOffsetAt({
+          lineNumber: selection.startLineNumber,
+          column: selection.startColumn,
+        });
+        const endOffset = model.getOffsetAt({
+          lineNumber: selection.endLineNumber,
+          column: selection.endColumn,
+        });
+        const rawSel = fullVal.slice(startOffset, endOffset);
+        const leadLen = rawSel.length - rawSel.trimStart().length;
+        const trailLen = rawSel.length - rawSel.trimEnd().length;
+        const trimmedStart = startOffset + leadLen;
+        const trimmedEnd = Math.max(trimmedStart, endOffset - trailLen);
+        const startPos = model.getPositionAt(trimmedStart);
+        const endPos = model.getPositionAt(trimmedEnd);
+
+        codeToReview = rawSel.slice(leadLen, rawSel.length - trailLen);
+        if (codeToReview) {
+          targetRange = {
+            tabId: currentTabIdRef.current,
+            startLine: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLine: endPos.lineNumber,
+            endColumn: endPos.column,
+          };
+        }
+      } else if (model && pos) {
+        const extracted = extractStatementAtCursor(model.getValue(), pos);
+        if (extracted && extracted.statement.trim()) {
+          codeToReview = extracted.statement;
+          targetRange = {
+            tabId: currentTabIdRef.current,
+            startLine: extracted.startLine,
+            startColumn: extracted.startColumn,
+            endLine: extracted.endLine,
+            endColumn: extracted.endColumn,
+          };
+        }
+      }
+      if (!codeToReview.trim() && model) {
+        const fullVal = model.getValue();
+        if (fullVal.trim()) {
+          const leadLen = fullVal.length - fullVal.trimStart().length;
+          const trailLen = fullVal.length - fullVal.trimEnd().length;
+          const startPos = model.getPositionAt(leadLen);
+          const endPos = model.getPositionAt(Math.max(leadLen, fullVal.length - trailLen));
+          codeToReview = fullVal.trim();
+          targetRange = {
+            tabId: currentTabIdRef.current,
+            startLine: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLine: endPos.lineNumber,
+            endColumn: endPos.column,
+          };
+        }
       }
     }
     if (codeToReview.trim()) {
-      onReviewSnippetRef.current(codeToReview.trim());
+      onReviewSnippetRef.current(codeToReview.trim(), undefined, targetRange);
     }
   }, [flushPendingContent]);
 
