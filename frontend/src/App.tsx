@@ -1034,32 +1034,67 @@ export const App: React.FC = () => {
 
   // Integração da Galeria, Templates e Desafios com a IDE
   const handleInstantiateSqlAndOpenView = useCallback(async (params: {
+    title?: string;
     dbName: string;
     sql: string;
     targetView: 'er-diagram' | 'workspace' | 'er-model';
     enableSplitView?: boolean;
+    onProgress?: (progress: { percent: number; label: string }) => void;
   }) => {
     setIsExecuting(true);
     try {
-      if (params.sql.trim()) {
-        await dbEngine.executeScript(params.sql);
+      params.onProgress?.({ percent: 15, label: 'Verificando estado do banco...' });
+
+      const alreadyLoaded = dbEngine.isDatabaseLoaded(params.dbName);
+
+      if (!alreadyLoaded && params.sql.trim()) {
+        params.onProgress?.({ percent: 30, label: 'Compilando tabelas no motor AlaSQL...' });
+
+        await dbEngine.executeScript(params.sql, 1, {
+          recordHistory: false, // Não polui o histórico interativo do aluno com dezenas de INSERTs internos
+          onProgress: (p) => {
+            const mappedPct = 30 + Math.round((p.percent * 0.50)); // 30% a 80%
+            params.onProgress?.({
+              percent: mappedPct,
+              label: `Instanciando tabelas e registros (${p.current}/${p.total})...`,
+            });
+          },
+        });
+
+        params.onProgress?.({ percent: 85, label: 'Atualizando catálogo de esquemas...' });
         await refreshSchemas();
       }
+
+      params.onProgress?.({ percent: 92, label: 'Ativando contexto...' });
       if (params.dbName) {
         dbEngine.setActiveDatabase(params.dbName);
         setActiveDatabase(params.dbName);
       }
+
+      const newTitle = params.title || `${params.dbName || 'modelo'}.sql`;
       const newTabId = `tab-template-${Date.now()}`;
-      const newTitle = `${params.dbName || 'modelo'}.sql`;
-      setTabs((prev) => [
-        ...prev,
-        { id: newTabId, title: newTitle, content: params.sql },
-      ]);
-      setActiveTabId(newTabId);
+
+      setTabs((prev) => {
+        // Se já existe uma aba com o mesmo título e mesmo conteúdo, reutiliza para não duplicar abas
+        const existing = prev.find((t) => t.title === newTitle && t.content === params.sql);
+        if (existing) {
+          setActiveTabId(existing.id);
+          return prev;
+        }
+        return [
+          ...prev,
+          { id: newTabId, title: newTitle, content: params.sql },
+        ];
+      });
+      setActiveTabId((curr) => (curr.startsWith('tab-template') ? newTabId : newTabId));
 
       if (params.enableSplitView && params.targetView === 'workspace') {
         setWorkspaceLayoutMode('split');
       }
+
+      params.onProgress?.({ percent: 100, label: 'Concluído!' });
+      // Pequeno timeout sutil para a barra completar 100% de forma visualmente fluida
+      await new Promise((r) => setTimeout(r, 120));
       setActiveView(params.targetView);
     } finally {
       setIsExecuting(false);

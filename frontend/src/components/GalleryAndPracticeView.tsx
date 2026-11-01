@@ -156,6 +156,7 @@ export interface GalleryAndPracticeViewProps {
     sql: string;
     targetView: 'er-diagram' | 'workspace' | 'er-model';
     enableSplitView?: boolean;
+    onProgress?: (progress: { percent: number; label: string }) => void;
   }) => Promise<void> | void;
   onLoadPreset: (preset: DatabasePreset) => Promise<void> | void;
   onStartExercise: (exercise: PracticeExerciseItem) => Promise<void> | void;
@@ -177,7 +178,55 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
   const [progressMap, setProgressMap] = useState<
     Record<string, StoredExerciseProgress>
   >({});
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [loadingTarget, setLoadingTarget] = useState<string | null>(null);
+  const [instantiationProgress, setInstantiationProgress] = useState<{
+    active: boolean;
+    targetId: string;
+    title: string;
+    targetView: string;
+    percent: number;
+    label: string;
+  } | null>(null);
+
+  // Helper centralizado com rastreamento de progresso e barra de carregamento visual
+  const handleOpenItem = async (options: {
+    id: string;
+    title: string;
+    dbName: string;
+    sql: string;
+    targetView: 'er-diagram' | 'workspace' | 'er-model';
+    enableSplitView?: boolean;
+  }) => {
+    setLoadingTarget(options.id);
+    setInstantiationProgress({
+      active: true,
+      targetId: options.id,
+      title: options.dbName,
+      targetView: options.targetView === 'er-diagram' ? 'Estúdio DER' : 'Laboratório SQL',
+      percent: 15,
+      label: 'Preparando ambiente...',
+    });
+
+    try {
+      await onInstantiateSqlAndOpenView({
+        title: options.title,
+        dbName: options.dbName,
+        sql: options.sql,
+        targetView: options.targetView,
+        enableSplitView: options.enableSplitView,
+        onProgress: (p) => {
+          setInstantiationProgress((curr) =>
+            curr
+              ? { ...curr, percent: p.percent, label: p.label }
+              : null
+          );
+        },
+      });
+    } finally {
+      setLoadingTarget(null);
+      setInstantiationProgress(null);
+    }
+  };
 
   // Carrega modelos salvos pelo aluno e progresso nos desafios
   const refreshLocalRecords = async () => {
@@ -257,7 +306,54 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden">
+    <div className="flex-1 flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden relative">
+      {/* Barra de Progresso de Carregamento Flutuante */}
+      {instantiationProgress && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-150">
+          <div className="rounded-2xl bg-[var(--bg-surface)]/95 border-2 border-[#FF6B00] p-4 shadow-2xl backdrop-blur-md space-y-2.5 pointer-events-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-[#FF6B00] animate-spin text-[20px]">
+                  progress_activity
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                    <span>Carregando {instantiationProgress.title}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FF6B00]/15 text-[#FF6B00] font-normal">
+                      → {instantiationProgress.targetView}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+                    {instantiationProgress.label}
+                  </p>
+                </div>
+              </div>
+              <span className="text-sm font-mono font-extrabold text-[var(--accent-yellow)]">
+                {instantiationProgress.percent}%
+              </span>
+            </div>
+
+            {/* Trilho da Barra de Carregamento */}
+            <div className="w-full h-2 rounded-full bg-[var(--bg-primary)] overflow-hidden border border-[var(--border-color)]">
+              <div
+                className="h-full bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFB300] rounded-full transition-all duration-150 ease-out shadow-sm"
+                style={{ width: `${Math.max(5, instantiationProgress.percent)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Linha Fina de Progresso no Topo */}
+      {instantiationProgress && (
+        <div className="w-full h-1 bg-[var(--bg-primary)] overflow-hidden shrink-0 z-40">
+          <div
+            className="h-full bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFB300] transition-all duration-150 ease-out"
+            style={{ width: `${Math.max(5, instantiationProgress.percent)}%` }}
+          />
+        </div>
+      )}
+
       {/* Cabeçalho da Galeria & Prática Guiada */}
       <div className="px-6 py-4 bg-[var(--bg-surface)] border-b border-[var(--border-color)] flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -426,32 +522,40 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          disabled={loadingId === item.dbName}
-                          onClick={async () => {
-                            setLoadingId(item.dbName);
-                            try {
-                              await onInstantiateSqlAndOpenView({
-                                title: `${item.dbName}.sql`,
-                                dbName: item.dbName,
-                                sql: item.sql,
-                                targetView: 'er-diagram',
-                              });
-                            } finally {
-                              setLoadingId(null);
-                            }
-                          }}
-                          className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          disabled={Boolean(loadingTarget)}
+                          onClick={() =>
+                            handleOpenItem({
+                              id: `der-${item.dbName}`,
+                              title: `${item.dbName}.sql`,
+                              dbName: item.dbName,
+                              sql: item.sql,
+                              targetView: 'er-diagram',
+                            })
+                          }
+                          className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                         >
-                          <span className="material-symbols-outlined text-[14px]">
-                            account_tree
+                          <span
+                            className={`material-symbols-outlined text-[15px] ${
+                              loadingTarget === `der-${item.dbName}` ? 'animate-spin' : ''
+                            }`}
+                          >
+                            {loadingTarget === `der-${item.dbName}`
+                              ? 'progress_activity'
+                              : 'account_tree'}
                           </span>
-                          <span>Abrir DER</span>
+                          <span>
+                            {loadingTarget === `der-${item.dbName}`
+                              ? 'Carregando...'
+                              : 'Abrir DER'}
+                          </span>
                         </button>
 
                         <button
                           type="button"
+                          disabled={Boolean(loadingTarget)}
                           onClick={() =>
-                            onInstantiateSqlAndOpenView({
+                            handleOpenItem({
+                              id: `lab-${item.dbName}`,
                               title: `${item.dbName}.sql`,
                               dbName: item.dbName,
                               sql: item.sql,
@@ -459,12 +563,22 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                               enableSplitView: false,
                             })
                           }
-                          className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-center gap-1 cursor-pointer"
+                          className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                         >
-                          <span className="material-symbols-outlined text-[14px] text-[var(--accent-yellow)]">
-                            terminal
+                          <span
+                            className={`material-symbols-outlined text-[15px] text-[var(--accent-yellow)] ${
+                              loadingTarget === `lab-${item.dbName}` ? 'animate-spin' : ''
+                            }`}
+                          >
+                            {loadingTarget === `lab-${item.dbName}`
+                              ? 'progress_activity'
+                              : 'terminal'}
                           </span>
-                          <span>Laboratório</span>
+                          <span>
+                            {loadingTarget === `lab-${item.dbName}`
+                              ? 'Carregando...'
+                              : 'Laboratório'}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -552,26 +666,40 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                         <div className="grid grid-cols-2 gap-2 pt-1">
                           <button
                             type="button"
+                            disabled={Boolean(loadingTarget)}
                             onClick={() =>
-                              onInstantiateSqlAndOpenView({
+                              handleOpenItem({
+                                id: `der-tpl-${tpl.id}`,
                                 title: `${tpl.dbName}.sql`,
                                 dbName: tpl.dbName,
                                 sql: tpl.ddlSql,
                                 targetView: 'er-diagram',
                               })
                             }
-                            className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                            className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                           >
-                            <span className="material-symbols-outlined text-[14px]">
-                              account_tree
+                            <span
+                              className={`material-symbols-outlined text-[15px] ${
+                                loadingTarget === `der-tpl-${tpl.id}` ? 'animate-spin' : ''
+                              }`}
+                            >
+                              {loadingTarget === `der-tpl-${tpl.id}`
+                                ? 'progress_activity'
+                                : 'account_tree'}
                             </span>
-                            <span>Estúdio DER</span>
+                            <span>
+                              {loadingTarget === `der-tpl-${tpl.id}`
+                                ? 'Carregando...'
+                                : 'Estúdio DER'}
+                            </span>
                           </button>
 
                           <button
                             type="button"
+                            disabled={Boolean(loadingTarget)}
                             onClick={() =>
-                              onInstantiateSqlAndOpenView({
+                              handleOpenItem({
+                                id: `lab-tpl-${tpl.id}`,
                                 title: `${tpl.dbName}.sql`,
                                 dbName: tpl.dbName,
                                 sql: tpl.ddlSql,
@@ -579,12 +707,22 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                                 enableSplitView: true,
                               })
                             }
-                            className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-center gap-1 cursor-pointer"
+                            className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                           >
-                            <span className="material-symbols-outlined text-[14px] text-[#29B6F6]">
-                              vertical_split
+                            <span
+                              className={`material-symbols-outlined text-[15px] text-[#29B6F6] ${
+                                loadingTarget === `lab-tpl-${tpl.id}` ? 'animate-spin' : ''
+                              }`}
+                            >
+                              {loadingTarget === `lab-tpl-${tpl.id}`
+                                ? 'progress_activity'
+                                : 'vertical_split'}
                             </span>
-                            <span>SQL ↔ DER</span>
+                            <span>
+                              {loadingTarget === `lab-tpl-${tpl.id}`
+                                ? 'Carregando...'
+                                : 'SQL ↔ DER'}
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -794,16 +932,27 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                           <div className="grid grid-cols-2 gap-2">
                             <button
                               type="button"
-                              onClick={() => onRestoreSavedDiagram(rec)}
-                              className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold cursor-pointer"
+                              disabled={Boolean(loadingTarget)}
+                              onClick={async () => {
+                                setLoadingTarget(`saved-der-${rec.id}`);
+                                try {
+                                  await onRestoreSavedDiagram(rec);
+                                } finally {
+                                  setLoadingTarget(null);
+                                }
+                              }}
+                              className="py-1.5 px-2.5 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                             >
-                              Abrir no DER
+                              <span className="material-symbols-outlined text-[15px]">account_tree</span>
+                              <span>Abrir no DER</span>
                             </button>
                             {rec.ddlSql && (
                               <button
                                 type="button"
+                                disabled={Boolean(loadingTarget)}
                                 onClick={() =>
-                                  onInstantiateSqlAndOpenView({
+                                  handleOpenItem({
+                                    id: `saved-lab-${rec.id}`,
                                     title: `${rec.dbName || 'modelo'}.sql`,
                                     dbName: rec.dbName || 'meu_modelo_db',
                                     sql: rec.ddlSql!,
@@ -811,9 +960,22 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                                     enableSplitView: true,
                                   })
                                 }
-                                className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold cursor-pointer"
+                                className="py-1.5 px-2.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 border border-[var(--border-color)] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                               >
-                                SQL ↔ DER
+                                <span
+                                  className={`material-symbols-outlined text-[15px] text-[#29B6F6] ${
+                                    loadingTarget === `saved-lab-${rec.id}` ? 'animate-spin' : ''
+                                  }`}
+                                >
+                                  {loadingTarget === `saved-lab-${rec.id}`
+                                    ? 'progress_activity'
+                                    : 'vertical_split'}
+                                </span>
+                                <span>
+                                  {loadingTarget === `saved-lab-${rec.id}`
+                                    ? 'Carregando...'
+                                    : 'SQL ↔ DER'}
+                                </span>
                               </button>
                             )}
                           </div>

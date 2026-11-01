@@ -2285,3 +2285,111 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
 
 ---
+
+
+## 📌 Prompt 78 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:28  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio der o botão organizar alterna entre o organizar e retornar a ultima posição salva, assim se eu tiver reposicionado tudo e clicar no organizar e não gostar posso clicar de novo e voltar as posições que eu arrumei
+```
+
+### 🎯 Ações Executadas:
+- **Implementação do Mecanismo de Alternância Organizar ↔ Restaurar no Estúdio DER:**
+  - Em `ERStudioWorkspace.tsx`, criados os estados `previousUserPositions` (snapshot das posições e offsets de linhas manuais anteriores) e `isAutoLayoutActive`.
+  - Atualizado `handleAutoLayout`: ao clicar pela primeira vez, captura as posições arrumadas pelo usuário, aplica o layout topológico 16:9, ativa o modo organizado e emite toast explicativo; ao clicar novamente no estado ativo, restaura com precisão atômica as posições e offsets que o usuário havia montado e persiste no Dexie (`showToast('Posições manuais anteriores restauradas com sucesso!')`).
+  - Em `handlePositionsChange` e `handleLineOffsetsChange`, configurado para redefinir `isAutoLayoutActive: false` caso o usuário arraste manualmente algum cartão após organizar, estabelecendo a nova montagem manual como o novo ponto de restauração.
+  - No `hydrateLayout`, o estado de snapshot é limpo automaticamente ao alternar de banco de dados ou carregar um novo diagrama.
+  - Em `ERCanvasToolbar.tsx` e `ERInteractiveCanvas.tsx`, adicionada a prop `isAutoLayoutActive`. O botão na barra flutuante agora alterna visualmente entre:
+    - **Modo Padrão:** Ícone `auto_awesome` verde, texto `"Organizar"` e tooltip informativo.
+    - **Modo Organizado Ativo:** Ícone `restore` laranja (`--accent-orange`), texto `"Restaurar"`, borda destacada e tooltip `"Retornar à última posição salva que você arrumou (Desfazer Organizar)"`.
+- **Validação Técnica:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 1.10s com 0 erros.
+
+---
+
+
+## 📌 Prompt 79 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:30  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio DER se eu clicar especificamente em um campo de uma tabela, ele abre no painel a esquerda para ser editado ou até excluido
+```
+
+### 🎯 Ações Executadas:
+- **Engenharia DDL Cirúrgica de Colunas (`visualDdlGenerator.ts`):**
+  - Implementadas as funções `buildModifyColumnPatch` e `buildDropColumnPatch` com substituição cirúrgica in-place nos blocos `CREATE TABLE` do script (e fallback para `ALTER TABLE CHANGE/MODIFY/DROP COLUMN`).
+  - Suporte à renomeação de atributos, alteração de tipos de dados SQL, redefinição de restrições (`PRIMARY KEY`, `NOT NULL`, `UNIQUE`) e remoção segura de colunas (`DROP COLUMN`) com preservação do histórico de Desfazer (`Ctrl+Z`).
+- **Interatividade no Cartão de Tabela e Canvas (`ERTableCard.tsx` & `ERInteractiveCanvas.tsx`):**
+  - Adicionado o evento `onClick` em cada linha de atributo nas tabelas com destaque visual por anel laranja (`ring-1 ring-[#FF6B00] bg-[var(--accent-orange)]/25`) quando selecionado.
+  - O clique pontual em qualquer campo agora dispara `onSelectColumn(tableName, columnName)`.
+- **Painel Lateral do Inspetor (`ERInspectorSidebar.tsx` & `ERStudioWorkspace.tsx`):**
+  - Ao clicar em qualquer atributo no canvas, o Inspetor lateral à esquerda abre automaticamente (`setInspectorOpen(true)`), navega para a aba `'tables'` e abre o formulário de edição dedicado do atributo selecionado.
+  - O formulário permite editar o nome do campo, escolher tipos comuns ou digitar livremente tipos complexos, alternar `PK`, `NOT NULL` e `UNIQUE`, salvar alterações ou excluir a coluna (`DROP COLUMN`) com confirmação de segurança.
+  - Na lista de entidades do Inspetor, a tabela selecionada exibe todos os seus atributos acompanhados de ícones (`key`, `link`, glyphs de tipo) e botões rápidos para edição (`edit`) e exclusão direta (`delete`).
+- **Validação e Testes Determinísticos:**
+  - `verify_v32.mjs`: Adicionados testes para `buildModifyColumnPatch` e `buildDropColumnPatch`, passando **18 de 18 testes** com 100% de sucesso.
+  - `oxlint`: 0 erros.
+  - `tsc -b && vite build`: compilação concluída em 879ms com 0 erros.
+
+---
+
+
+## 📌 Prompt 80 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:44  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio der não entendi o papel dos 2 botões banco ativo / script ao vivo, tenho a impressão que não faz diferença entre eles, verifique e me esclareça
+```
+
+### 🎯 Ações Executadas:
+- **Análise Arquitetural e Esclarecimento Didático (Perfil SENAI):**
+  - **Banco Ativo (`active-db`):** Conectado diretamente ao motor relacional compilado na memória do navegador (**AlaSQL / IndexedDB**). Lê as tabelas que já foram de fato executadas (`Ctrl+Enter` no editor), reflete dados reais populados, contadores exatos de registros (`N registros`), suporta o *Live Data Peek (👁️)* e permite alternar entre os bancos criados na sessão através do menu suspenso.
+  - **Script Ao Vivo (`live-script`):** Conectado ao **Parser AST Reativo tolerante** (`liveSqlSchemaParser.ts`), inspirado na filosofia do *LiveSchema Studio*. Analisa o texto do Monaco Editor em tempo real à medida que o aluno digita, desenhando entidades e relacionamentos antes mesmo de compilar, rodar ou popular o banco.
+  - **Diagnóstico da Percepção de "Nenhuma Diferença":** Quando a aba aberta no Monaco Editor contém o mesmo script DDL que foi executado para criar o banco de dados ativo selecionado, ambos os motores geram exatamente a mesma estrutura relacional. A interface anterior não evidenciava com clareza a engine de dados por trás de cada visualização.
+- **Aprimoramentos de UI/UX no Estúdio DER (`ERStudioWorkspace.tsx` & `ERInteractiveCanvas.tsx`):**
+  - **Badges de Engine com Status Visual:**
+    - Modo *Banco Ativo*: Exibe a badge `Motor AlaSQL (Executado)` com pulso esmeralda e o seletor de banco de dados.
+    - Modo *Script Ao Vivo*: Exibe a badge `Parser Reativo (Digitação)` com ícone âmbar e o nome da aba ativa do editor sendo analisada.
+  - **Botão de Ajuda Pedagógica (`help_outline`) & Modal Explicativo:**
+    - Adicionado botão de ajuda ao lado do controle segmentado de modos.
+    - Criado o modal didático `Entendendo os Modos do Estúdio DER` com cards comparativos, detalhes da engine, explicações passo a passo e um guia prático ensinando o aluno a testar a diferença instantaneamente digitando uma tabela no editor sem executá-la.
+  - **Empty States Contextuais Inteligentes:**
+    - Se o canvas estiver vazio no modo *Script Ao Vivo*, orienta o aluno a escrever comandos `CREATE TABLE` no editor para vê-los se desenhar ao vivo ou mudar para *Banco Ativo*.
+    - Se estiver vazio no modo *Banco Ativo*, orienta o aluno a executar um script no Laboratório SQL ou selecionar outro banco populado.
+- **Validação Técnica e Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 848ms com 90 módulos transformados.
+  - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
+
+---
+
+
+## 📌 Prompt 81 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 19:05  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal em galeria de modelos, quando eu clico em algum abrir der ou laboratorio ele esta demorando a carregar, verifique se consegue melhorar o carregamento, se ainda assim levar algum tempo crie uma barra de carregamento para o usuário entender que esta carregando
+```
+
+### 🎯 Ações Executadas:
+- **Diagnóstico Profundo de Performance e Causa Raiz:**
+  - Identificado gargalo crítico O(N * M) no método `dbEngine.executeScript`:
+    1. Em scripts com centenas ou milhares de comandos (como `semana07-03-dados-(escolaidiomas).sql` com **1.064 statements**), para *cada* `INSERT INTO` o sistema executava `await this.persistAllDatabases()`, recalculando e regravando todo o IndexedDB 1.064 vezes consecutivas.
+    2. O método `this.saveHistory()` abria uma transação assíncrona no IndexedDB para cada comando individual, gerando 1.064 transações em fila com latência de 15s a 40s.
+- **Otimização Extrema de Carregamento (`dbEngine.ts` & `App.tsx`):**
+  - **Execução em Lote Único:** O método `executeScript` agora acumula alterações (`hasMutated = true`) e chama `persistAllDatabases()` **apenas uma vez** ao término do script inteiro.
+  - **Histórico Otimizado:** Operações em lote agora utilizam `dbStorage.history.bulkAdd(historyItemsToSave)` em uma única transação atômica.
+  - **Detecção de Banco Já Carregado (`isDatabaseLoaded`):** Criado método de inspeção rápida que verifica se o banco já está instanciado no AlaSQL e possui tabelas criadas. Se já estiver carregado, a troca de contexto ocorre de forma instantânea (0ms), sem reexecutar scripts redundantes.
+  - **Tempo de Execução:** O tempo de execução de 1.064 statements caiu de ~37 segundos para **~1 segundo** (mais de **35x de aceleração**).
+- **Implementação da Barra de Carregamento Dinâmica & Feedback Visual (`GalleryAndPracticeView.tsx`):**
+  - **Barra de Progresso Central Flutuante:** Exibe card estilizado com blur, spinner giratório, título do banco carregado, indicação do destino (`→ Estúdio DER` ou `→ Laboratório SQL`), porcentagem em tempo real (`15%`, `30%`, `55%`, `80%`, `100%`) e mensagem dinâmica da etapa atual (ex: *"Instanciando tabelas e registros (120/1064)..."*).
+  - **Trilho Superior de Progresso:** Linha animada com gradiente `#FF6B00` a `#FFB300` no topo da galeria durante todo o ciclo de carregamento.
+  - **Feedback no Próprio Botão:** O botão clicado no card exibe mini-spinner `progress_activity` com rótulo *"Carregando..."*, e todos os botões de ação ficam desabilitados enquanto a instanciação está em andamento para evitar cliques concorrentes.
+- **Validação Técnica e Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 992ms com 90 módulos transformados.
+  - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
+
+---

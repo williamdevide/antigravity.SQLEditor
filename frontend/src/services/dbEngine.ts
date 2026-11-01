@@ -196,6 +196,18 @@ class DatabaseEngine {
     return this.hideSystemDatabases;
   }
 
+  /**
+   * Verifica de forma síncrona se o banco de dados já está instanciado no AlaSQL e possui tabelas criadas.
+   */
+  public isDatabaseLoaded(dbName: string): boolean {
+    if (!dbName) return false;
+    const clean = dbName.toLowerCase().replace(/[`'"]/g, '');
+    const matched = Object.keys(alasql.databases).find(d => d.toLowerCase() === clean);
+    if (!matched) return false;
+    const tables = alasql.databases[matched]?.tables;
+    return Boolean(tables && Object.keys(tables).length > 0);
+  }
+
   public setHideSystemDatabases(hide: boolean): void {
     this.hideSystemDatabases = hide;
     try {
@@ -732,16 +744,49 @@ class DatabaseEngine {
     }
   }
 
-  public async executeScript(script: string, baseStartLine: number = 1): Promise<QueryResult[]> {
+  public async executeScript(
+    script: string,
+    baseStartLine: number = 1,
+    options?: {
+      recordHistory?: boolean;
+      skipPersist?: boolean;
+      onProgress?: (progress: {
+        percent: number;
+        current: number;
+        total: number;
+        statement: string;
+      }) => void;
+    }
+  ): Promise<QueryResult[]> {
     await this.initialize();
 
     // Divide em statements estruturados com rastreamento exato de linhas (com ou sem ';')
     const parsedStatements = parseSqlStatementsWithRanges(script);
     const results: QueryResult[] = [];
+    const historyItemsToSave: QueryHistoryItem[] = [];
+    let hasMutated = false;
+
+    const validStatements = parsedStatements.filter((p) => p.text.trim().length > 0);
+    const totalStatements = validStatements.length;
+    let executedCount = 0;
 
     for (const parsed of parsedStatements) {
       const stmt = parsed.text;
       if (!stmt.trim()) continue;
+
+      executedCount++;
+      if (
+        options?.onProgress &&
+        (executedCount % 10 === 0 || executedCount === totalStatements || totalStatements < 20)
+      ) {
+        const percent = Math.min(100, Math.round((executedCount / totalStatements) * 100));
+        options.onProgress({
+          percent,
+          current: executedCount,
+          total: totalStatements,
+          statement: stmt.substring(0, 60),
+        });
+      }
 
       const commandIndex = results.length;
       const startLine = baseStartLine + parsed.codeStartLine - 1;
@@ -770,6 +815,7 @@ class DatabaseEngine {
           // Cria o banco se não existir ainda no alasql
           if (!alasql.databases[targetDb]) {
             alasql(`CREATE DATABASE \`${targetDb}\`;`);
+            hasMutated = true;
           }
           alasql(`USE \`${targetDb}\`;`);
           this.activeDatabase = targetDb;
@@ -790,7 +836,17 @@ class DatabaseEngine {
             isSelectQuery: false,
           });
 
-          await this.saveHistory(stmt, 'success', execTime, 0);
+          if (options?.recordHistory !== false) {
+            historyItemsToSave.push({
+              id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + commandIndex,
+              query: stmt,
+              timestamp,
+              status: 'success',
+              executionTimeMs: execTime,
+              database: this.activeDatabase,
+              affectedRows: 0,
+            });
+          }
           continue;
         } catch (err: any) {
           const execTime = Math.round(performance.now() - startTime);
@@ -809,7 +865,17 @@ class DatabaseEngine {
             endLine,
             isSelectQuery: false,
           });
-          await this.saveHistory(stmt, 'error', execTime, 0, errMsg);
+          if (options?.recordHistory !== false) {
+            historyItemsToSave.push({
+              id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + commandIndex,
+              query: stmt,
+              timestamp,
+              status: 'error',
+              executionTimeMs: execTime,
+              database: this.activeDatabase,
+              errorMessage: errMsg,
+            });
+          }
           continue;
         }
       }
@@ -834,6 +900,7 @@ class DatabaseEngine {
           const newDb = Object.keys(alasql.databases).find(d => d.toLowerCase() === rawNewDb.toLowerCase()) || rawNewDb;
           this.activeDatabase = newDb;
           try { alasql(`USE \`${newDb}\`;`); } catch (_) {}
+          hasMutated = true;
         }
 
         let columns: string[] = [];
@@ -872,11 +939,21 @@ class DatabaseEngine {
           isSelectQuery: isSelectQuery || Array.isArray(res),
         });
 
-        await this.saveHistory(stmt, 'success', execTime, affectedRows);
+        if (options?.recordHistory !== false) {
+          historyItemsToSave.push({
+            id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + commandIndex,
+            query: stmt,
+            timestamp,
+            status: 'success',
+            executionTimeMs: execTime,
+            database: this.activeDatabase,
+            affectedRows,
+          });
+        }
 
-        // Se for DDL/DML que altera estrutura ou dados, persiste no IndexedDB
+        // Se for DDL/DML que altera estrutura ou dados, marca para persistir uma única vez
         if (/^\s*(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)/i.test(cleanStmt)) {
-          await this.persistAllDatabases();
+          hasMutated = true;
         }
       } catch (err: any) {
         const execTime = Math.round(performance.now() - startTime);
@@ -897,8 +974,30 @@ class DatabaseEngine {
           isSelectQuery,
         });
 
-        await this.saveHistory(stmt, 'error', execTime, 0, errMsg);
+        if (options?.recordHistory !== false) {
+          historyItemsToSave.push({
+            id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6) + '_' + commandIndex,
+            query: stmt,
+            timestamp,
+            status: 'error',
+            executionTimeMs: execTime,
+            database: this.activeDatabase,
+            errorMessage: errMsg,
+          });
+        }
       }
+    }
+
+    // 1. Salva histórico em lote (1 única transação IndexedDB em vez de N consecutivas)
+    if (historyItemsToSave.length > 0) {
+      try {
+        await dbStorage.history.bulkAdd(historyItemsToSave);
+      } catch (_) {}
+    }
+
+    // 2. Persiste bancos no IndexedDB exatamente uma vez ao final de todo o lote
+    if (hasMutated && !options?.skipPersist) {
+      await this.persistAllDatabases();
     }
 
     return results;
@@ -1338,7 +1437,7 @@ class DatabaseEngine {
     }
   }
 
-  private async saveHistory(
+  public async saveHistory(
     query: string,
     status: 'success' | 'error',
     executionTimeMs: number,
