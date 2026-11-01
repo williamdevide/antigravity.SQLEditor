@@ -14,7 +14,9 @@ build/
 */dist/
 */build/
 
-# Temporários e Logs
+# Temporários, Estudos Locais e Logs
+analisar/
+/analisar/
 .tmp/
 *.log
 npm-debug.log*

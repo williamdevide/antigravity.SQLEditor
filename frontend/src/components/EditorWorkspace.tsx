@@ -12,6 +12,10 @@ import {
   isOffsetInsideCommentOrString,
   AUTO_SEMICOLON_VERBS,
 } from '../services/sqlStatementParser';
+import {
+  DEFAULT_APP_PREFERENCES,
+  type AppPreferences,
+} from '../types/preferences';
 
 // Dicionário de auto-correção de palavras-chave para MAIÚSCULAS ao digitar (ex: 'from ' -> 'FROM ')
 const SQL_KEYWORDS_MAP: Record<string, string> = {
@@ -307,6 +311,7 @@ interface EditorWorkspaceProps {
   executedTabId?: string;
   selectedResultIndex?: number;
   onSelectResultIndex?: (index: number, fromGutterClick?: boolean) => void;
+  preferences?: AppPreferences;
 }
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
@@ -341,7 +346,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   executedTabId = '',
   selectedResultIndex = 0,
   onSelectResultIndex,
+  preferences = DEFAULT_APP_PREFERENCES,
 }) => {
+  const preferencesRef = useRef<AppPreferences>(preferences);
+  preferencesRef.current = preferences;
   const editorRef = useRef<any>(null);
   const monacoInstanceRef = useRef<any>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -901,6 +909,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       const model = editor.getModel();
       if (!model) return;
 
+      const autoUpperEnabled = preferencesRef.current?.editor?.autoUppercaseKeywords ?? true;
+      const autoSemiEnabled = preferencesRef.current?.editor?.autoInsertSemicolon ?? true;
+
       for (const change of e.changes) {
         const lineNumber = change.range.startLineNumber;
 
@@ -908,7 +919,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         const multiWordAutocompleteMatch = change.text.match(
           /^(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|USE|TRUNCATE|SHOW|DESCRIBE)\s+[A-Z_]+$/i
         );
-        if (multiWordAutocompleteMatch && change.text.length <= 25) {
+        if (autoSemiEnabled && multiWordAutocompleteMatch && change.text.length <= 25) {
           const verbUpper = multiWordAutocompleteMatch[1].toUpperCase();
           const sqlBefore = model.getValueInRange(
             new monaco.Range(1, 1, lineNumber, change.range.startColumn)
@@ -989,13 +1000,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         if (isOffsetInsideCommentOrString(sqlBeforeWord)) continue;
 
         const mappedKeyword = SQL_KEYWORDS_MAP[lowerWord];
-        const needsCapitalize = Boolean(mappedKeyword && rawWord !== mappedKeyword);
+        const needsCapitalize = Boolean(autoUpperEnabled && mappedKeyword && rawWord !== mappedKeyword);
         const candidateVerbUpper = mappedKeyword || rawWord.toUpperCase();
 
         // Auto-inserção de ';' dispara apenas quando o delimitador digitado após o verbo primário é espaço/Enter/Tab
         const isWhitespaceDelimiter = /\s/.test(change.text);
         let semiPos: { lineNumber: number; column: number } | null = null;
-        if (isWhitespaceDelimiter && AUTO_SEMICOLON_VERBS.has(candidateVerbUpper)) {
+        if (autoSemiEnabled && isWhitespaceDelimiter && AUTO_SEMICOLON_VERBS.has(candidateVerbUpper)) {
           const semiOffset = detectMissingPreviousSemicolon(
             sqlBeforeWord,
             candidateVerbUpper,
@@ -1125,6 +1136,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
       if (cursorDbTimer) clearTimeout(cursorDbTimer);
       cursorDbTimer = setTimeout(() => {
+        const syncCursorUse = preferencesRef.current?.editor?.syncDatabaseWithCursorUse ?? true;
+        if (!syncCursorUse) return;
         const model = editor.getModel();
         if (!model) return;
         const detectedDb = findActiveDatabaseAtPosition(model.getValue(), e.position);
@@ -1419,7 +1432,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     ];
   };
 
-  const baseFontSize = 14;
+  const baseFontSize = preferences?.ui?.editorFontSize || 14;
   const currentFontSize = Math.round(baseFontSize * (zoomLevel / 100));
 
   return (
@@ -1559,7 +1572,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {tabs.length > 0 && onCloseAllTabs && (
             <button
               onClick={() => {
-                if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
+                const needsConfirm = preferencesRef.current?.editor?.confirmBeforeCloseAllTabs ?? true;
+                if (!needsConfirm || window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
                   flushPendingContent();
                   if (monacoInstanceRef.current) {
                     tabs.forEach(t => {

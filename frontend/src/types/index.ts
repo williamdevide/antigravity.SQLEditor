@@ -143,7 +143,16 @@ export const FONT_THEME_OPTIONS: FontThemeOption[] = [
   },
 ];
 
-export type ActiveView = 'landing' | 'workspace' | 'history' | 'er-diagram' | 'er-model' | 'settings' | 'about';
+export type ActiveView =
+  | 'landing'
+  | 'gallery'
+  | 'er-model'
+  | 'er-diagram'
+  | 'workspace'
+  | 'history'
+  | 'settings'
+  | 'guide-feedback'
+  | 'about';
 
 export type DatabasePreset = 'empty' | 'samples' | 'class';
 

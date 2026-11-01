@@ -7,6 +7,9 @@ import { ConsoleResults } from './components/ConsoleResults';
 import { QueryHistoryView } from './components/QueryHistoryView';
 import { ERDiagramView } from './components/ERDiagramView';
 import { ERModelView } from './components/ERModelView';
+import { ERStudioWorkspace } from './components/er/ERStudioWorkspace';
+import { GalleryAndPracticeView, ActiveChallengeBanner } from './components/GalleryAndPracticeView';
+import { GuideAndFeedbackView } from './components/GuideAndFeedbackView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
 import { LandingPageView } from './components/LandingPageView';
@@ -15,6 +18,19 @@ import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
 import { dbStorage } from './services/storage';
 import { reviewSqlQuery, resolveReviewTargetRange, applySuggestedSqlToScript } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
+import {
+  loadAppPreferences,
+  saveAppPreferences,
+  type SuperBackupRestoreSummary,
+} from './services/preferencesStorage';
+import { decodeSharedSchemaHash } from './services/shareSchemaLink';
+import {
+  type AppPreferences,
+  type ERStudioPreferences,
+} from './types/preferences';
+import type { PracticeExerciseItem } from './data/practiceExercisesCatalog';
+import type { SavedERDiagramRecord } from './types/erStudio';
+import type { SurgicalSqlPatch } from './services/visualDdlGenerator';
 import type { VisiblePanels } from './components/MainMenuDropdown';
 import type {
   ActiveView,
@@ -38,37 +54,63 @@ const INITIAL_TABS: TabItem[] = [
     id: 'tab-1',
     title: 'script_1.sql',
     content: `-- Bem-vindo ao SQLEditor! (Google Antigravity Professional Edition)
--- O motor AlaSQL e IndexedDB opera 100% no seu navegador.
+-- Central da Disciplina de Banco de Dados • v3.2
 --
--- 📌 Para carregar bancos de dados:
---    Clique com o BOTÃO DIREITO sobre 'SCHEMA EXPLORER' na barra lateral:
+-- 📌 Para carregar bancos de dados de aula:
+--    Acesse o menu 'Galeria & Prática Guiada' ou clique com botão direito no SCHEMA EXPLORER:
 --    • Carregar vazio (iniciar sem nenhum banco)
 --    • Carregar BDs de exemplo (ecommerce_db e universidade_db)
---    • Carregar BDs Aula (bancos enviados pelo professor em data/bds)
+--    • Carregar BDs Aula (Pizzaria, Escola de Idiomas, RH, E-Commerce)
 --
--- 💡 Para carregar soluções ou novas abas:
---    Clique no botão '+ Nova Aba' para abrir aba em branco ou carregar soluções de aula.
+-- 📐 Estúdio DER & Split-View:
+--    Clique em 'SQL ↔ DER' no topo do laboratório para desenhar seu modelo ao vivo!
 `,
-  }
+  },
 ];
 
+function parseActiveViewFromHash(rawHash: string): ActiveView | null {
+  const raw = (rawHash || '').replace(/^#\/?/, '').toLowerCase().trim();
+  if (!raw) return null;
+  if (raw === 'editor' || raw === 'workspace') return 'workspace';
+  if (raw === 'galeria' || raw === 'gallery') return 'gallery';
+  if (raw === 'modelo' || raw === 'er-model' || raw === 'dicionario') return 'er-model';
+  if (raw === 'der' || raw === 'er-diagram') return 'er-diagram';
+  if (raw === 'historico' || raw === 'history') return 'history';
+  if (raw === 'configuracoes' || raw === 'config' || raw === 'settings') return 'settings';
+  if (raw === 'guia' || raw === 'guide' || raw === 'guide-feedback' || raw === 'feedback') return 'guide-feedback';
+  if (raw === 'sobre' || raw === 'about') return 'about';
+  if (raw === 'landing' || raw === 'home') return 'landing';
+  return null;
+}
 
 export const App: React.FC = () => {
+  const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
+  const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
+  const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
+
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
-      // 1. Tenta recuperar do hash da URL (#landing, #editor, #workspace, #about, #settings, #er-diagram, #er-model, #history)
-      const raw = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-      if (raw === 'editor' || raw === 'workspace') return 'workspace';
-      if (['landing', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(raw)) {
-        return raw as ActiveView;
-      }
-      // 2. Tenta recuperar do localStorage salvo
+      const fromHash = parseActiveViewFromHash(window.location.hash);
+      if (fromHash) return fromHash;
       const saved = localStorage.getItem('sqleditor_active_view') as ActiveView;
-      if (saved && ['landing', 'workspace', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(saved)) {
+      if (
+        saved &&
+        [
+          'landing',
+          'gallery',
+          'er-model',
+          'er-diagram',
+          'workspace',
+          'history',
+          'settings',
+          'guide-feedback',
+          'about',
+        ].includes(saved)
+      ) {
         return saved;
       }
     } catch (_) {}
-    return 'landing'; // Por padrão, exibe a landing page moderna nos moldes do drawdb.app
+    return 'landing';
   });
 
   const setActiveView = useCallback((view: ActiveView) => {
@@ -77,33 +119,83 @@ export const App: React.FC = () => {
       localStorage.setItem('sqleditor_active_view', view);
       if (view === 'workspace') {
         window.location.hash = '#editor';
+      } else if (view === 'gallery') {
+        window.location.hash = '#galeria';
+      } else if (view === 'er-model') {
+        window.location.hash = '#modelo';
+      } else if (view === 'er-diagram') {
+        window.location.hash = '#der';
+      } else if (view === 'history') {
+        window.location.hash = '#historico';
+      } else if (view === 'settings') {
+        window.location.hash = '#configuracoes';
+      } else if (view === 'guide-feedback') {
+        window.location.hash = '#guia';
+      } else if (view === 'about') {
+        window.location.hash = '#sobre';
       } else if (view === 'landing') {
         history.replaceState(null, '', window.location.pathname + window.location.search);
-      } else {
-        window.location.hash = `#${view}`;
       }
     } catch (_) {}
   }, []);
 
-  // Ouve navegação por botões Voltar/Avançar do navegador
+  const handleUpdatePreferences = useCallback((next: AppPreferences) => {
+    setPreferencesState(next);
+    saveAppPreferences(next);
+  }, []);
+
+  const handleUpdateErPreferences = useCallback((patch: Partial<ERStudioPreferences>) => {
+    setPreferencesState((prev) => {
+      const updated: AppPreferences = {
+        ...prev,
+        er: { ...prev.er, ...patch },
+      };
+      saveAppPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  // Ouve navegação por hash e links compartilhados (#z. / #u.)
+  const checkAndApplySharedSchema = useCallback(async (hashStr: string) => {
+    const clean = (hashStr || '').replace(/^#\/?/, '');
+    if (!clean.startsWith('z.') && !clean.startsWith('u.')) {
+      return false;
+    }
+    const decoded = await decodeSharedSchemaHash(hashStr);
+    if (decoded) {
+      const newTabId = `tab-shared-${Date.now()}`;
+      const title = decoded.title || 'esquema_compartilhado.sql';
+      setTabs((prev) => [
+        ...prev,
+        { id: newTabId, title, content: decoded.sql },
+      ]);
+      setActiveTabId(newTabId);
+      setActiveView('workspace');
+      setWorkspaceLayoutMode('split');
+      return true;
+    }
+    return false;
+  }, [setActiveView]);
+
   useEffect(() => {
-    const handleHashChange = () => {
-      const raw = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-      if (raw === 'editor' || raw === 'workspace') {
-        setActiveViewState('workspace');
-        try { localStorage.setItem('sqleditor_active_view', 'workspace'); } catch (_) {}
-        return;
-      }
-      if (['landing', 'history', 'er-diagram', 'er-model', 'settings', 'about'].includes(raw)) {
-        setActiveViewState(raw as ActiveView);
-        try { localStorage.setItem('sqleditor_active_view', raw); } catch (_) {}
-      } else if (!raw) {
+    const handleHashChange = async () => {
+      const hash = window.location.hash;
+      const isShared = await checkAndApplySharedSchema(hash);
+      if (isShared) return;
+
+      const parsed = parseActiveViewFromHash(hash);
+      if (parsed) {
+        setActiveViewState(parsed);
+        try { localStorage.setItem('sqleditor_active_view', parsed); } catch (_) {}
+      } else if (!hash) {
         setActiveViewState('landing');
       }
     };
+
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [checkAndApplySharedSchema]);
+
   const [schemas, setSchemas] = useState<DatabaseSchema[]>([]);
   const [activeDatabase, setActiveDatabase] = useState<string>('');
   const [currentPreset, setCurrentPreset] = useState<DatabasePreset>('empty');
@@ -145,12 +237,15 @@ export const App: React.FC = () => {
   const [sqlReview, setSqlReview] = useState<SqlReview | null>(null);
   const [activeConsoleTab, setActiveConsoleTab] = useState<ConsoleTab>('data');
 
-  // Tabela selecionada e limite ativo de visualização na aba Dados (Limit 30 -> Limit 100 -> Total)
+  // Tabela selecionada e limite ativo de visualização na aba Dados
   const [selectedTable, setSelectedTable] = useState<{ dbName: string; tableName: string } | null>(null);
   const [tablePreviewData, setTablePreviewData] = useState<TablePreviewData | null>(null);
-  const [dataPreviewLimit, setDataPreviewLimit] = useState<DataPreviewLimit>(30);
-  const dataPreviewLimitRef = useRef<DataPreviewLimit>(30);
+  const [dataPreviewLimit, setDataPreviewLimit] = useState<DataPreviewLimit>(
+    preferences.editor.defaultDataPreviewLimit
+  );
+  const dataPreviewLimitRef = useRef<DataPreviewLimit>(preferences.editor.defaultDataPreviewLimit);
   const selectedTableRef = useRef<{ dbName: string; tableName: string } | null>(null);
+
   useEffect(() => {
     selectedTableRef.current = selectedTable;
   }, [selectedTable]);
@@ -205,6 +300,12 @@ export const App: React.FC = () => {
       const tree = await dbEngine.getSchemaTree();
       setSchemas(tree);
 
+      // Verifica se a URL contém esquema compartilhado (#z. / #u.)
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const isShared = await checkAndApplySharedSchema(window.location.hash);
+        if (isShared) return;
+      }
+
       // Restaura workspace salvo do IndexedDB
       try {
         const savedWs = await dbStorage.workspace.get('current_workspace');
@@ -236,13 +337,17 @@ export const App: React.FC = () => {
     };
 
     initApp();
-  }, []);
+  }, [checkAndApplySharedSchema]);
 
-  // Sincroniza classes e atributos no elemento raiz HTML
+  // Sincroniza classes, tema de letras e preferência de movimento reduzido no elemento raiz HTML
   useEffect(() => {
     document.documentElement.className = theme;
     document.documentElement.setAttribute('data-font-theme', fontTheme);
-  }, [theme, fontTheme]);
+    document.documentElement.setAttribute(
+      'data-reduced-motion',
+      preferences.ui.reducedMotionAndGlow ? 'true' : 'false'
+    );
+  }, [theme, fontTheme, preferences.ui.reducedMotionAndGlow]);
 
   // Salva estado do workspace automaticamente no IndexedDB
   const persistWorkspace = useCallback(async () => {
@@ -339,7 +444,6 @@ export const App: React.FC = () => {
       setActiveDatabase(currentActive);
     }
 
-    // Se há tabela selecionada, atualiza seus dados na aba Dados mantendo o limite escolhido
     if (selectedTableRef.current) {
       const { dbName, tableName } = selectedTableRef.current;
       const dbFound = tree.find(d => d.name.toLowerCase() === dbName.toLowerCase());
@@ -360,7 +464,7 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Seleção automática da primeira tabela disponível caso nenhuma esteja selecionada
+  // Seleção automática da primeira tabela disponível
   useEffect(() => {
     if (!selectedTable && schemas.length > 0) {
       const activeDbObj = schemas.find(d => d.name === activeDatabase && d.tables.length > 0);
@@ -371,7 +475,7 @@ export const App: React.FC = () => {
     }
   }, [schemas, activeDatabase, selectedTable, handleSelectTable]);
 
-  // Executar query completa (executa todos os comandos em sequência e exibe o último no Retorno)
+  // Executar query completa
   const handleRunQuery = useCallback(async () => {
     const activeCode = editorRef.current ? editorRef.current.getValue() : (tabs.find(t => t.id === activeTabId)?.content || '');
     if (!activeCode.trim()) return;
@@ -385,7 +489,6 @@ export const App: React.FC = () => {
       await refreshSchemas();
       setActiveConsoleTab('grid');
 
-      // Confetti se todos os comandos tiveram sucesso
       if (res.length > 0 && res.every(r => r.status === 'success')) {
         confetti({
           particleCount: 25,
@@ -461,7 +564,7 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, activeDatabase, activeTabId]);
 
-  // Seleção de aba sincronizando banco ativo se houver comando USE no script
+  // Seleção de aba sincronizando banco ativo
   const handleSelectTab = useCallback((id: string) => {
     setActiveTabId(id);
     const targetTab = tabs.find(t => t.id === id);
@@ -476,14 +579,13 @@ export const App: React.FC = () => {
     }
   }, [tabs, schemas]);
 
-  // Executar trecho onde o cursor está posicionado ou trecho selecionado (sem exigir seleção)
+  // Executar trecho onde o cursor está posicionado
   const handleRunCurrentSnippet = useCallback(() => {
     const ed = editorRef.current;
     if (ed) {
       const model = ed.getModel();
       const pos = ed.getPosition();
 
-      // Sincroniza banco com USE precedente no script caso exista
       if (model && pos) {
         const detectedDb = findActiveDatabaseAtPosition(model.getValue(), pos);
         if (detectedDb) {
@@ -515,7 +617,6 @@ export const App: React.FC = () => {
     handleRunQuery();
   }, [handleRunSnippet, handleRunQuery, schemas, activeDatabase]);
 
-  // Sincronização bidirecional de inspeção de comandos (Editor <-> Retorno)
   const handleEditorSelectResultIndex = useCallback((index: number, fromGutterClick?: boolean) => {
     setSelectedResultIndex(index);
     if (fromGutterClick) {
@@ -533,14 +634,54 @@ export const App: React.FC = () => {
     }
   }, [results, activeTabId, executedTabId]);
 
-  // Atualizar Conteúdo da Aba
   const handleUpdateTabContent = useCallback((id: string, content: string) => {
     setTabs(prev =>
       prev.map(t => (t.id === id ? { ...t, content, isDirty: true } : t))
     );
   }, []);
 
-  // Revisar trecho selecionado (Alt+R) ou comando com erro no Retorno/Log, rastreando a faixa exata no script
+  // Aplicação cirúrgica de patch DDL vindo do DER no Monaco Editor
+  const handleApplySurgicalSqlPatch = useCallback(async (
+    patch: SurgicalSqlPatch,
+    executeInAlaSql?: boolean
+  ) => {
+    const ed = editorRef.current;
+    const model = ed?.getModel?.();
+
+    if (ed && model && activeTabId) {
+      const startPos = model.getPositionAt(patch.startOffset);
+      const endPos = model.getPositionAt(patch.endOffset);
+      ed.pushUndoStop();
+      ed.executeEdits('er-visual-ddl', [
+        {
+          range: {
+            startLineNumber: startPos.lineNumber,
+            startColumn: startPos.column,
+            endLineNumber: endPos.lineNumber,
+            endColumn: endPos.column,
+          },
+          text: patch.replacementText,
+          forceMoveMarkers: true,
+        },
+      ]);
+      ed.pushUndoStop();
+      const updatedVal = model.getValue();
+      handleUpdateTabContent(activeTabId, updatedVal);
+    } else if (activeTabId) {
+      handleUpdateTabContent(activeTabId, patch.newFullSql);
+    }
+
+    if (executeInAlaSql) {
+      try {
+        await dbEngine.executeScript(patch.replacementText);
+        await refreshSchemas();
+      } catch (err) {
+        console.warn('Erro ao sincronizar DDL visual no AlaSQL:', err);
+      }
+    }
+  }, [activeTabId, handleUpdateTabContent, refreshSchemas]);
+
+  // Revisar trecho selecionado
   const handleReviewSnippet = useCallback((
     snippet: string,
     runtimeError?: string,
@@ -569,7 +710,7 @@ export const App: React.FC = () => {
     setActiveConsoleTab('review');
   }, [activeDatabase, schemas, executedTabId, activeTabId, tabs]);
 
-  // Aplicar sugestão da revisão cirurgicamente na própria linha/faixa do comando (preservando os demais comandos)
+  // Aplicar sugestão da revisão cirurgicamente
   const handleApplyReviewSuggestion = useCallback((suggestedSql: string) => {
     const cleanSuggested = suggestedSql.trim();
     if (!cleanSuggested) return;
@@ -622,7 +763,6 @@ export const App: React.FC = () => {
         }
       }
     } else if (ed && model) {
-      // Fallback seguro: caso o comando original já tenha sido removido manualmente, substitui apenas a seleção/cursor atual sem apagar o script
       const selection = ed.getSelection();
       if (selection) {
         ed.pushUndoStop();
@@ -653,29 +793,25 @@ export const App: React.FC = () => {
     }
   }, [tabs.length, activeDatabase, activeView, setActiveView]);
 
-  // Criar Aba em Branco (via dropdown ou botão + na barra de abas)
   const handleNewBlankTab = useCallback(() => {
     handleNewTab('');
   }, [handleNewTab]);
 
-  // Carregar Solução (via dropdown)
   const handleOpenSolution = useCallback((solution: SolutionItem) => {
     handleNewTab(solution.content, solution.fileName);
   }, [handleNewTab]);
 
-  // Fechar Todas as Guias (permite fechar 100% das abas)
   const handleCloseAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabId('');
   }, []);
 
-  // Fechar Outras Guias
   const handleCloseOtherTabs = useCallback((keepId: string) => {
     setTabs(prev => prev.filter(t => t.id === keepId));
     setActiveTabId(keepId);
   }, []);
 
-  // Carregar Preset do Schema Explorer (Vazio, Exemplos, BDs Aula)
+  // Carregar Preset do Schema Explorer
   const handleLoadPreset = useCallback(async (preset: DatabasePreset) => {
     setIsExecuting(true);
     if (preset === 'class') {
@@ -721,20 +857,17 @@ export const App: React.FC = () => {
     setActiveConsoleTab('grid');
     setIsExecuting(false);
 
-    // Mantém as barras em 100% por 1.8 segundos para confirmação visual
     setTimeout(() => {
       setLoadingProgress(null);
       setIsClassLoading(false);
     }, 1800);
   }, [refreshSchemas]);
 
-  // Recarregar Bancos Completos (inclusive com as barras de progresso)
   const handleReloadAllDatabases = useCallback(async () => {
     const preset = dbEngine.getPreset();
     await handleLoadPreset(preset);
   }, [handleLoadPreset]);
 
-  // Criar Novo Banco de Dados (pelo botão na Sidebar)
   const handleCreateDatabase = useCallback(async (name: string) => {
     try {
       await dbEngine.createDatabase(name);
@@ -746,7 +879,6 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas, handleNewTab]);
 
-  // Fechar Aba (permite fechar até a última aba, deixando a lista vazia se desejado)
   const handleCloseTab = useCallback((id: string) => {
     setTabs(prev => {
       const next = prev.filter(t => t.id !== id);
@@ -757,10 +889,11 @@ export const App: React.FC = () => {
     });
   }, [activeTabId]);
 
-  // Limpar Editor (solicita confirmação antes de apagar o conteúdo do script atual e preserva Ctrl+Z)
+  // Limpar Editor
   const handleClearEditor = useCallback(() => {
     if (!activeTabId) return;
-    if (!window.confirm('Tem certeza que deseja limpar todo o conteúdo do script atual?')) {
+    const needsConfirm = preferences.editor.confirmBeforeClear;
+    if (needsConfirm && !window.confirm('Tem certeza que deseja limpar todo o conteúdo do script atual?')) {
       return;
     }
 
@@ -782,9 +915,9 @@ export const App: React.FC = () => {
     setTabs(prev =>
       prev.map(t => (t.id === activeTabId ? { ...t, content: '', isDirty: true } : t))
     );
-  }, [activeTabId]);
+  }, [activeTabId, preferences.editor.confirmBeforeClear]);
 
-  // Resetar Banco de Dados (restaura o estado da opção ativa no Schema Explorer)
+  // Resetar Banco de Dados
   const handleResetDb = useCallback(async () => {
     const preset = dbEngine.getPreset();
     let presetLabel = 'Vazio (sem bancos)';
@@ -833,7 +966,6 @@ export const App: React.FC = () => {
     }
   }, [refreshSchemas]);
 
-  // Gerenciamento de Temas (Interface e Cores das Letras)
   const handleThemeChange = useCallback((newTheme: ThemeMode) => {
     setTheme(newTheme);
     document.documentElement.className = newTheme;
@@ -850,7 +982,6 @@ export const App: React.FC = () => {
     } catch (_) {}
   }, []);
 
-  // Alternar Cores das Letras (Cicla: Âmbar Solar -> Ciano Cibernético -> Esmeralda Matrix -> Púrpura Synthwave)
   const handleToggleFontTheme = useCallback(() => {
     const cycle: FontTheme[] = ['solar', 'cyber', 'matrix', 'synthwave'];
     setFontTheme(prev => {
@@ -863,7 +994,6 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Alternar Tema (Cicla ordenadamente: Dark -> Light -> Bege -> Grafite -> Dark)
   const handleToggleTheme = useCallback(() => {
     const cycle: ThemeMode[] = ['dark', 'light', 'beige', 'graphite'];
     setTheme(prev => {
@@ -876,7 +1006,6 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Renomear Aba de Script
   const handleRenameTab = useCallback((tabId: string, newTitle: string) => {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
@@ -885,7 +1014,6 @@ export const App: React.FC = () => {
     );
   }, []);
 
-  // Exportar Script da Aba Ativa (.sql)
   const handleExportScript = useCallback(() => {
     const currentTab = tabs.find(t => t.id === activeTabId) || tabs[0];
     if (!currentTab) return;
@@ -904,24 +1032,112 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [tabs, activeTabId]);
 
+  // Integração da Galeria, Templates e Desafios com a IDE
+  const handleInstantiateSqlAndOpenView = useCallback(async (params: {
+    dbName: string;
+    sql: string;
+    targetView: 'er-diagram' | 'workspace' | 'er-model';
+    enableSplitView?: boolean;
+  }) => {
+    setIsExecuting(true);
+    try {
+      if (params.sql.trim()) {
+        await dbEngine.executeScript(params.sql);
+        await refreshSchemas();
+      }
+      if (params.dbName) {
+        dbEngine.setActiveDatabase(params.dbName);
+        setActiveDatabase(params.dbName);
+      }
+      const newTabId = `tab-template-${Date.now()}`;
+      const newTitle = `${params.dbName || 'modelo'}.sql`;
+      setTabs((prev) => [
+        ...prev,
+        { id: newTabId, title: newTitle, content: params.sql },
+      ]);
+      setActiveTabId(newTabId);
+
+      if (params.enableSplitView && params.targetView === 'workspace') {
+        setWorkspaceLayoutMode('split');
+      }
+      setActiveView(params.targetView);
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [refreshSchemas, setActiveView]);
+
+  const handleStartExercise = useCallback(async (exercise: PracticeExerciseItem) => {
+    setActiveExercise(exercise);
+    if (exercise.setupSql) {
+      await dbEngine.executeScript(exercise.setupSql);
+      await refreshSchemas();
+    }
+    const newTabId = `tab-ex-${exercise.id}`;
+    const newTabTitle = `${exercise.id}.sql`;
+    setTabs((prev) => {
+      const existing = prev.find((t) => t.id === newTabId);
+      if (existing) return prev;
+      return [
+        ...prev,
+        { id: newTabId, title: newTabTitle, content: exercise.starterSql },
+      ];
+    });
+    setActiveTabId(newTabId);
+    setActiveView('workspace');
+    if (exercise.validationMode === 'schema-check') {
+      setWorkspaceLayoutMode('split');
+    } else {
+      setWorkspaceLayoutMode('editor');
+    }
+  }, [refreshSchemas, setActiveView]);
+
+  const handleRestoreSavedDiagram = useCallback(async (record: SavedERDiagramRecord) => {
+    if (record.dbName) {
+      dbEngine.setActiveDatabase(record.dbName);
+      setActiveDatabase(record.dbName);
+    }
+    setActiveView('er-diagram');
+  }, [setActiveView]);
+
+  const handleRestoreSuperBackup = useCallback(async (summary: SuperBackupRestoreSummary) => {
+    if (summary.restoredTheme) {
+      handleThemeChange(summary.restoredTheme);
+    }
+    if (summary.restoredFontTheme) {
+      handleFontThemeChange(summary.restoredFontTheme);
+    }
+    if (summary.restoredPreferences) {
+      handleUpdatePreferences(summary.restoredPreferences);
+    }
+    if (summary.restoredWorkspace) {
+      if (summary.restoredWorkspace.tabs && summary.restoredWorkspace.tabs.length > 0) {
+        setTabs(summary.restoredWorkspace.tabs);
+        setActiveTabId(summary.restoredWorkspace.activeTabId || summary.restoredWorkspace.tabs[0].id);
+      }
+      if (summary.restoredWorkspace.zoomLevels) setZoomLevels(summary.restoredWorkspace.zoomLevels);
+      if (summary.restoredWorkspace.sidebarWidth) setSidebarWidth(summary.restoredWorkspace.sidebarWidth);
+    }
+    await refreshSchemas();
+    const activeDb = dbEngine.getActiveDatabase();
+    if (activeDb) setActiveDatabase(activeDb);
+    setActiveView('workspace');
+  }, [handleThemeChange, handleFontThemeChange, handleUpdatePreferences, refreshSchemas, setActiveView]);
+
   // Atalhos Globais de Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Exportar Script .sql (Ctrl + S / Cmd + S)
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleExportScript();
         return;
       }
 
-      // Alternar Cores do Tema (Alt + T)
       if (e.altKey && (e.key === 't' || e.key === 'T')) {
         e.preventDefault();
         handleToggleTheme();
         return;
       }
 
-      // Alternar Cores das Letras (Alt + L)
       if (e.altKey && (e.key === 'l' || e.key === 'L')) {
         e.preventDefault();
         handleToggleFontTheme();
@@ -939,7 +1155,6 @@ export const App: React.FC = () => {
         e.preventDefault();
         handleNewTab();
       }
-      // Atalhos Alt+E e Alt+R fora do foco direto do Monaco (dentro do Monaco as actions nativas executam 1x sem duplicidade)
       if (e.altKey && (e.key === 'e' || e.key === 'E')) {
         if (isInsideMonaco) return;
         e.preventDefault();
@@ -1038,6 +1253,8 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors">
       {/* 1. Página Inicial / Landing Page nos moldes do DrawDB */}
@@ -1048,6 +1265,14 @@ export const App: React.FC = () => {
             onOpenView={(view) => setActiveView(view)}
             theme={theme}
             onToggleTheme={handleToggleTheme}
+            onInstantiateTemplate={(tplId) => {
+              const found = solutions.find((s) => s.id === tplId);
+              if (found) {
+                handleOpenSolution(found);
+              } else {
+                setActiveView('gallery');
+              }
+            }}
           />
         </div>
       ) : (
@@ -1056,350 +1281,600 @@ export const App: React.FC = () => {
           <Header
             activeView={activeView}
             onViewChange={setActiveView}
-        visiblePanels={visiblePanels}
-        onTogglePanel={handleTogglePanel}
-        onRunQuery={handleRunQuery}
-        onRunSnippet={handleRunCurrentSnippet}
-        onNewBlankTab={handleNewBlankTab}
-        onOpenSolution={handleOpenSolution}
-        solutions={solutions}
-        onClearEditor={handleClearEditor}
-        onCloseAllTabs={handleCloseAllTabs}
-        onResetDb={handleResetDb}
-        theme={theme}
-        onThemeChange={handleThemeChange}
-        onToggleTheme={handleToggleTheme}
-        fontTheme={fontTheme}
-        onFontThemeChange={handleFontThemeChange}
-        isExecuting={isExecuting}
-        activeDatabase={activeDatabase || '(nenhum)'}
-      />
+            visiblePanels={visiblePanels}
+            onTogglePanel={handleTogglePanel}
+            onRunQuery={handleRunQuery}
+            onRunSnippet={handleRunCurrentSnippet}
+            onNewBlankTab={handleNewBlankTab}
+            onOpenSolution={handleOpenSolution}
+            solutions={solutions}
+            onClearEditor={handleClearEditor}
+            onCloseAllTabs={handleCloseAllTabs}
+            onResetDb={handleResetDb}
+            theme={theme}
+            onThemeChange={handleThemeChange}
+            onToggleTheme={handleToggleTheme}
+            fontTheme={fontTheme}
+            onFontThemeChange={handleFontThemeChange}
+            isExecuting={isExecuting}
+            activeDatabase={activeDatabase || '(nenhum)'}
+            showQuickModulePills={preferences.ui.showQuickModulePills}
+            workspaceLayoutMode={workspaceLayoutMode}
+            onWorkspaceLayoutModeChange={setWorkspaceLayoutMode}
+            confirmBeforeCloseAllTabs={preferences.editor.confirmBeforeCloseAllTabs}
+          />
 
-      {/* 2. Área Central Conforme Visão Selecionada */}
-      {activeView === 'history' ? (
-        <QueryHistoryView
-          onLoadQueryIntoNewTab={(query) => handleNewTab(query, 'historico.sql')}
-        />
-      ) : activeView === 'er-diagram' ? (
-        <ERDiagramView
-          schemas={schemas}
-          activeDatabase={activeDatabase}
-          onSelectDatabase={(db) => {
-            dbEngine.setActiveDatabase(db);
-            setActiveDatabase(db);
-          }}
-          onSelectTableForQuery={(db, tbl) =>
-            handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
-          }
-        />
-      ) : activeView === 'er-model' ? (
-        <ERModelView
-          schemas={schemas}
-          activeDatabase={activeDatabase}
-          onSelectDatabase={(db) => {
-            dbEngine.setActiveDatabase(db);
-            setActiveDatabase(db);
-          }}
-          onSelectTableForQuery={(db, tbl) =>
-            handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
-          }
-        />
-      ) : activeView === 'settings' ? (
-        <SettingsView
-          onResetDb={handleResetDb}
-          onRefreshSchemas={refreshSchemas}
-          onImportSqlSuccess={(sql) => handleNewTab(sql, 'importado.sql')}
-          theme={theme}
-          onThemeChange={handleThemeChange}
-          fontTheme={fontTheme}
-          onFontThemeChange={handleFontThemeChange}
-        />
-      ) : activeView === 'about' ? (
-        <AboutView onBackToWorkspace={() => setActiveView('workspace')} />
-      ) : (
-        /* Workspace Principal (IDE) */
-        <main className="flex-1 flex flex-row overflow-hidden relative">
-          {/* A. Coluna da Esquerda: Schema Explorer */}
-          {visiblePanels.sidebar && (
-            <>
-              <div style={{ width: `${sidebarWidth}px` }} className="h-full shrink-0 flex flex-col overflow-hidden">
-                <Sidebar
-                  schemas={schemas}
-                  activeDatabase={activeDatabase}
-                  onSelectDatabase={(db) => {
-                    dbEngine.setActiveDatabase(db);
-                    setActiveDatabase(db);
-                  }}
-                  onCreateDatabase={handleCreateDatabase}
-                  onRefreshSchemas={handleReloadAllDatabases}
-                  zoomLevel={zoomLevels.sidebar}
-                  onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, sidebar: Math.min(250, p.sidebar + 10) }))
-                  }
-                  onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, sidebar: Math.max(50, p.sidebar - 10) }))
-                  }
-                  onZoomReset={() =>
-                    setZoomLevels(p => ({ ...p, sidebar: 100 }))
-                  }
-                  onContextMenu={setContextMenuTarget}
-                  onTableDoubleClick={(db, tbl) =>
-                    handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
-                  }
-                  selectedTable={selectedTable}
-                  onSelectTable={(db, tbl) => handleSelectTable(db, tbl, true)}
-                  loadingProgress={loadingProgress}
-                  isClassLoading={isClassLoading}
-                />
-              </div>
-
-              {/* Divisor Redimensionável Horizontal */}
-              <div
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  isResizingSidebar.current = true;
-                  document.body.style.cursor = 'col-resize';
-                  document.body.style.userSelect = 'none';
-                }}
-                className="w-1.5 hover:w-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-col-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
-                title="Arraste para redimensionar a Barra Lateral"
-              />
-            </>
+          {/* Banner de Desafio Ativo Acoplado ao Topo da Tela */}
+          {activeExercise && (activeView === 'workspace' || activeView === 'er-diagram') && (
+            <ActiveChallengeBanner
+              exercise={activeExercise}
+              currentSql={activeTab?.content || ''}
+              onValidatedSuccess={() => {
+                confetti({
+                  particleCount: 50,
+                  spread: 70,
+                  origin: { y: 0.2 },
+                  colors: ['#00E676', '#FFE600', '#FF6B00'],
+                });
+              }}
+              onCloseChallenge={() => setActiveExercise(null)}
+            />
           )}
 
-          {/* B. Coluna da Direita: Editor + Console */}
-          <section id="workspace-panel" className="flex-1 flex flex-col h-full overflow-hidden">
-            {visiblePanels.scripts && visiblePanels.info ? (
-              <>
-                {/* Ambos visíveis: Editor com % de altura e Console com o restante */}
-                <div style={{ height: `${editorHeightPercent}%` }} className="min-h-[140px] flex flex-col">
-                  <EditorWorkspace
-                    tabs={tabs}
-                    activeTabId={activeTabId}
-                    onSelectTab={handleSelectTab}
-                    onCloseTab={handleCloseTab}
-                    onNewBlankTab={handleNewBlankTab}
-                    onOpenSolution={handleOpenSolution}
-                    solutions={solutions}
-                    onUpdateContent={handleUpdateTabContent}
-                    onRunQuery={handleRunQuery}
-                    onRunSnippet={handleRunSnippet}
-                    onReviewSnippet={handleReviewSnippet}
-                    zoomLevel={zoomLevels.editor}
-                    onZoomIn={() =>
-                      setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                    }
-                    onZoomOut={() =>
-                      setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                    }
-                    onZoomReset={() =>
-                      setZoomLevels(p => ({ ...p, editor: 100 }))
-                    }
-                    onCloseAllTabs={handleCloseAllTabs}
-                    onCloseOtherTabs={handleCloseOtherTabs}
-                    theme={theme}
-                    fontTheme={fontTheme}
-                    onRenameTab={handleRenameTab}
-                    onExportScript={handleExportScript}
-                    onToggleTheme={handleToggleTheme}
-                    onToggleFontTheme={handleToggleFontTheme}
-                    schemas={schemas}
-                    activeDatabase={activeDatabase}
-                    editorRefOut={editorRef}
-                    onSelectDatabase={(db) => {
-                      dbEngine.setActiveDatabase(db);
-                      setActiveDatabase(db);
+          {/* 2. Área Central Conforme Visão Selecionada */}
+          {activeView === 'gallery' ? (
+            <GalleryAndPracticeView
+              onInstantiateSqlAndOpenView={handleInstantiateSqlAndOpenView}
+              onLoadPreset={handleLoadPreset}
+              onStartExercise={handleStartExercise}
+              onRestoreSavedDiagram={handleRestoreSavedDiagram}
+            />
+          ) : activeView === 'history' ? (
+            <QueryHistoryView
+              onLoadQueryIntoNewTab={(query) => handleNewTab(query, 'historico.sql')}
+            />
+          ) : activeView === 'er-diagram' ? (
+            <ERDiagramView
+              schemas={schemas}
+              activeDatabase={activeDatabase}
+              liveScriptSql={activeTab?.content || ''}
+              activeTabName={activeTab?.title || 'consulta.sql'}
+              theme={theme}
+              preferences={preferences}
+              onUpdateErPreferences={handleUpdateErPreferences}
+              onSelectDatabase={(db) => {
+                dbEngine.setActiveDatabase(db);
+                setActiveDatabase(db);
+              }}
+              onSelectTableForQuery={(db, tbl) =>
+                handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+              }
+              onApplySurgicalSqlPatch={handleApplySurgicalSqlPatch}
+              onOpenDdlInEditor={(title, sql) => handleNewTab(sql, title)}
+              onRefreshSchemas={refreshSchemas}
+            />
+          ) : activeView === 'er-model' ? (
+            <ERModelView
+              schemas={schemas}
+              activeDatabase={activeDatabase}
+              preferences={preferences}
+              onSelectDatabase={(db) => {
+                dbEngine.setActiveDatabase(db);
+                setActiveDatabase(db);
+              }}
+              onSelectTableForQuery={(db, tbl) =>
+                handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+              }
+            />
+          ) : activeView === 'settings' ? (
+            <SettingsView
+              onResetDb={handleResetDb}
+              onRefreshSchemas={refreshSchemas}
+              onImportSqlSuccess={(sql) => handleNewTab(sql, 'importado.sql')}
+              theme={theme}
+              onThemeChange={handleThemeChange}
+              fontTheme={fontTheme}
+              onFontThemeChange={handleFontThemeChange}
+              preferences={preferences}
+              onUpdatePreferences={handleUpdatePreferences}
+              onRestoreSuperBackup={handleRestoreSuperBackup}
+            />
+          ) : activeView === 'guide-feedback' ? (
+            <GuideAndFeedbackView
+              theme={theme}
+              fontTheme={fontTheme}
+              onNavigate={setActiveView}
+            />
+          ) : activeView === 'about' ? (
+            <AboutView onBackToWorkspace={() => setActiveView('workspace')} />
+          ) : (
+            /* Workspace Principal (Laboratório SQL) */
+            <main className="flex-1 flex flex-row overflow-hidden relative">
+              {/* A. Coluna da Esquerda: Schema Explorer */}
+              {visiblePanels.sidebar && (
+                <>
+                  <div style={{ width: `${sidebarWidth}px` }} className="h-full shrink-0 flex flex-col overflow-hidden">
+                    <Sidebar
+                      schemas={schemas}
+                      activeDatabase={activeDatabase}
+                      onSelectDatabase={(db) => {
+                        dbEngine.setActiveDatabase(db);
+                        setActiveDatabase(db);
+                      }}
+                      onCreateDatabase={handleCreateDatabase}
+                      onRefreshSchemas={handleReloadAllDatabases}
+                      zoomLevel={zoomLevels.sidebar}
+                      onZoomIn={() =>
+                        setZoomLevels(p => ({ ...p, sidebar: Math.min(250, p.sidebar + 10) }))
+                      }
+                      onZoomOut={() =>
+                        setZoomLevels(p => ({ ...p, sidebar: Math.max(50, p.sidebar - 10) }))
+                      }
+                      onZoomReset={() =>
+                        setZoomLevels(p => ({ ...p, sidebar: 100 }))
+                      }
+                      onContextMenu={setContextMenuTarget}
+                      onTableDoubleClick={(db, tbl) =>
+                        handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                      }
+                      selectedTable={selectedTable}
+                      onSelectTable={(db, tbl) => handleSelectTable(db, tbl, true)}
+                      loadingProgress={loadingProgress}
+                      isClassLoading={isClassLoading}
+                    />
+                  </div>
+
+                  {/* Divisor Redimensionável Horizontal */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      isResizingSidebar.current = true;
+                      document.body.style.cursor = 'col-resize';
+                      document.body.style.userSelect = 'none';
                     }}
-                    results={results}
-                    executedTabId={executedTabId}
-                    selectedResultIndex={selectedResultIndex}
-                    onSelectResultIndex={handleEditorSelectResultIndex}
+                    className="w-1.5 hover:w-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-col-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
+                    title="Arraste para redimensionar a Barra Lateral"
                   />
-                </div>
+                </>
+              )}
 
-                {/* Divisor Redimensionável Vertical */}
-                <div
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    isResizingEditor.current = true;
-                    document.body.style.cursor = 'row-resize';
-                    document.body.style.userSelect = 'none';
-                  }}
-                  className="h-1.5 hover:h-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-row-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
-                  title="Arraste para redimensionar o Console"
-                />
+              {/* B. Coluna da Direita: Editor + Console / Split-View */}
+              <section id="workspace-panel" className="flex-1 flex flex-col h-full overflow-hidden">
+                {visiblePanels.scripts && visiblePanels.info ? (
+                  <>
+                    {/* Ambos visíveis: Editor com % de altura e Console com o restante */}
+                    <div style={{ height: `${editorHeightPercent}%` }} className="min-h-[140px] flex flex-col overflow-hidden">
+                      {workspaceLayoutMode === 'split' ? (
+                        /* Modo Split-View: Editor SQL ↔ Estúdio DER lado a lado */
+                        <div className="flex-1 flex flex-row overflow-hidden border-b border-[var(--border-color)]">
+                          <div
+                            style={{ width: `${preferences.editor.defaultSplitRatio}%` }}
+                            className="h-full flex flex-col border-r border-[var(--border-color)] shrink-0"
+                          >
+                            <EditorWorkspace
+                              tabs={tabs}
+                              activeTabId={activeTabId}
+                              onSelectTab={handleSelectTab}
+                              onCloseTab={handleCloseTab}
+                              onNewBlankTab={handleNewBlankTab}
+                              onOpenSolution={handleOpenSolution}
+                              solutions={solutions}
+                              onUpdateContent={handleUpdateTabContent}
+                              onRunQuery={handleRunQuery}
+                              onRunSnippet={handleRunSnippet}
+                              onReviewSnippet={handleReviewSnippet}
+                              zoomLevel={zoomLevels.editor}
+                              onZoomIn={() =>
+                                setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
+                              }
+                              onZoomOut={() =>
+                                setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
+                              }
+                              onZoomReset={() =>
+                                setZoomLevels(p => ({ ...p, editor: 100 }))
+                              }
+                              onCloseAllTabs={handleCloseAllTabs}
+                              onCloseOtherTabs={handleCloseOtherTabs}
+                              theme={theme}
+                              fontTheme={fontTheme}
+                              onRenameTab={handleRenameTab}
+                              onExportScript={handleExportScript}
+                              onToggleTheme={handleToggleTheme}
+                              onToggleFontTheme={handleToggleFontTheme}
+                              schemas={schemas}
+                              activeDatabase={activeDatabase}
+                              editorRefOut={editorRef}
+                              onSelectDatabase={(db) => {
+                                dbEngine.setActiveDatabase(db);
+                                setActiveDatabase(db);
+                              }}
+                              results={results}
+                              executedTabId={executedTabId}
+                              selectedResultIndex={selectedResultIndex}
+                              onSelectResultIndex={handleEditorSelectResultIndex}
+                              preferences={preferences}
+                            />
+                          </div>
 
-                {/* Console de Resultados */}
-                <div style={{ height: `${100 - editorHeightPercent}%` }} className="min-h-[120px] flex flex-col">
-                  <ConsoleResults
-                    results={results}
-                    isExecuting={isExecuting}
-                    zoomLevel={zoomLevels.console}
-                    onZoomIn={() =>
-                      setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
-                    }
-                    onZoomOut={() =>
-                      setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
-                    }
-                    onZoomReset={() =>
-                      setZoomLevels(p => ({ ...p, console: 100 }))
-                    }
-                    review={sqlReview}
-                    onApplyReviewSuggestion={handleApplyReviewSuggestion}
-                    activeConsoleTab={activeConsoleTab}
-                    onSelectConsoleTab={setActiveConsoleTab}
-                    tablePreviewData={tablePreviewData}
-                    onRefreshTablePreview={handleRefreshTablePreview}
-                    schemas={schemas}
-                    onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
-                    onReviewSnippet={handleReviewSnippet}
-                    selectedResultIndex={selectedResultIndex}
-                    onSelectResultIndex={handleConsoleSelectResultIndex}
-                    dataPreviewLimit={dataPreviewLimit}
-                    onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
-                  />
-                </div>
-              </>
-            ) : visiblePanels.scripts && !visiblePanels.info ? (
-              /* Apenas Editor Visível (Ocupa 100%) */
-              <div className="h-full w-full flex flex-col">
-                <EditorWorkspace
-                  tabs={tabs}
-                  activeTabId={activeTabId}
-                  onSelectTab={handleSelectTab}
-                  onCloseTab={handleCloseTab}
-                  onNewBlankTab={handleNewBlankTab}
-                  onOpenSolution={handleOpenSolution}
-                  solutions={solutions}
-                  onUpdateContent={handleUpdateTabContent}
-                  onRunQuery={handleRunQuery}
-                  onRunSnippet={handleRunSnippet}
-                  onReviewSnippet={handleReviewSnippet}
-                  zoomLevel={zoomLevels.editor}
-                  onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                  }
-                  onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                  }
-                  onZoomReset={() =>
-                    setZoomLevels(p => ({ ...p, editor: 100 }))
-                  }
-                  onCloseAllTabs={handleCloseAllTabs}
-                  onCloseOtherTabs={handleCloseOtherTabs}
-                  theme={theme}
-                  fontTheme={fontTheme}
-                  onRenameTab={handleRenameTab}
-                  onExportScript={handleExportScript}
-                  onToggleTheme={handleToggleTheme}
-                  onToggleFontTheme={handleToggleFontTheme}
-                  schemas={schemas}
-                  activeDatabase={activeDatabase}
-                  editorRefOut={editorRef}
-                  onSelectDatabase={(db) => {
-                    dbEngine.setActiveDatabase(db);
-                    setActiveDatabase(db);
-                  }}
-                  results={results}
-                  executedTabId={executedTabId}
-                  selectedResultIndex={selectedResultIndex}
-                  onSelectResultIndex={handleEditorSelectResultIndex}
-                />
-              </div>
-            ) : !visiblePanels.scripts && visiblePanels.info ? (
-              /* Apenas Console Visível (Ocupa 100%) */
-              <div className="h-full w-full flex flex-col">
-                <ConsoleResults
-                  results={results}
-                  isExecuting={isExecuting}
-                  zoomLevel={zoomLevels.console}
-                  onZoomIn={() =>
-                    setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
-                  }
-                  onZoomOut={() =>
-                    setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
-                  }
-                  onZoomReset={() =>
-                    setZoomLevels(p => ({ ...p, console: 100 }))
-                  }
-                  review={sqlReview}
-                  onApplyReviewSuggestion={handleApplyReviewSuggestion}
-                  activeConsoleTab={activeConsoleTab}
-                  onSelectConsoleTab={setActiveConsoleTab}
-                  tablePreviewData={tablePreviewData}
-                  onRefreshTablePreview={handleRefreshTablePreview}
-                  schemas={schemas}
-                  onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
-                  onReviewSnippet={handleReviewSnippet}
-                  selectedResultIndex={selectedResultIndex}
-                  onSelectResultIndex={handleConsoleSelectResultIndex}
-                  dataPreviewLimit={dataPreviewLimit}
-                  onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
-                />
-              </div>
-            ) : (
-              /* Scripts e Informações Ocultos (ou Todos os Painéis Ocultos) */
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
-                <span className="material-symbols-outlined text-[48px] text-[var(--accent-yellow)] opacity-60 mb-3 animate-pulse">
-                  visibility_off
-                </span>
-                <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
-                  {!visiblePanels.sidebar
-                    ? 'Todos os Painéis do Workspace Estão Ocultos'
-                    : 'Painéis de Scripts e Informações Ocultos'}
-                </h3>
-                <p className="text-xs text-[var(--text-secondary)] max-w-md mb-6 leading-relaxed">
-                  {!visiblePanels.sidebar
-                    ? 'O Schema Explorer (Barra Lateral), o Editor de Scripts e o Console de Informações foram ocultados. Você pode reexibi-los através do Menu Hambúrguer > Visualização ou usando os botões abaixo:'
-                    : 'Você ocultou os painéis centrais de scripts e resultados do workspace. Reexiba-os abaixo ou através do Menu Hambúrguer > Visualização:'}
-                </p>
+                          <div className="flex-1 h-full flex flex-col overflow-hidden">
+                            <ERStudioWorkspace
+                              mode="split-preview"
+                              schemas={schemas}
+                              activeDatabase={activeDatabase}
+                              liveScriptSql={activeTab?.content || ''}
+                              activeTabName={activeTab?.title || 'consulta.sql'}
+                              theme={theme}
+                              preferences={preferences}
+                              onUpdateErPreferences={handleUpdateErPreferences}
+                              onSelectDatabase={(db) => {
+                                dbEngine.setActiveDatabase(db);
+                                setActiveDatabase(db);
+                              }}
+                              onSelectTableForQuery={(db, tbl) =>
+                                handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                              }
+                              onApplySurgicalSqlPatch={handleApplySurgicalSqlPatch}
+                              onOpenDdlInEditor={(title, sql) => handleNewTab(sql, title)}
+                              onRefreshSchemas={refreshSchemas}
+                              onExpandToFullStudio={() => setActiveView('er-diagram')}
+                            />
+                          </div>
+                        </div>
+                      ) : workspaceLayoutMode === 'der' ? (
+                        /* Modo DER em destaque no topo */
+                        <div className="flex-1 h-full flex flex-col overflow-hidden border-b border-[var(--border-color)]">
+                          <ERStudioWorkspace
+                            mode="split-preview"
+                            schemas={schemas}
+                            activeDatabase={activeDatabase}
+                            liveScriptSql={activeTab?.content || ''}
+                            activeTabName={activeTab?.title || 'consulta.sql'}
+                            theme={theme}
+                            preferences={preferences}
+                            onUpdateErPreferences={handleUpdateErPreferences}
+                            onSelectDatabase={(db) => {
+                              dbEngine.setActiveDatabase(db);
+                              setActiveDatabase(db);
+                            }}
+                            onSelectTableForQuery={(db, tbl) =>
+                              handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                            }
+                            onApplySurgicalSqlPatch={handleApplySurgicalSqlPatch}
+                            onOpenDdlInEditor={(title, sql) => handleNewTab(sql, title)}
+                            onRefreshSchemas={refreshSchemas}
+                            onExpandToFullStudio={() => setActiveView('er-diagram')}
+                          />
+                        </div>
+                      ) : (
+                        /* Modo Editor Padrão */
+                        <EditorWorkspace
+                          tabs={tabs}
+                          activeTabId={activeTabId}
+                          onSelectTab={handleSelectTab}
+                          onCloseTab={handleCloseTab}
+                          onNewBlankTab={handleNewBlankTab}
+                          onOpenSolution={handleOpenSolution}
+                          solutions={solutions}
+                          onUpdateContent={handleUpdateTabContent}
+                          onRunQuery={handleRunQuery}
+                          onRunSnippet={handleRunSnippet}
+                          onReviewSnippet={handleReviewSnippet}
+                          zoomLevel={zoomLevels.editor}
+                          onZoomIn={() =>
+                            setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
+                          }
+                          onZoomOut={() =>
+                            setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
+                          }
+                          onZoomReset={() =>
+                            setZoomLevels(p => ({ ...p, editor: 100 }))
+                          }
+                          onCloseAllTabs={handleCloseAllTabs}
+                          onCloseOtherTabs={handleCloseOtherTabs}
+                          theme={theme}
+                          fontTheme={fontTheme}
+                          onRenameTab={handleRenameTab}
+                          onExportScript={handleExportScript}
+                          onToggleTheme={handleToggleTheme}
+                          onToggleFontTheme={handleToggleFontTheme}
+                          schemas={schemas}
+                          activeDatabase={activeDatabase}
+                          editorRefOut={editorRef}
+                          onSelectDatabase={(db) => {
+                            dbEngine.setActiveDatabase(db);
+                            setActiveDatabase(db);
+                          }}
+                          results={results}
+                          executedTabId={executedTabId}
+                          selectedResultIndex={selectedResultIndex}
+                          onSelectResultIndex={handleEditorSelectResultIndex}
+                          preferences={preferences}
+                        />
+                      )}
+                    </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <button
-                    onClick={handleShowAllPanels}
-                    className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#FF6B00] hover:bg-[#FF8533] text-white rounded-lg cursor-pointer transition-all shadow-[0_0_15px_rgba(255,107,0,0.3)] hover:scale-105 active:scale-95"
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">visibility</span>
-                    <span>Reexibir Todos os Painéis</span>
-                  </button>
+                    {/* Divisor Redimensionável Vertical */}
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        isResizingEditor.current = true;
+                        document.body.style.cursor = 'row-resize';
+                        document.body.style.userSelect = 'none';
+                      }}
+                      className="h-1.5 hover:h-2 bg-[var(--border-color)] hover:bg-[#FF6B00] cursor-row-resize z-20 transition-all shrink-0 active:bg-[#FF6B00] active:shadow-[0_0_8px_#FF6B00]"
+                      title="Arraste para redimensionar o Console"
+                    />
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!visiblePanels.sidebar && (
+                    {/* Console de Resultados */}
+                    <div style={{ height: `${100 - editorHeightPercent}%` }} className="min-h-[120px] flex flex-col">
+                      <ConsoleResults
+                        results={results}
+                        isExecuting={isExecuting}
+                        zoomLevel={zoomLevels.console}
+                        onZoomIn={() =>
+                          setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
+                        }
+                        onZoomOut={() =>
+                          setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
+                        }
+                        onZoomReset={() =>
+                          setZoomLevels(p => ({ ...p, console: 100 }))
+                        }
+                        review={sqlReview}
+                        onApplyReviewSuggestion={handleApplyReviewSuggestion}
+                        activeConsoleTab={activeConsoleTab}
+                        onSelectConsoleTab={setActiveConsoleTab}
+                        tablePreviewData={tablePreviewData}
+                        onRefreshTablePreview={handleRefreshTablePreview}
+                        schemas={schemas}
+                        onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
+                        onReviewSnippet={handleReviewSnippet}
+                        selectedResultIndex={selectedResultIndex}
+                        onSelectResultIndex={handleConsoleSelectResultIndex}
+                        dataPreviewLimit={dataPreviewLimit}
+                        onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
+                      />
+                    </div>
+                  </>
+                ) : visiblePanels.scripts && !visiblePanels.info ? (
+                  /* Apenas Editor Visível (Ocupa 100%) */
+                  <div className="h-full w-full flex flex-col">
+                    {workspaceLayoutMode === 'split' ? (
+                      <div className="flex-1 flex flex-row overflow-hidden">
+                        <div
+                          style={{ width: `${preferences.editor.defaultSplitRatio}%` }}
+                          className="h-full flex flex-col border-r border-[var(--border-color)] shrink-0"
+                        >
+                          <EditorWorkspace
+                            tabs={tabs}
+                            activeTabId={activeTabId}
+                            onSelectTab={handleSelectTab}
+                            onCloseTab={handleCloseTab}
+                            onNewBlankTab={handleNewBlankTab}
+                            onOpenSolution={handleOpenSolution}
+                            solutions={solutions}
+                            onUpdateContent={handleUpdateTabContent}
+                            onRunQuery={handleRunQuery}
+                            onRunSnippet={handleRunSnippet}
+                            onReviewSnippet={handleReviewSnippet}
+                            zoomLevel={zoomLevels.editor}
+                            onZoomIn={() =>
+                              setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
+                            }
+                            onZoomOut={() =>
+                              setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
+                            }
+                            onZoomReset={() =>
+                              setZoomLevels(p => ({ ...p, editor: 100 }))
+                            }
+                            onCloseAllTabs={handleCloseAllTabs}
+                            onCloseOtherTabs={handleCloseOtherTabs}
+                            theme={theme}
+                            fontTheme={fontTheme}
+                            onRenameTab={handleRenameTab}
+                            onExportScript={handleExportScript}
+                            onToggleTheme={handleToggleTheme}
+                            onToggleFontTheme={handleToggleFontTheme}
+                            schemas={schemas}
+                            activeDatabase={activeDatabase}
+                            editorRefOut={editorRef}
+                            onSelectDatabase={(db) => {
+                              dbEngine.setActiveDatabase(db);
+                              setActiveDatabase(db);
+                            }}
+                            results={results}
+                            executedTabId={executedTabId}
+                            selectedResultIndex={selectedResultIndex}
+                            onSelectResultIndex={handleEditorSelectResultIndex}
+                            preferences={preferences}
+                          />
+                        </div>
+                        <div className="flex-1 h-full flex flex-col overflow-hidden">
+                          <ERStudioWorkspace
+                            mode="split-preview"
+                            schemas={schemas}
+                            activeDatabase={activeDatabase}
+                            liveScriptSql={activeTab?.content || ''}
+                            activeTabName={activeTab?.title || 'consulta.sql'}
+                            theme={theme}
+                            preferences={preferences}
+                            onUpdateErPreferences={handleUpdateErPreferences}
+                            onSelectDatabase={(db) => {
+                              dbEngine.setActiveDatabase(db);
+                              setActiveDatabase(db);
+                            }}
+                            onSelectTableForQuery={(db, tbl) =>
+                              handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                            }
+                            onApplySurgicalSqlPatch={handleApplySurgicalSqlPatch}
+                            onOpenDdlInEditor={(title, sql) => handleNewTab(sql, title)}
+                            onRefreshSchemas={refreshSchemas}
+                            onExpandToFullStudio={() => setActiveView('er-diagram')}
+                          />
+                        </div>
+                      </div>
+                    ) : workspaceLayoutMode === 'der' ? (
+                      <ERStudioWorkspace
+                        mode="split-preview"
+                        schemas={schemas}
+                        activeDatabase={activeDatabase}
+                        liveScriptSql={activeTab?.content || ''}
+                        activeTabName={activeTab?.title || 'consulta.sql'}
+                        theme={theme}
+                        preferences={preferences}
+                        onUpdateErPreferences={handleUpdateErPreferences}
+                        onSelectDatabase={(db) => {
+                          dbEngine.setActiveDatabase(db);
+                          setActiveDatabase(db);
+                        }}
+                        onSelectTableForQuery={(db, tbl) =>
+                          handleNewTab(`USE \`${db}\`;\nSELECT * FROM \`${tbl}\` LIMIT 100;\n`, `${tbl}.sql`)
+                        }
+                        onApplySurgicalSqlPatch={handleApplySurgicalSqlPatch}
+                        onOpenDdlInEditor={(title, sql) => handleNewTab(sql, title)}
+                        onRefreshSchemas={refreshSchemas}
+                        onExpandToFullStudio={() => setActiveView('er-diagram')}
+                      />
+                    ) : (
+                      <EditorWorkspace
+                        tabs={tabs}
+                        activeTabId={activeTabId}
+                        onSelectTab={handleSelectTab}
+                        onCloseTab={handleCloseTab}
+                        onNewBlankTab={handleNewBlankTab}
+                        onOpenSolution={handleOpenSolution}
+                        solutions={solutions}
+                        onUpdateContent={handleUpdateTabContent}
+                        onRunQuery={handleRunQuery}
+                        onRunSnippet={handleRunSnippet}
+                        onReviewSnippet={handleReviewSnippet}
+                        zoomLevel={zoomLevels.editor}
+                        onZoomIn={() =>
+                          setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
+                        }
+                        onZoomOut={() =>
+                          setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
+                        }
+                        onZoomReset={() =>
+                          setZoomLevels(p => ({ ...p, editor: 100 }))
+                        }
+                        onCloseAllTabs={handleCloseAllTabs}
+                        onCloseOtherTabs={handleCloseOtherTabs}
+                        theme={theme}
+                        fontTheme={fontTheme}
+                        onRenameTab={handleRenameTab}
+                        onExportScript={handleExportScript}
+                        onToggleTheme={handleToggleTheme}
+                        onToggleFontTheme={handleToggleFontTheme}
+                        schemas={schemas}
+                        activeDatabase={activeDatabase}
+                        editorRefOut={editorRef}
+                        onSelectDatabase={(db) => {
+                          dbEngine.setActiveDatabase(db);
+                          setActiveDatabase(db);
+                        }}
+                        results={results}
+                        executedTabId={executedTabId}
+                        selectedResultIndex={selectedResultIndex}
+                        onSelectResultIndex={handleEditorSelectResultIndex}
+                        preferences={preferences}
+                      />
+                    )}
+                  </div>
+                ) : !visiblePanels.scripts && visiblePanels.info ? (
+                  /* Apenas Console Visível (Ocupa 100%) */
+                  <div className="h-full w-full flex flex-col">
+                    <ConsoleResults
+                      results={results}
+                      isExecuting={isExecuting}
+                      zoomLevel={zoomLevels.console}
+                      onZoomIn={() =>
+                        setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
+                      }
+                      onZoomOut={() =>
+                        setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
+                      }
+                      onZoomReset={() =>
+                        setZoomLevels(p => ({ ...p, console: 100 }))
+                      }
+                      review={sqlReview}
+                      onApplyReviewSuggestion={handleApplyReviewSuggestion}
+                      activeConsoleTab={activeConsoleTab}
+                      onSelectConsoleTab={setActiveConsoleTab}
+                      tablePreviewData={tablePreviewData}
+                      onRefreshTablePreview={handleRefreshTablePreview}
+                      schemas={schemas}
+                      onSelectPreviewTable={(db, tbl) => handleSelectTable(db, tbl, false)}
+                      onReviewSnippet={handleReviewSnippet}
+                      selectedResultIndex={selectedResultIndex}
+                      onSelectResultIndex={handleConsoleSelectResultIndex}
+                      dataPreviewLimit={dataPreviewLimit}
+                      onCycleDataPreviewLimit={handleCycleDataPreviewLimit}
+                    />
+                  </div>
+                ) : (
+                  /* Scripts e Informações Ocultos */
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
+                    <span className="material-symbols-outlined text-[48px] text-[var(--accent-yellow)] opacity-60 mb-3 animate-pulse">
+                      visibility_off
+                    </span>
+                    <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
+                      {!visiblePanels.sidebar
+                        ? 'Todos os Painéis do Workspace Estão Ocultos'
+                        : 'Painéis de Scripts e Informações Ocultos'}
+                    </h3>
+                    <p className="text-xs text-[var(--text-secondary)] max-w-md mb-6 leading-relaxed">
+                      {!visiblePanels.sidebar
+                        ? 'O Schema Explorer (Barra Lateral), o Editor de Scripts e o Console de Informações foram ocultados. Você pode reexibi-los através do Menu Hambúrguer > Painéis do Workspace ou usando os botões abaixo:'
+                        : 'Você ocultou os painéis centrais de scripts e resultados do workspace. Reexiba-os abaixo ou através do Menu Hambúrguer > Painéis do Workspace:'}
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
                       <button
-                        onClick={() => handleTogglePanel('sidebar')}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                        onClick={handleShowAllPanels}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#FF6B00] hover:bg-[#FF8533] text-white rounded-lg cursor-pointer transition-all shadow-[0_0_15px_rgba(255,107,0,0.3)] hover:scale-105 active:scale-95"
                         type="button"
                       >
-                        <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">account_tree</span>
-                        <span>Exibir Schema Explorer</span>
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        <span>Reexibir Todos os Painéis</span>
                       </button>
-                    )}
 
-                    <button
-                      onClick={() => handleTogglePanel('scripts')}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
-                      type="button"
-                    >
-                      <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">code</span>
-                      <span>Exibir Scripts</span>
-                    </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!visiblePanels.sidebar && (
+                          <button
+                            onClick={() => handleTogglePanel('sidebar')}
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">account_tree</span>
+                            <span>Exibir Schema Explorer</span>
+                          </button>
+                        )}
 
-                    <button
-                      onClick={() => handleTogglePanel('info')}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
-                      type="button"
-                    >
-                      <span className="material-symbols-outlined text-[15px] text-[var(--status-success)]">terminal</span>
-                      <span>Exibir Informações</span>
-                    </button>
+                        <button
+                          onClick={() => handleTogglePanel('scripts')}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                          type="button"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">code</span>
+                          <span>Exibir Scripts</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleTogglePanel('info')}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg cursor-pointer transition-colors shadow-sm"
+                          type="button"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-[var(--status-success)]">terminal</span>
+                          <span>Exibir Informações</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </section>
-        </main>
-      )}
+                )}
+              </section>
+            </main>
+          )}
         </>
       )}
 

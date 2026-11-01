@@ -386,3 +386,44 @@ html.beige .sql-active-result-block {
   border-left: 3px solid var(--accent-orange) !important;
   margin-left: 2px;
 }
+
+/* Fluxo laser direcional FK -> PK nas linhas de relacionamento do Estúdio DER (v3.2+) */
+@keyframes er-laser-flow {
+  from {
+    stroke-dashoffset: 32;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-er-laser {
+  animation: er-laser-flow 1.15s linear infinite;
+}
+
+/* Acessibilidade e Modo Leve para Laboratório Escolar (desativa animações contínuas) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-er-laser,
+  .animate-pulse-glow {
+    animation: none !important;
+  }
+}
+
+html[data-reduced-motion="true"] .animate-er-laser,
+html[data-reduced-motion="true"] .animate-pulse-glow {
+  animation: none !important;
+}
+
+/* Suporte de impressão limpa A4 para Exportação PDF do DER e Dicionário de Dados */
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+  body {
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

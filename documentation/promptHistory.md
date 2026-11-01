@@ -1883,3 +1883,283 @@ Atualizar a versão para v3.1.20 e já realizar commit + git push para publicar 
    - Versão atualizada para `3.1.20` em `frontend/src/config/version.ts`, `frontend/package.json` e changelog de `frontend/src/components/LandingPageView.tsx`.
    - Suíte automatizada aprovada com **40/40 verificações e 0 falhas**; `npm run lint` e `npm run build` aprovados com **0 erros**.
    - Realizado `git commit` e `git push origin main` para publicação automática no GitHub e Vercel.
+
+
+---
+
+## 📌 Prompt 62 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 15:39  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal agora vamos a uma grande mudança. essa a principio deve ser só estudada e desenvolvido um plano de ação. criei em nosso projeto a pasta analisar, dentro dela existe 2 pastas: uma drawdb-main e a outra LiveSchema-Studio-main. são 2 projetos reais, o primeiro é o drawdb.app (baixei o repo do github dele) que trata de um portal onde desenhamos DER. o segundo LiveSchema é uma ferramenta criada para gerar DER a partir de código SQL ao vivo enquanto escreve o SQL. como um engenheiro de IA senior quero que faça uma analise profunda nesses 2 projetos e gere um plano de implementação de quais recursos são interessantes absorver no nosso SQL-Editor. por exemplo, gostei de como as linhas de relacionamento se comportam no LiveSchema. Muitissimo importante, não comece nenhuma mudança ainda, estamos somente na fase de estudo. e a pasta analisar não deve ser enviada para o nosso repositorio. após alinharmos quais serão as mudanças então você poderá aproveitar o codigo desses 2 projetos onde for pertinente no nosso.
+```
+
+### Prompt 63 (Resposta do Usuário no Grill-me - 1/5 Visão Macro do Novo DER)
+```text
+(Recommended) Híbrido Reativo + Construtor Visual Essencial: manter o DER do Banco Ativo (AlaSQL), adicionar o Modo Dividido Ao Vivo (Split-View SQL ➔ DER a cada tecla, estilo LiveSchema) e permitir criação/edição visual essencial no canvas (tabelas, colunas e arrastar linha FK) gerando o SQL para o editor
+```
+
+### Prompt 64 (Resposta do Usuário no Grill-me - 2/5 Motor das Linhas de Relacionamento)
+```text
+Quero a solução 1, mas com linhas como estamos usando hoje com quebras de 90º arredondadas
+```
+
+### Prompt 65 (Resposta do Usuário no Grill-me - 3/5 Cards de Tabela e Organização Didática do Canvas)
+```text
+(Recommended) Pacote Didático Completo: Cards com Amostra Viva de Dados (👁️ Estrutura/Registros), seção de Triggers (⚡), Colapso inteligente (mantém só PK/FK ancoradas), Faixa de cor/Trava, mais Áreas Temáticas (Subject Areas), Notas Adesivas (Post-its de aula) e Zoom focal no cursor
+```
+
+### Prompt 66 (Resposta do Usuário no Grill-me - 4/5 Sincronização SQL ↔ DER ↔ Banco AlaSQL)
+```text
+(Recommended) Fonte Dupla Inteligente ("Banco Ativo" ↔ "Script DDL Ao Vivo"): em "Script Ao Vivo", digitar CREATE/INSERT/TRIGGER atualiza o DER a cada tecla e desenhar no canvas escreve o DDL direto no editor; em "Banco Ativo" (ex: db_ecommerce), exibe o banco real e edições visuais geram o CREATE/ALTER SQL no editor com opção de aplicar no banco
+```
+
+### Prompt 67 (Resposta do Usuário no Grill-me - 5/5 Linter, Exportações/Share e Fatiamento do Plano)
+```text
+(Recommended) Incluir Pacote Completo (Linter Pedagógico de Schema + Link Compartilhável #z. na URL + Exportações PNG/SVG/PDF/Mermaid/Markdown) estruturado em um Plano de Ação de 4 Fases Incrementais seguras (1 release por pilar)
+```
+
+### 🎯 Ações Executadas (Fase de Estudo Arquitetural & Plano de Ação DER `v3.2`):
+
+1. **Blindagem do Repositório (`.gitignore`):**
+   - Adicionada a pasta `analisar/` ao `.gitignore` raiz para garantir que os repositórios estudados (`drawdb-main` e `LiveSchema-Studio-main` + arquivos `.zip`) nunca sejam enviados ao GitHub/Vercel.
+   - Respeitada integralmente a trava de segurança solicitada: **zero alterações em arquivos de código da aplicação (`frontend/`)**.
+
+2. **Análise Arquitetural Profunda (`LiveSchema Studio` × `drawDB` × `SQLEditor`):**
+   - Mapeados todos os 21 módulos TypeScript do `LiveSchema Studio` (`RelationshipLines.tsx`, `engine/layout.ts`, `engine/sqlParser.ts`, `InteractiveCanvas.tsx`, `FloatingTableCard.tsx`, `lib/shareLink.ts`) e toda a árvore de subsistemas do `drawDB` (`Canvas.jsx`, `calcPath.js`, `autoArrange.js`, `autoRelationships.js`, `issues.js`, `diffToSQL.js`, `exportAs/*`, `importSQL/*`).
+   - Identificado risco jurídico crítico de licença **GNU AGPLv3** no `drawDB` e definida diretriz **Clean-Room Design** (zero cópia literal de código do `drawDB`; reaproveitamento/adaptação direta apenas dos padrões compatíveis em TypeScript do `LiveSchema Studio` + bibliotecas MIT/Apache-2.0).
+   - Gerado artefato técnico comparativo `analise_arquitetural_der.md`.
+
+3. **Alinhamento Completo via `/grill-me` (5 Decisões Estruturais) e Criação do Plano de Ação:**
+   - Consolidado o documento oficial `documentation/plan-v3.2-der-reactive-studio.md` (e o artefato executável `plano_acao_der_v3_2.md`) estruturando a evolução em **4 Fases Incrementais (`v3.2.0` a `v3.2.3`)**:
+     - **Fase 1 (`v3.2.0`):** Motor de Canvas + Linhas **Ortogonais 90° com Cantos Arredondados** dotadas das **7 camadas interativas do LiveSchema** (`z-[5]` atrás dos cards ➔ `z-30` no foco, Spotlight `22%`, fluxo laser animado `FK ➔ PK`, pílula sob demanda, Self-Join `"C"`, garfo composto e seletor `Pinos` / `Crow's Foot` / `1:N`) + Cards Ricos (`👁️ Dados`, `⚡ Triggers`, Colapso `PK/FK`, Faixa de cor, Trava `🔒`, Zoom focal no cursor).
+     - **Fase 2 (`v3.2.1`):** Modo **Split-View Reativo (`Editor SQL | DER Ao Vivo`)** a cada tecla (`useDeferredValue`) + Fonte Dupla (`Banco Ativo AlaSQL` ↔ `Script DDL Ao Vivo`).
+     - **Fase 3 (`v3.2.2`):** **Construtor Visual Essencial (`DER ➔ SQL`)** com `Drag-to-Connect FK` gerando DDL cirúrgico no Monaco Editor + **Áreas Temáticas (`Subject Areas`)** + **Notas Adesivas (`Sticky Notes`)**.
+     - **Fase 4 (`v3.2.3`):** **Linter Pedagógico de Schema em Tempo Real** + **Link Compartilhável `#z.`** (`CompressionStream` zero-backend) + **Super-Exportação (`PNG`, `SVG`, `PDF`, `Mermaid`, `Markdown`)**.
+
+
+---
+
+## 📌 Prompt 68 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 16:14  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me acrescente ao nosso plano de acao as seguintes diretrizes:
+- nem tudo que iremos reconstruir precisa ficar diretamente na opção Editor (Workspace), alem de alterar outras telas também deve considerar reorganizar o menu se julgar necessário.
+- deve criar as configurações que julgar necessárias também.
+- manter ao máximo nosso estetica em relação a dos projetos absorvidos.
+- refatorar nossa pagina inicial a partir de uma analise profunda da pagina do drawdb.app, analise todas as paginas do drawdb e crie o que for necessario, contudo mantenha nossa identidade visual.
+- nosso objetivo é ter uma central para o aluno praticar todas as etapas da disciplina de banco de dados.
+```
+
+
+### Prompt 69 (Resposta do Usuário no Grill-me - 1/4 Arquitetura de Telas e Reorganização do Menu)
+```text
+(Recommended) Central Completa em Módulos + Menu Categorizado + Pills Rápidas no Topo: 1) Laboratório SQL (Workspace limpo + Split-View DER opcional), 2) Estúdio DER Visual dedicado (com Inspetor lateral, Linter, Áreas/Notas e Modo Apresentação), 3) Modelo Lógico & Dicionário (MER/Normalização/PDF), 4) Nova Tela "Galeria & Prática" (Templates DER com miniaturas SVG ao vivo estilo DrawDB, Bancos de Aula e Exercícios) e 5) Sistema (Histórico, Configurações, Guia/Feedback e Sobre)
+```
+
+
+### Prompt 70 (Resposta do Usuário no Grill-me - 2/4 Refatoração da Página Inicial e Telas de Apoio)
+```text
+(Recommended) Refatoração Completa Estilo DrawDB com 100% da Nossa Estética: Mini-Canvas DER real arrastável na Home (com nossas linhas 90° arredondadas + laser #FF6B00/#FFE600), seção interativa "Trilha das 5 Etapas da Disciplina", preview da Galeria com miniaturas SVG clonáveis em 1 clique, Bento Grid expandido + Banner Offline-First, preservando 100% Milkfed/Prof. William/Changelog + nova tela leve de "Guia Rápido, Atalhos & Reportar Feedback" (inspirada em /bug-report e NotFound)
+```
+
+
+### Prompt 71 (Resposta do Usuário no Grill-me - 3/4 Central de Configurações Expandida)
+```text
+(Recommended) Central de Configurações em 4 Pilares + Espelhamento Rápido nas Toolbars: 1) Aparência & Acessibilidade (4x4 temas, fontes, modo leve p/ PCs de laboratório), 2) Editor SQL (toggles de auto-MAIÚSCULAS, auto ";", sync de USE pelo cursor, limite padrão 30/100/Total), 3) Estúdio DER (linha 90°/Bézier, notação Crow's Foot/1:N/Pinos, etiquetas sob demanda vs fixas, Snap-to-Grid 24px, toggle de Inferência Heurística de FKs vs somente FKs explícitas) e 4) Pedagogia & Super-Backup (.sqleditor.json completo p/ aluno levar do laboratório p/ casa)
+```
+
+
+### Prompt 72 (Resposta do Usuário no Grill-me - 4/4 Cobertura Prática das 5 Etapas da Disciplina e Roadmap em 5 Fases)
+```text
+(Recommended) Cobertura Prática Integral das 5 Etapas (incluindo Cenários de Requisitos/Normalização 1FN-3FN, Dicionário de Dados editável e Trilha de Exercícios/Desafios com Validador Local de Gabarito na Galeria), organizada em 5 Fases Incrementais seguras (v3.2.0 a v3.2.4) no Plano de Ação
+```
+
+### 🎯 Ações Executadas (Expansão do Estudo & Plano Mestre "Central da Disciplina de Banco de Dados" `v3.2.0` → `v3.2.4`):
+
+1. **Inspeção Completa de Todas as Páginas e Subcomponentes do `drawdb.app` (`analisar/drawdb-main`):**
+   - Analisadas integralmente as páginas `LandingPage.jsx` (`SimpleCanvas.jsx` + `heroDiagram.js`), `Templates.jsx` (`Thumbnail.jsx` + `template1..6.js`), `Editor.jsx` (`StartModal.jsx`, `SidePanel.jsx`, `ControlPanel.jsx`, `FloatingControls.jsx`), `SettingsContext.jsx`, `BugReport.jsx` e `NotFound.jsx`, confrontando-as com nossas telas atuais (`LandingPageView.tsx`, `MainMenuDropdown.tsx`, `Header.tsx`, `SettingsView.tsx`, `ERDiagramView.tsx`, `ERModelView.tsx`).
+   - Atualizado o artefato técnico `analise_arquitetural_der.md` com o raio-x página a página do `drawDB`, o **Contrato Estrito de Preservação Estética (`SQLEditor Design Lock` — 100% identidade Milkfed / SQLEditor nos 4×4 temas)** e o mapeamento das 5 etapas da disciplina de Banco de Dados.
+   - Mantida a trava absoluta da fase de estudo: **zero alterações em arquivos de código dentro de `frontend/`**.
+
+2. **Alinhamento via `/grill-me` (Prompts 69–72) e Consolidação do Plano Mestre em 5 Fases (`documentation/plan-v3.2-der-reactive-studio.md` & `plano_acao_der_v3_2.md`):**
+   - **Fase 1 (`v3.2.0`):** Reorganização do Menu Categorizado + Pills Rápidas das Etapas da Disciplina no Topo + Central de Configurações em 4 Pilares (incluindo Modo Leve p/ Laboratório, toggles de automação do Editor SQL, toggle pedagógico de Inferência Heurística de FKs vs Somente Explícitas e Super-Backup Portátil `.sqleditor.json`) + Novo Motor DER Ortogonal 90° de 7 Camadas + Cards Ricos + Modo Apresentação Tela Cheia.
+   - **Fase 2 (`v3.2.1`):** Split-View Reativo (`SQL ➔ DER` a cada tecla) no Laboratório SQL + Bancada Visual Completa exclusiva da tela Estúdio DER (Inspetor Lateral, Construtor `DER ➔ SQL` com `Drag-to-Connect FK`, Áreas Temáticas e Notas de Requisitos).
+   - **Fase 3 (`v3.2.2`):** Evolução do `ERModelView` para Modelo Lógico & Dicionário de Dados Editável com checklist `1FN–3FN` + Linter Pedagógico em Tempo Real + Link Compartilhável `#z.` + Super-Exportação (`PNG`, `SVG`, `PDF`, `Mermaid`, `Dicionário Markdown`).
+   - **Fase 4 (`v3.2.3`):** Nova Tela **`Galeria & Prática Guiada`** com Miniaturas Vetoriais SVG ao vivo nos 4 temas, Bancos de Aula, Templates DER, Cenários de Normalização, Meus Modelos Salvos e Trilha de Exercícios com **Validador Local de Gabarito** (`exerciseValidator.ts`).
+   - **Fase 5 (`v3.2.4`):** Refatoração profunda da `LandingPageView.tsx` (Mini-Canvas DER real arrastável a 60fps na Home com nossas linhas 90° arredondadas + laser `#FF6B00`/`#FFE600`, seção "Trilha das 5 Etapas da Disciplina", preview SVG da Galeria clonável em 1 clique, Bento Grid expandido e Banner Offline-First, preservando 100% Milkfed / Prof. William / Changelog / Quickstart) + Nova Tela **`Guia Rápido, Atalhos & Reportar Feedback`**.
+
+
+---
+
+## 📌 Prompt 73 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 16:49  
+**Usuário:**
+```text
+perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pasta atual, caso precisemos regressar a versão atual)
+```
+
+
+### 🎯 Ações Executadas (Implementação Completa da Central da Disciplina de Banco de Dados `v3.2.4`):
+
+1. **Branch Dedicada de Desenvolvimento:**
+   - Criada a branch `feature/v3.2-central-bd` para execução isolada e segura de todas as fases da Central.
+
+2. **Tipagens e Contratos Globais de Domínio (`frontend/src/types/`):**
+   - Atualizado `ActiveView` em `frontend/src/types/index.ts` com `'gallery'` e `'guide-feedback'`, totalizando as 9 visões semânticas da Central.
+   - Criado `frontend/src/types/preferences.ts` com o contrato dos **4 Pilares de Configuração** (`ui`, `editor`, `er`, `pedagogy`) e defaults em `DEFAULT_APP_PREFERENCES`.
+   - Criado `frontend/src/types/erStudio.ts` estruturando nós de entidades, arestas de relacionamento de 7 camadas, áreas temáticas, notas adesivas post-it, dicionário de dados relacional, regras do linter pedagógico, desafios autocorrigíveis e paleta de cartões autorais `SQLEDITOR_CARD_PALETTE`.
+
+3. **Persistência IndexedDB e Super-Backup Portátil (`storage.ts` & `preferencesStorage.ts`):**
+   - Atualizado Dexie em `frontend/src/services/storage.ts` para schema `version(2)` adicionando as stores persistentes: `erDiagrams`, `dictionaryMeta` e `exerciseProgress`.
+   - Criado `frontend/src/services/preferencesStorage.ts`: carregamento e salvamento de preferências em `localStorage`, exportador do **Super-Backup Portátil (`.sqleditor.json`)** empacotando 100% do estado local do aluno e importador inteligente com restauração de bancos, workspace, diagramas, dicionários e desafios.
+
+4. **Motor SVG de Geometria, Parser Tolerante e Engenharia Direta Cirúrgica (`frontend/src/services/`):**
+   - Criado `frontend/src/services/erLayoutEngine.ts`: cálculo de rotas ortogonais 90° arredondadas com algoritmo de escape geométrico e opção Bézier fluida, hit-area de 22px, alça em "C" para Self-Join, garfo *fork-trunk-fork* para chaves compostas, ancoragem inteligente no colapso de cartões e layout topológico widescreen 16:9.
+   - Criado `frontend/src/services/liveSqlSchemaParser.ts`: parser tolerante em tempo real para `CREATE TABLE`, `ALTER TABLE`, `INSERT INTO` (amostra de registros para o Live Peek) e `CREATE TRIGGER` com suporte a `DELIMITER`.
+   - Criado `frontend/src/services/visualDdlGenerator.ts`: gerador de patches cirúrgicos via Monaco `executeEdits` para inserção de tabelas, colunas e constraints `FOREIGN KEY` preservando o histórico de Desfazer (`Ctrl+Z`).
+   - Criado `frontend/src/services/schemaLinter.ts`: linter pedagógico de esquemas em PT-BR verificando `MISSING_PK`, `ORPHAN_FK`, `FK_TYPE_MISMATCH`, dependências circulares com DFS e regras de normalização 1FN, 2FN e 3FN.
+   - Criado `frontend/src/services/shareSchemaLink.ts`: compartilhamento zero-backend com compressão `deflate-raw` via `CompressionStream` e descompressão de hashes `#z.<base64url>` e `#u.<base64url>`.
+   - Criado `frontend/src/services/schemaExporters.ts`: 5 exportadores de alta fidelidade: PNG HD com escala 2x, SVG vetorial limpo, PDF A4 paisagem para impressão, diagrama Mermaid `erDiagram` e Dicionário de Dados em Markdown (`.md`).
+   - Criado `frontend/src/services/exerciseValidator.ts`: validador local determinístico comparando estruturas de tabelas (`schema-check`) ou conjuntos de resultados SQL (`query-match`).
+
+5. **Componentes do Estúdio DER e Visualização (`frontend/src/components/er/`):**
+   - Criados `ERRelationshipLayer.tsx`, `ERTableCard.tsx`, `ERSubjectAreasLayer.tsx`, `ERStickyNotesLayer.tsx`, `ERCanvasToolbar.tsx`, `ERInteractiveCanvas.tsx`, `ERInspectorSidebar.tsx` e o orquestrador `ERStudioWorkspace.tsx` com modo duplo (`full-studio` e `split-preview`), *Live Data Peek* assíncrono do AlaSQL e seletor de exportações.
+   - Criados `ERThumbnailSvg.tsx` para miniaturas vetoriais vivas e `HeroInteractiveERCanvas.tsx` para o mini-DER interativo a 60 FPS na página inicial.
+   - Atualizados `ERDiagramView.tsx` e `ERModelView.tsx` (transformado em Modelo Lógico e Dicionário de Dados 1FN–3FN com checklists interativos e sem qualquer tom de roxo `#AB47BC`).
+
+6. **Nova Tela de Galeria, Prática Guiada e Guia/Feedback:**
+   - Criados `frontend/src/data/erTemplatesCatalog.ts` e `frontend/src/data/practiceExercisesCatalog.ts` com templates de referência 3FN, laboratórios de violação de 1FN/2FN/3FN e 7 desafios práticos autocorrigíveis.
+   - Criado `frontend/src/components/GalleryAndPracticeView.tsx` com 4 abas e banner acoplável de desafio ativo `<ActiveChallengeBanner />`.
+   - Criado `frontend/src/components/GuideAndFeedbackView.tsx` com guia de 5 passos da disciplina, cheat-sheet de atalhos e gerador de relatórios Markdown de bugs/sugestões.
+   - Refatorada integralmente `frontend/src/components/LandingPageView.tsx` integrando o mini-canvas interativo, bento grid de 12 cards, trilha de 5 etapas da disciplina e preservação total da autoria e identidade visual.
+
+7. **Reorganização da Navegação e Integração no Laboratório SQL (`MainMenuDropdown.tsx`, `Header.tsx`, `SettingsView.tsx`, `EditorWorkspace.tsx`, `App.tsx`):**
+   - Reorganizado `MainMenuDropdown.tsx` em 3 categorias semânticas (🎓 *Jornada da Disciplina*, 🛠️ *Ferramentas & Preferências*, 🏛️ *Vitrine, Apoio & Institucional*) com eliminação de 100% dos códigos de cor `#AB47BC`.
+   - Adicionadas Pills Rápidas no `Header.tsx` e alternador segmented `[Editor | SQL ↔ DER | DER]` no modo Workspace.
+   - Atualizado `SettingsView.tsx` para navegação nos 4 Pilares de preferências e área do Super-Backup Portátil (`.sqleditor.json`).
+   - Conectado `EditorWorkspace.tsx` às preferências do usuário (`fontSize`, `autoUppercaseKeywords`, `autoInsertSemicolon`, `syncDatabaseWithCursorUse`, `confirmBeforeCloseAllTabs`).
+   - Conectado `App.tsx` às 9 rotas com sincronização de hashes (`#galeria`, `#modelo`, `#der`, `#editor`, `#historico`, `#configuracoes`, `#guia`, `#sobre`, `#landing`), decodificador de links `#z.`, modo Split-View dinâmico e banner de desafios.
+
+8. **Versionamento Oficial `v3.2.4` e Atualização de Documentação:**
+   - Sincronizados `frontend/src/config/version.ts` e `frontend/package.json` para a versão `3.2.4`.
+   - Atualizado o `README.md` raiz com documentação moderna, bilíngue e destaque aos Agentes e Skill Packs do Google Antigravity.
+
+---
+
+## 📌 Prompt 74 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 17:29  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal continue de onde parou
+```
+
+### 🎯 Ações Executadas:
+- Retomada a execução da Release `v3.2.4`: finalização dos componentes centrais (`MainMenuDropdown.tsx`, `Header.tsx`, `SettingsView.tsx`, `EditorWorkspace.tsx`, `App.tsx`), versionamento, atualização de documentação e execução da esteira mandatória de validação técnica (`npm run lint`, `npm run build` e suíte de testes de integração).
+
+---
+
+
+## 📌 Prompt 75 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 17:42  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal continue de onde parou
+```
+
+### 🎯 Ações Executadas:
+- **Aprovação do Plano Diretor de Ação:** Plano de Ação v3.2 aprovado integralmente pelo usuário no artifact `plano_acao_der_v3_2.md`.
+- **Execução da Suíte de Testes Determinísticos (`verify_v32.mjs` via `tsx`):**
+  - Validados 16 testes cobrindo: parser SQL em tempo real (PKs, FKs implícitas e explícitas, triggers com DELIMITER, dados de amostra INSERT INTO), linter pedagógico (detecção de tabelas sem PK `MISSING_PK`, dependências circulares com DFS `CIRCULAR_FK`, anomalias de normalização `NORMALIZATION_1NF`), motor de rotas ortogonais 90° e Self-Join com curvas `Q`, layout topológico 16:9, gerador cirúrgico de DDL para inserção de tabelas, colunas e foreign keys com preservação de histórico, codificador/decodificador de links compactados `#z.`, exportadores Mermaid e Dicionário de Dados Markdown, normalizador de preferências com clamps seguros e integridade dos catálogos de templates e desafios de aula.
+  - **Resultado:** 16 de 16 testes aprovados com 100% de sucesso.
+- **Validação de Compilação e Qualidade Estática:**
+  - `npm run lint` (`oxlint`): 0 erros em 51 arquivos.
+  - `npm run build` (`tsc -b && vite build`): compilação TypeScript e empacotamento Vite concluídos em 1.65s com 0 erros.
+- **Auditoria de Clean-Room & Git:**
+  - Confirmado que a pasta temporária `analisar/` permanece blindada no `.gitignore` e não foi incluída no versionamento Git.
+- **Conclusão com Sucesso:** Meta `/goal` atingida com todos os módulos operacionais e integrados na versão `3.2.4`.
+
+---
+
+
+### 🎯 Ações Executadas (Implementação Completa da Central da Disciplina de Banco de Dados `v3.2.4`):
+
+1. **Branch Dedicada de Desenvolvimento:**
+   - Criada a branch `feature/v3.2-central-bd` para execução isolada e segura de todas as fases da Central.
+
+2. **Tipagens e Contratos Globais de Domínio (`frontend/src/types/`):**
+   - Atualizado `ActiveView` em `frontend/src/types/index.ts` com `'gallery'` e `'guide-feedback'`, totalizando as 9 visões semânticas da Central.
+   - Criado `frontend/src/types/preferences.ts` com o contrato dos **4 Pilares de Configuração** (`ui`, `editor`, `er`, `pedagogy`) e defaults em `DEFAULT_APP_PREFERENCES`.
+   - Criado `frontend/src/types/erStudio.ts` estruturando nós de entidades, arestas de relacionamento de 7 camadas, áreas temáticas, notas adesivas post-it, dicionário de dados relacional, regras do linter pedagógico, desafios autocorrigíveis e paleta de cartões autorais `SQLEDITOR_CARD_PALETTE`.
+
+3. **Persistência IndexedDB e Super-Backup Portátil (`storage.ts` & `preferencesStorage.ts`):**
+   - Atualizado Dexie em `frontend/src/services/storage.ts` para schema `version(2)` adicionando as stores persistentes: `erDiagrams`, `dictionaryMeta` e `exerciseProgress`.
+   - Criado `frontend/src/services/preferencesStorage.ts`: carregamento e salvamento de preferências em `localStorage`, exportador do **Super-Backup Portátil (`.sqleditor.json`)** empacotando 100% do estado local do aluno e importador inteligente com restauração de bancos, workspace, diagramas, dicionários e desafios.
+
+4. **Motor SVG de Geometria, Parser Tolerante e Engenharia Direta Cirúrgica (`frontend/src/services/`):**
+   - Criado `frontend/src/services/erLayoutEngine.ts`: cálculo de rotas ortogonais 90° arredondadas com algoritmo de escape geométrico e opção Bézier fluida, hit-area de 22px, alça em "C" para Self-Join, garfo *fork-trunk-fork* para chaves compostas, ancoragem inteligente no colapso de cartões e layout topológico widescreen 16:9.
+   - Criado `frontend/src/services/liveSqlSchemaParser.ts`: parser tolerante em tempo real para `CREATE TABLE`, `ALTER TABLE`, `INSERT INTO` (amostra de registros para o Live Peek) e `CREATE TRIGGER` com suporte a `DELIMITER`.
+   - Criado `frontend/src/services/visualDdlGenerator.ts`: gerador de patches cirúrgicos via Monaco `executeEdits` para inserção de tabelas, colunas e constraints `FOREIGN KEY` preservando o histórico de Desfazer (`Ctrl+Z`).
+   - Criado `frontend/src/services/schemaLinter.ts`: linter pedagógico de esquemas em PT-BR verificando `MISSING_PK`, `ORPHAN_FK`, `FK_TYPE_MISMATCH`, dependências circulares com DFS e regras de normalização 1FN, 2FN e 3FN.
+   - Criado `frontend/src/services/shareSchemaLink.ts`: compartilhamento zero-backend com compressão `deflate-raw` via `CompressionStream` e descompressão de hashes `#z.<base64url>` e `#u.<base64url>`.
+   - Criado `frontend/src/services/schemaExporters.ts`: 5 exportadores de alta fidelidade: PNG HD com escala 2x, SVG vetorial limpo, PDF A4 paisagem para impressão, diagrama Mermaid `erDiagram` e Dicionário de Dados em Markdown (`.md`).
+   - Criado `frontend/src/services/exerciseValidator.ts`: validador local determinístico comparando estruturas de tabelas (`schema-check`) ou conjuntos de resultados SQL (`query-match`).
+
+5. **Componentes do Estúdio DER e Visualização (`frontend/src/components/er/`):**
+   - Criados `ERRelationshipLayer.tsx`, `ERTableCard.tsx`, `ERSubjectAreasLayer.tsx`, `ERStickyNotesLayer.tsx`, `ERCanvasToolbar.tsx`, `ERInteractiveCanvas.tsx`, `ERInspectorSidebar.tsx` e o orquestrador `ERStudioWorkspace.tsx` com modo duplo (`full-studio` e `split-preview`), *Live Data Peek* assíncrono do AlaSQL e seletor de exportações.
+   - Criados `ERThumbnailSvg.tsx` para miniaturas vetoriais vivas e `HeroInteractiveERCanvas.tsx` para o mini-DER interativo a 60 FPS na página inicial.
+   - Atualizados `ERDiagramView.tsx` e `ERModelView.tsx` (transformado em Modelo Lógico e Dicionário de Dados 1FN–3FN com checklists interativos e sem qualquer tom de roxo `#AB47BC`).
+
+6. **Nova Tela de Galeria, Prática Guiada e Guia/Feedback:**
+   - Criados `frontend/src/data/erTemplatesCatalog.ts` e `frontend/src/data/practiceExercisesCatalog.ts` com templates de referência 3FN, laboratórios de violação de 1FN/2FN/3FN e 7 desafios práticos autocorrigíveis.
+   - Criado `frontend/src/components/GalleryAndPracticeView.tsx` com 4 abas e banner acoplável de desafio ativo `<ActiveChallengeBanner />`.
+   - Criado `frontend/src/components/GuideAndFeedbackView.tsx` com guia de 5 passos da disciplina, cheat-sheet de atalhos e gerador de relatórios Markdown de bugs/sugestões.
+   - Refatorada integralmente `frontend/src/components/LandingPageView.tsx` integrando o mini-canvas interativo, bento grid de 12 cards, trilha de 5 etapas da disciplina e preservação total da autoria e identidade visual.
+
+7. **Reorganização da Navegação e Integração no Laboratório SQL (`MainMenuDropdown.tsx`, `Header.tsx`, `SettingsView.tsx`, `EditorWorkspace.tsx`, `App.tsx`):**
+   - Reorganizado `MainMenuDropdown.tsx` em 3 categorias semânticas (🎓 *Jornada da Disciplina*, 🛠️ *Ferramentas & Preferências*, 🏛️ *Vitrine, Apoio & Institucional*) com eliminação de 100% dos códigos de cor `#AB47BC`.
+   - Adicionadas Pills Rápidas no `Header.tsx` e alternador segmented `[Editor | SQL ↔ DER | DER]` no modo Workspace.
+   - Atualizado `SettingsView.tsx` para navegação nos 4 Pilares de preferências e área do Super-Backup Portátil (`.sqleditor.json`).
+   - Conectado `EditorWorkspace.tsx` às preferências do usuário (`fontSize`, `autoUppercaseKeywords`, `autoInsertSemicolon`, `syncDatabaseWithCursorUse`, `confirmBeforeCloseAllTabs`).
+   - Conectado `App.tsx` às 9 rotas com sincronização de hashes (`#galeria`, `#modelo`, `#der`, `#editor`, `#historico`, `#configuracoes`, `#guia`, `#sobre`, `#landing`), decodificador de links `#z.`, modo Split-View dinâmico e banner de desafios.
+
+8. **Versionamento Oficial `v3.2.4` e Atualização de Documentação:**
+   - Sincronizados `frontend/src/config/version.ts` e `frontend/package.json` para a versão `3.2.4`.
+   - Atualizado o `README.md` raiz com documentação moderna, bilíngue e destaque aos Agentes e Skill Packs do Google Antigravity.
+
+---
+
+## 📌 Prompt 74 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 17:29  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal continue de onde parou
+```
+
+### 🎯 Ações Executadas:
+- Retomada a execução da Release `v3.2.4`: finalização dos componentes centrais (`MainMenuDropdown.tsx`, `Header.tsx`, `SettingsView.tsx`, `EditorWorkspace.tsx`, `App.tsx`), versionamento, atualização de documentação e execução da esteira mandatória de validação técnica (`npm run lint`, `npm run build` e suíte de testes de integração).
+
+---
+
+
+## 📌 Prompt 75 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 17:42  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal continue de onde parou
+```
+
+### 🎯 Ações Executadas:
+- **Aprovação do Plano Diretor de Ação:** Plano de Ação v3.2 aprovado integralmente pelo usuário no artifact `plano_acao_der_v3_2.md`.
+- **Execução da Suíte de Testes Determinísticos (`verify_v32.mjs` via `tsx`):**
+  - Validados 16 testes cobrindo: parser SQL em tempo real (PKs, FKs implícitas e explícitas, triggers com DELIMITER, dados de amostra INSERT INTO), linter pedagógico (detecção de tabelas sem PK `MISSING_PK`, dependências circulares com DFS `CIRCULAR_FK`, anomalias de normalização `NORMALIZATION_1NF`), motor de rotas ortogonais 90° e Self-Join com curvas `Q`, layout topológico 16:9, gerador cirúrgico de DDL para inserção de tabelas, colunas e foreign keys com preservação de histórico, codificador/decodificador de links compactados `#z.`, exportadores Mermaid e Dicionário de Dados Markdown, normalizador de preferências com clamps seguros e integridade dos catálogos de templates e desafios de aula.
+  - **Resultado:** 16 de 16 testes aprovados com 100% de sucesso.
+- **Validação de Compilação e Qualidade Estática:**
+  - `npm run lint` (`oxlint`): 0 erros em 51 arquivos.
+  - `npm run build` (`tsc -b && vite build`): compilação TypeScript e empacotamento Vite concluídos em 1.65s com 0 erros.
+- **Auditoria de Clean-Room & Git:**
+  - Confirmado que a pasta temporária `analisar/` permanece blindada no `.gitignore` e não foi incluída no versionamento Git.
+- **Conclusão com Sucesso:** Meta `/goal` atingida com todos os módulos operacionais e integrados na versão `3.2.4`.
+
+---

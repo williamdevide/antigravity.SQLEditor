@@ -1,17 +1,18 @@
-# ⚡ SQLEditor - Interactive MySQL Playground & Schema Explorer
+# ⚡ SQLEditor - Central da Disciplina de Banco de Dados
 
 <div align="center">
 
-![Google Antigravity](https://img.shields.io/badge/Developed%20with-Google%20Antigravity-4285F4?style=for-the-badge&logo=google&logoColor=white)
-![React](https://img.shields.io/badge/React%2019-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Google Antigravity](https://img.shields.io/badge/Desenvolvido%20com-Google%20Antigravity-4285F4?style=for-the-badge&logo=google&logoColor=white)
+![React 19](https://img.shields.io/badge/React%2019-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
-![IndexedDB](https://img.shields.io/badge/Storage-IndexedDB%20%2B%20AlaSQL-FF6B00?style=for-the-badge&logo=mysql&logoColor=white)
-![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white)
+![Storage](https://img.shields.io/badge/Storage-IndexedDB%20%2B%20Dexie%20%2B%20AlaSQL-FF6B00?style=for-the-badge&logo=mysql&logoColor=white)
+![Version](https://img.shields.io/badge/Version-v3.2.4-00E676?style=for-the-badge)
+![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white)
 
-**Ambiente Web Interativo e Educacional para Prática de Banco de Dados MySQL com Persistência 100% Offline no Navegador**  
-*Interactive Web Educational Environment for MySQL Database Practice with 100% In-Browser Offline Persistence*
+**Ambiente Web Educacional Integrado para a Disciplina de Banco de Dados: Modelagem Conceitual, Normalização 1FN–3FN, Estúdio DER Reativo e Laboratório SQL 100% Offline no Navegador**  
+*Integrated Educational Web Platform for Database Systems: Conceptual Modeling, 1NF–3NF Normalization, Reactive ER Studio, and SQL Lab with 100% In-Browser Offline Persistence*
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwilliamdevide%2Fantigravity.SQLEditor&root-directory=frontend)
 
@@ -21,98 +22,131 @@
 
 ---
 
+## 🤖 Agentes de IA & Skill Packs (Google Antigravity)
+
+Este ecossistema foi projetado, arquitetado e refinado com o auxílio dos agentes e pacotes de competências especializados do **Google Antigravity**:
+
+| Agente / Especialista | Papel Principal no Projeto |
+| :--- | :--- |
+| **`@orchestrator` / `@agente-orquestrador`** | Orquestração central da jornada de 5 etapas da disciplina, roteamento determinístico e integridade de contexto. |
+| **`@frontend-specialist`** | Engenharia dos componentes React 19, Monaco Editor, animações a 60 FPS e conformidade estrita da identidade visual (*Zero Purple Ban*). |
+| **`@database-architect`** | Modelagem relacional, parser tolerante de SQL ao vivo, linter pedagógico de esquemas e validação de normalização 1FN–3FN. |
+
+### 📚 Skill Packs Utilizados
+* **`@agente-orquestrador`**: Governança da arquitetura em 3 camadas e histórico auditável de prompts.
+* **`@clean-code`**: Código idiomático, sem over-engineering, testes automatizados e tipagem TypeScript estrita.
+* **`@frontend-architecture`**: Separação modular de responsabilidades (UI, Geometria, Parsers, Dexie e AlaSQL).
+* **`@frontend-design`**: Sistema de design autoral com variáveis CSS dinâmicas para 4 Temas de Interface e 4 Temas de Sintaxe.
+* **`@database-design`**: Arquitetura relacional, integridade referencial e normalização formal 1FN, 2FN e 3FN.
+* **`@lint-and-validate` & `@verify-changes`**: Execução de suites determinísticas de compilação, lint e testes de layout SVG.
+
+---
+
 ## 🇧🇷 Português
 
-### 📖 Visão Geral
-O **SQLEditor** é uma plataforma educacional Single Page Application (SPA) projetada para estudantes e instrutores praticarem comandos DDL e DML com sintaxe MySQL inteiramente no navegador.
+### 📖 Visão Geral da Central (v3.2.4)
+O **SQLEditor** evoluiu de um editor SQL para uma **Central Completa da Disciplina de Banco de Dados**, cobrindo todas as etapas práticas da formação técnica e acadêmica do SENAI:
 
-Inspirado em interfaces modernas como DBeaver, TablePlus e prototipado no **Google Stitch**, o sistema inclui:
-- **Navegador de Schema (Schema Explorer):** Inicia limpo por padrão. Clique com o botão direito sobre o título **SCHEMA EXPLORER** para alternar entre:
-  - 🗑️ **Carregar vazio:** ambiente sem nenhum banco de dados.
-  - 📦 **Carregar BDs de exemplo:** carrega os bancos clássicos `ecommerce_db` e `universidade_db`.
-  - 🎓 **Carregar BDs Aula:** carrega automaticamente todos os bancos enviados pelo professor.
-- **Editor Multi-Abas com Soluções Integradas:**
-  - Botão **+ Nova Aba** com menu suspenso: *Criar aba em branco* ou *Carregar Soluções* (com submenu dinâmico listando os arquivos de aula).
-  - Rolagem automática da barra de guias para manter a última aba e o botão `+` sempre visíveis.
-  - Botão **Fechar Todas** (ao lado de Limpar) com diálogo de confirmação.
-- **Botão Resetar Banco:** Restaura com precisão o estado original do modo atualmente selecionado no Schema Explorer (Vazio, Exemplos ou Aula).
-- **Console e Grade de Dados (Data Grid):** Exibição interativa e paginada dos resultados com contagem de registros e logs detalhados de execução (tempo decorrido, linhas afetadas e erros precisos).
-- **Persistência Total no Navegador (IndexedDB):** Todos os bancos criados, tabelas e registros ficam salvos localmente no computador do aluno via IndexedDB (AlaSQL e Dexie), sobrevivendo ao fechar e reabrir o navegador.
-- **Controles de Zoom Independentes:** Botoeiras de zoom dedicadas para ajustar individualmente o tamanho de fonte da Sidebar, do Editor e do Console.
-- **Visualizador ER e Histórico:** Diagrama visual dinâmico de relacionamento entre tabelas com identificação inteligente de PK/FK, cardinalidades `1 : N`, conectores Bézier ajustados ao zoom e exportação em PNG de alta resolução.
-- **Autocompletar Inteligente e Contextual:** Sugestões estritas ao banco de dados ativo e sensíveis ao início digitado.
-- **Exportação e Scripts Completos:** Acesso rápido por clique direito na sidebar para inspecionar scripts DDL/DML e exportar arquivos `.sql` de bancos e tabelas.
-- **Temas Claro e Escuro:** Suporte a temas com paleta de contraste refinada.
+```
+[Etapa 1: Modelo Conceitual] ➔ [Etapa 2: Normalização 1FN-3FN] ➔ [Etapa 3: Estúdio DER] ➔ [Etapa 4: Laboratório SQL] ➔ [Etapa 5: Prática & Desafios]
+```
 
-### 📁 Pastas Definitivas para Novos Arquivos (Professor)
-Para adicionar novos bancos de dados ou soluções sem necessidade de comandos ou prompts adicionais, salve os arquivos `.sql` diretamente nestas pastas:
+### ✨ Módulos Principais
+
+1. **📐 Estúdio DER Dedicado (Motor SVG de 7 Camadas):**
+   * Rotas ortogonais 90° arredondadas com algoritmo de escape geométrico e opção Bézier fluida.
+   * Hit-area invisível de 22px, trilha de contraste, Spotlight com atenuação a 22% para foco em aula.
+   * Fluxo laser animado no sentido `FK ➔ PK`, alça em "C" para Self-Join e garfo *fork-trunk-fork* para chaves compostas.
+   * Notações de cardinalidade selecionáveis: Pé-de-Galinha (*Crow's Foot*), 1:N clássico ou Pinos Vetoriais.
+   * Cartões ricos: colapso inteligente mantendo chaves ancoradas, trava de posição (🔒), amostra ao vivo de registros (👁️ *Live Data Peek*), seção de triggers (⚡), áreas temáticas com arraste solidário e notas adesivas post-it.
+
+2. **⚡ Laboratório SQL com Split-View Reativo (SQL ↔ DER):**
+   * Editor Monaco de alto desempenho com autocompletar contextual estrito ao banco ativo.
+   * Parser tolerante em tempo real via `useDeferredValue` para `CREATE TABLE`, `ALTER TABLE`, `INSERT INTO` e `CREATE TRIGGER`.
+   * Engenharia reversa e direta cirúrgica: alterações visuais no DER aplicam patches pontuais no Monaco via `executeEdits` preservando o histórico de Desfazer (`Ctrl+Z`).
+   * Execução multi-comando em lote com exibição fiel do último comando e marcadores interativos (`✓`/`✖`) no gutter.
+
+3. **📋 Modelo Lógico & Dicionário de Dados (1FN–3FN):**
+   * Descrições semânticas editáveis por tabela e por coluna, salvas localmente no IndexedDB.
+   * Checklist interativo dos critérios de 1FN, 2FN e 3FN com explicação teórica imediata.
+   * Linter pedagógico em português com detecção de chaves ausentes, orfãs, tipos incompatíveis e dependências circulares.
+   * Compartilhamento zero-backend via link compactado `#z.<base64url>` e 5 exportadores: PNG HD, SVG, PDF A4, Mermaid `erDiagram` e Markdown `.md`.
+
+4. **🎓 Galeria de Bancos de Aula & Desafios Autocorrigíveis:**
+   * Miniaturas vetoriais dinâmicas dos bancos de dados (`<ERThumbnailSvg />`).
+   * Bancos oficiais das aulas (Pizzaria/Streaming, Escola de Idiomas, RH, E-Commerce).
+   * Templates curados e laboratórios de correção de violação de 1FN, 2FN e 3FN.
+   * 7 desafios graduados em 5 fases com validador local determinístico e banner ativo acoplável.
+
+5. **⚙️ Central de Configurações em 4 Pilares & Super-Backup (.sqleditor.json):**
+   * **Pilar 1:** Interface, Tipografia (`12–22px`), Zoom DER (`60–150%`), Pills Rápidas e Modo Leve (Lab Mode 60 FPS).
+   * **Pilar 2:** Automações do editor, auto-capitalização, auto-ponto-e-vírgula e ciclo `Limit 30/100/Total`.
+   * **Pilar 3:** Estúdio DER, ortogonal vs Bézier, cardinalidades, snap to grid 24px e FKs implícitas.
+   * **Pilar 4:** Rigor do linter, controle do esquema interno `dbo` e **Super-Backup Portátil (.sqleditor.json)** para migrar todo o ambiente entre o laboratório da escola e o computador pessoal de casa.
+
+---
+
+### 📁 Pastas de Scripts para Professores
+
+Para adicionar novos bancos de dados ou soluções sem tocar no código:
 * 🗄️ **Bancos de Dados de Aula:** `frontend/src/data/bds/`  
-  *(Qualquer arquivo `.sql` colocado aqui é automaticamente reconhecido e carregado ao selecionar "Carregar BDs Aula")*
+  *(Qualquer arquivo `.sql` adicionado aqui é imediatamente carregado na Galeria e no Schema Explorer).*
 * 💡 **Scripts de Soluções:** `frontend/src/data/solutions/`  
-  *(Qualquer arquivo `.sql` colocado aqui aparece imediatamente no submenu "Carregar Soluções" do botão "+ Nova Aba")*
+  *(Qualquer arquivo `.sql` adicionado aqui aparece no menu suspenso do botão "+ Nova Aba").*
 
-### 📁 Estrutura de Pastas do Projeto
-```
-├── /frontend
-│   ├── /src
-│   │   ├── /data
-│   │   │   ├── /bds          # 👈 Pasta Oficial: Scripts SQL dos bancos de aula
-│   │   │   └── /solutions    # 👈 Pasta Oficial: Scripts SQL das soluções de aula
-│   │   ├── /components       # Componentes React (Editor, Sidebar, Dropdowns, etc.)
-│   │   ├── /services         # Motor AlaSQL, Dexie, Reviewer e ScriptsLoader
-├── /backend                  # Serviço Node.js/Express auxiliar
-├── /documentation            # Diretivas, SOPs e promptHistory.md
-├── executar.bat              # Script de inicialização automática de 1 clique no Windows
-└── README.md                 # Documentação mestre do repositório
-```
+---
 
 ### 🚀 Como Executar Localmente
-1. Dê um duplo clique no arquivo `executar.bat` ou:
+
 ```bash
-cd frontend
+# 1. Clone o repositório
+git clone https://github.com/williamdevide/antigravity.SQLEditor.git
+cd antigravity.SQLEditor/frontend
+
+# 2. Instale as dependências
 npm install
+
+# 3. Inicie o servidor Vite
 npm run dev
 ```
-2. Acesse `http://localhost:5173` no seu navegador.
 
-### 🌐 Publicação no Vercel
-Você pode publicar o projeto na nuvem da Vercel de duas formas:
-
-#### Opção A: 1-Clique com GitHub (Recomendado)
-1. Clique no botão [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwilliamdevide%2Fantigravity.SQLEditor&root-directory=frontend)
-2. Conecte sua conta do GitHub e clique em **Deploy**. O arquivo `vercel.json` configurado na raiz cuidará do build automático de produção.
-
-#### Opção B: Via Terminal (Vercel CLI)
-```bash
-cd frontend
-npx vercel login
-npx vercel --prod
-```
+Abra `http://localhost:5173` no navegador. No Windows, você também pode dar duplo clique no executável `executar.bat` na raiz.
 
 ---
 
 ## 🇺🇸 English
 
-### 📖 Overview
-**SQLEditor** is a client-side educational Single Page Application (SPA) crafted for students and developers to practice MySQL DDL/DML queries with high fidelity right in their browser.
+### 📖 Platform Overview (v3.2.4)
+**SQLEditor** is a comprehensive educational Single Page Application (SPA) designed for computer science students and instructors to practice every phase of relational database systems directly in the browser:
 
-Inspired by industry-standard tools like DBeaver, TablePlus and styled directly with modern web standards, featuring:
-- **Schema Explorer:** Dynamic tree view of databases, tables, views and columns with rich right-click context actions (`SELECT *`, `INSERT`, `UPDATE`, `DELETE`, `ALTER`, `DROP`, full script view and `.sql` file export).
-- **Tabbed SQL Workspace:** Powered by **Monaco Editor** with MySQL syntax highlighting, auto-complete restricted to the active database, Find & Replace and keyboard shortcuts (`Ctrl+Enter` to run).
-- **Interactive Data Grid & Execution Log:** High-density result table, copy error buttons, column sorting, elapsed time and precise diagnostic reporting.
-- **100% In-Browser Offline Persistence:** Local databases are stored using IndexedDB (`alasql` + `dexie`), keeping all data intact even after closing the browser.
-- **Independent Zoom Controls:** Per-pane zoom sliders for sidebar, code editor, and console panels.
-- **Interactive ER Diagram & Query History:** Entity-relationship viewer with cardinalities `1 : N`, Bézier connectors and HD PNG export.
+1. **📐 Dedicated ER Studio (7-Layer SVG Engine):**
+   * 90° rounded orthogonal routing with obstacle avoidance and optional fluid Bézier curves.
+   * 22px hit-areas, contrast outlines, 22% Spotlight focus dimming for classroom demonstrations.
+   * Animated laser flow (`FK ➔ PK`), recursive "C" loops for Self-Joins, and fork-trunk-fork composite FK trunks.
+   * Rich table cards with smart collapse, position locks (🔒), Live Data Peek, triggers section (⚡), subject areas, and sticky notes.
 
-### 👨‍🏫 Author & Credits
-* **Creator & Lead Instructor:** Professor William Devidé Komel
-* **Contact / Email:** `williamdevide@gmail.com`
-* **Institution:** SENAI Ourinhos
+2. **⚡ Reactive SQL Lab & Split-View (SQL ↔ ER):**
+   * High-performance Monaco Editor with schema-aware autocomplete strictly scoped to active databases.
+   * Real-time tolerant parser for `CREATE TABLE`, `ALTER TABLE`, `INSERT INTO`, and `CREATE TRIGGER`.
+   * Surgical visual forward-engineering: visual additions in ER patch Monaco via `executeEdits` while preserving Undo (`Ctrl+Z`).
 
-### 🤖 Powered by Google Antigravity
-Built with Google's next-generation agentic development framework:
-- **Specialized AI Agents:** `@orchestrator`, `@frontend-specialist`, `@project-planner`.
-- **Active Skills:** `@clean-code`, `@frontend-design`, `@app-builder`, `@stitch`.
+3. **📋 Relational Data Dictionary & 1NF–3NF Normalization:**
+   * Editable descriptions for tables and columns persisted in IndexedDB.
+   * Interactive 1NF/2NF/3NF criteria checklist with academic definitions.
+   * Pedagogical schema linter detecting missing PKs, orphan FKs, type mismatches, and circular dependencies.
+   * Zero-backend sharing via `#z.<deflate-base64url>` URLs and 5 exporters (PNG HD, SVG, PDF A4, Mermaid, and Markdown).
+
+4. **🎓 Classroom Gallery & Auto-Graded Challenges:**
+   * Dynamic pure-vector schema silhouettes (`<ERThumbnailSvg />`).
+   * Pre-packaged classroom datasets and normalization violation labs.
+   * 7 graduated practice exercises with instant deterministic local validation.
+
+5. **⚙️ 4-Pillar Settings & Portable Super-Backup (.sqleditor.json):**
+   * Complete portable state backup packaging databases, open tabs, ER diagrams, notes, dictionaries, and exercise progress into a single `.sqleditor.json` file.
 
 ---
-*Assinado: Agente Antigravity - SENAI Ourinhos Edition*
+
+### 📄 Licença / License
+Distribuído sob a licença MIT. Consulte o arquivo `LICENSE` para mais detalhes.
+
+*Desenvolvido com o ecossistema Google Antigravity — Edição Especial SENAI.*

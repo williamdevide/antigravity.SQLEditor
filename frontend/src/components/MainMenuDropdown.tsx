@@ -138,33 +138,85 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
         </span>
       </button>
 
-      {/* Menu Principal Dropdown */}
+      {/* Menu Principal Dropdown Reorganizado em 3 Categorias */}
       {isOpen && (
-        <div className="absolute left-0 mt-1.5 z-50 min-w-[230px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
-            Menu SQLEditor
+        <div className="absolute left-0 mt-1.5 z-50 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+          
+          {/* ========================================================== */}
+          {/* CATEGORIA 1: 🎓 JORNADA DA DISCIPLINA DE BANCO DE DADOS   */}
+          {/* ========================================================== */}
+          <div className="px-3 py-1.5 text-[10px] font-bold text-[var(--accent-yellow)] uppercase tracking-wider border-b border-[var(--border-color)]/60 flex items-center justify-between">
+            <span>🎓 Jornada da Disciplina</span>
+            <span className="text-[9px] font-mono text-[var(--text-muted)]">v3.2</span>
           </div>
 
-          {/* Opção 0: Página Inicial (Landing Page) */}
+          {/* 1. Galeria & Prática Guiada */}
           <button
-            onClick={() => handleNavClick('landing')}
+            onClick={() => handleNavClick('gallery')}
             className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
-              activeView === 'landing' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+              activeView === 'gallery' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
             }`}
             type="button"
           >
             <div className="flex items-center gap-2.5">
               <span className="material-symbols-outlined text-[17px] text-[#FF6B00]">
-                rocket_launch
+                collections_bookmark
               </span>
-              <span>Página Inicial</span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Galeria & Prática Guiada</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Bancos de aula & desafios</span>
+              </div>
             </div>
-            {activeView === 'landing' && (
+            {activeView === 'gallery' && (
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
             )}
           </button>
 
-          {/* Opção 1: Workspace / Editor */}
+          {/* 2. Modelo Lógico & Dicionário de Dados */}
+          <button
+            onClick={() => handleNavClick('er-model')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'er-model' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#29B6F6]">
+                menu_book
+              </span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Modelo Lógico & Dicionário</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Checklist 1FN–3FN & Linter</span>
+              </div>
+            </div>
+            {activeView === 'er-model' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            )}
+          </button>
+
+          {/* 3. Estúdio DER (Diagrama Entidade-Relacionamento) */}
+          <button
+            onClick={() => handleNavClick('er-diagram')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'er-diagram' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#FF8533]">
+                schema
+              </span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Estúdio DER</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Canvas 7 camadas 90°</span>
+              </div>
+            </div>
+            {activeView === 'er-diagram' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            )}
+          </button>
+
+          {/* 4. Laboratório SQL (Workspace) */}
           <button
             onClick={() => handleNavClick('workspace')}
             className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
@@ -176,14 +228,24 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
               <span className="material-symbols-outlined text-[17px] text-[var(--accent-yellow)]">
                 terminal
               </span>
-              <span>Editor (Workspace)</span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Laboratório SQL (Editor)</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Monaco + AlaSQL + Split-View</span>
+              </div>
             </div>
             {activeView === 'workspace' && (
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
             )}
           </button>
 
-          {/* Opção 2: Histórico */}
+          {/* ========================================================== */}
+          {/* CATEGORIA 2: 🛠️ FERRAMENTAS & PREFERÊNCIAS                 */}
+          {/* ========================================================== */}
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider border-t border-[var(--border-color)]/60 flex items-center justify-between mt-1">
+            <span>🛠️ Ferramentas & Preferências</span>
+          </div>
+
+          {/* Histórico */}
           <button
             onClick={() => handleNavClick('history')}
             className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
@@ -195,52 +257,14 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
               <span className="material-symbols-outlined text-[17px] text-[#00E676]">
                 history
               </span>
-              <span>Histórico</span>
+              <span>Histórico de Consultas</span>
             </div>
             {activeView === 'history' && (
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
             )}
           </button>
 
-          {/* Opção 3: Diagrama ER */}
-          <button
-            onClick={() => handleNavClick('er-diagram')}
-            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
-              activeView === 'er-diagram' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
-            }`}
-            type="button"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[17px] text-[#29B6F6]">
-                schema
-              </span>
-              <span>Diagrama ER</span>
-            </div>
-            {activeView === 'er-diagram' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
-            )}
-          </button>
-
-          {/* Opção 4: Modelo ER (MER - Texto) */}
-          <button
-            onClick={() => handleNavClick('er-model')}
-            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
-              activeView === 'er-model' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
-            }`}
-            type="button"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[17px] text-[#AB47BC]">
-                article
-              </span>
-              <span>Modelo ER (MER Texto)</span>
-            </div>
-            {activeView === 'er-model' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
-            )}
-          </button>
-
-          {/* Opção 4: Configurações (com Submenu Temas / Cores do Tema & Cores das Letras) */}
+          {/* Configurações (com Submenu Temas / Cores do Tema & Cores das Letras) */}
           <div
             className="relative"
             onMouseEnter={handleMouseEnterSettings}
@@ -255,9 +279,9 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-[17px] text-[#FFA726]">
-                  settings
+                  tune
                 </span>
-                <span>Configurações</span>
+                <span>Configurações (4 Pilares)</span>
               </div>
               <div className="flex items-center gap-1">
                 {activeView === 'settings' && (
@@ -272,7 +296,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
             {/* Submenu Nível 1: Configurações */}
             {isSettingsSubmenuOpen && (
               <div
-                className="absolute left-full top-0 ml-1 min-w-[240px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                className="absolute left-full top-0 ml-1 min-w-[240px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
                 onMouseEnter={handleMouseEnterSettings}
                 onMouseLeave={handleMouseLeaveSettings}
               >
@@ -290,7 +314,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
                   <span className="material-symbols-outlined text-[15px] text-[#FFA726]">
                     tune
                   </span>
-                  <span>Abrir Painel de Configurações</span>
+                  <span>Abrir Painel Completo (4 Pilares)</span>
                 </button>
 
                 <div className="h-px bg-[var(--border-color)] my-1" />
@@ -332,7 +356,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
 
                   {/* Submenu Nível 3: Opções de Cores do Tema */}
                   {isColorThemeOpen && (
-                    <div className="absolute left-full top-0 ml-1 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50">
+                    <div className="absolute left-full top-0 ml-1 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50">
                       <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
                         Selecione as Cores do Tema
                       </div>
@@ -407,7 +431,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
 
                   {/* Submenu Nível 3: Opções de Cores das Letras */}
                   {isFontThemeOpen && (
-                    <div className="absolute left-full top-0 ml-1 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50">
+                    <div className="absolute left-full top-0 ml-1 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50">
                       <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
                         Selecione as Cores das Letras
                       </div>
@@ -452,28 +476,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
             )}
           </div>
 
-          {/* Opção 5: Sobre */}
-          <button
-            onClick={() => handleNavClick('about')}
-            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
-              activeView === 'about' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
-            }`}
-            type="button"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[17px] text-[#AB47BC]">
-                info
-              </span>
-              <span>Sobre</span>
-            </div>
-            {activeView === 'about' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
-            )}
-          </button>
-
-          <div className="h-px bg-[var(--border-color)] my-1" />
-
-          {/* Submenu Visualização */}
+          {/* Submenu Visualização (Painéis da Interface) */}
           <div
             className="relative"
             onMouseEnter={handleMouseEnterView}
@@ -488,7 +491,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
                 <span className="material-symbols-outlined text-[17px] text-[var(--accent-yellow)]">
                   visibility
                 </span>
-                <span className="font-medium">Visualização</span>
+                <span className="font-medium">Painéis do Workspace</span>
               </div>
               <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors">
                 chevron_right
@@ -498,7 +501,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
             {/* Submenu Flutuante com as 3 opções de alternância */}
             {isViewSubmenuOpen && (
               <div
-                className="absolute left-full top-0 ml-1 min-w-[220px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50"
+                className="absolute left-full top-0 ml-1 min-w-[220px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50"
                 onMouseEnter={handleMouseEnterView}
                 onMouseLeave={handleMouseLeaveView}
               >
@@ -580,6 +583,74 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
               </div>
             )}
           </div>
+
+          {/* ========================================================== */}
+          {/* CATEGORIA 3: 🏛️ VITRINE, APOIO & INSTITUCIONAL             */}
+          {/* ========================================================== */}
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider border-t border-[var(--border-color)]/60 flex items-center justify-between mt-1">
+            <span>🏛️ Vitrine, Apoio & Institucional</span>
+          </div>
+
+          {/* Página Inicial (Landing Page) */}
+          <button
+            onClick={() => handleNavClick('landing')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'landing' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#FF6B00]">
+                rocket_launch
+              </span>
+              <span>Página Inicial</span>
+            </div>
+            {activeView === 'landing' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            )}
+          </button>
+
+          {/* Guia Rápido, Atalhos & Report (#guia) */}
+          <button
+            onClick={() => handleNavClick('guide-feedback')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'guide-feedback' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#29B6F6]">
+                help_outline
+              </span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Guia Rápido & Feedback</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Atalhos & relatórios em markdown</span>
+              </div>
+            </div>
+            {activeView === 'guide-feedback' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            )}
+          </button>
+
+          {/* Sobre o Projeto */}
+          <button
+            onClick={() => handleNavClick('about')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'about' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#00E676]">
+                info
+              </span>
+              <span>Sobre o Projeto</span>
+            </div>
+            {activeView === 'about' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            )}
+          </button>
+
         </div>
       )}
     </div>

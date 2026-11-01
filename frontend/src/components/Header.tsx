@@ -30,6 +30,10 @@ interface HeaderProps {
   onFontThemeChange: (fontTheme: FontTheme) => void;
   isExecuting: boolean;
   activeDatabase: string;
+  showQuickModulePills?: boolean;
+  workspaceLayoutMode?: 'editor' | 'split' | 'der';
+  onWorkspaceLayoutModeChange?: (mode: 'editor' | 'split' | 'der') => void;
+  confirmBeforeCloseAllTabs?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -52,6 +56,10 @@ export const Header: React.FC<HeaderProps> = ({
   isExecuting,
   activeDatabase,
   onRunSnippet,
+  showQuickModulePills = true,
+  workspaceLayoutMode = 'editor',
+  onWorkspaceLayoutModeChange,
+  confirmBeforeCloseAllTabs = true,
 }) => {
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
@@ -92,10 +100,20 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const handleSafeCloseAllTabs = () => {
+    if (confirmBeforeCloseAllTabs) {
+      if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
+        onCloseAllTabs();
+      }
+    } else {
+      onCloseAllTabs();
+    }
+  };
+
   return (
     <header className="h-[52px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-3 sm:px-4 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
       {/* Brand & Main Hamburger Menu */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Menu Hambúrguer ao lado esquerdo do logo */}
         <MainMenuDropdown
           activeView={activeView}
@@ -128,15 +146,125 @@ export const Header: React.FC<HeaderProps> = ({
         </span>
 
         {/* Indicador de Banco Ativo */}
-        <div className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--status-success)] shadow-sm">
+        <div className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--status-success)] shadow-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shadow-[0_0_6px_var(--glow-success)]"></span>
           <span className="text-[var(--text-muted)]">db:</span>
-          <span className="font-semibold text-[var(--status-success)]">{activeDatabase}</span>
+          <span className="font-semibold text-[var(--status-success)] truncate max-w-[120px]">{activeDatabase}</span>
         </div>
       </div>
 
+      {/* Quick Module Pills (Central da Disciplina) - Visível em telas médias/grandes */}
+      {showQuickModulePills && (
+        <nav aria-label="Navegação Rápida da Disciplina" className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]/70 shadow-inner">
+          {/* Galeria */}
+          <button
+            type="button"
+            onClick={() => onViewChange('gallery')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeView === 'gallery'
+                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Galeria de Bancos de Aula, Templates e Desafios"
+          >
+            <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">collections_bookmark</span>
+            <span>Galeria</span>
+          </button>
+
+          {/* Dicionário */}
+          <button
+            type="button"
+            onClick={() => onViewChange('er-model')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeView === 'er-model'
+                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Modelo Lógico, Dicionário de Dados & Checklist 1FN–3FN"
+          >
+            <span className="material-symbols-outlined text-[15px] text-[#29B6F6]">menu_book</span>
+            <span>Dicionário</span>
+          </button>
+
+          {/* Estúdio DER */}
+          <button
+            type="button"
+            onClick={() => onViewChange('er-diagram')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeView === 'er-diagram'
+                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Estúdio DER Dedicado (Canvas 7 Camadas)"
+          >
+            <span className="material-symbols-outlined text-[15px] text-[#FF8533]">schema</span>
+            <span>Estúdio DER</span>
+          </button>
+
+          {/* Laboratório SQL */}
+          <button
+            type="button"
+            onClick={() => onViewChange('workspace')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeView === 'workspace'
+                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+            }`}
+            title="Laboratório SQL com Monaco Editor e Split-View"
+          >
+            <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">terminal</span>
+            <span>Laboratório SQL</span>
+          </button>
+        </nav>
+      )}
+
       {/* Action Buttons */}
       <div className="flex items-center gap-2">
+        {/* Alternador de Layout do Workspace [Editor | SQL ↔ DER | DER] */}
+        {activeView === 'workspace' && onWorkspaceLayoutModeChange && (
+          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs">
+            <button
+              type="button"
+              onClick={() => onWorkspaceLayoutModeChange('editor')}
+              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+                workspaceLayoutMode === 'editor'
+                  ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] font-bold shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Exibir apenas o Editor de Scripts SQL"
+            >
+              <span className="material-symbols-outlined text-[14px]">code</span>
+              <span className="hidden xl:inline">Editor</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onWorkspaceLayoutModeChange('split')}
+              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+                workspaceLayoutMode === 'split'
+                  ? 'bg-[#FF6B00] text-white font-bold shadow-[0_0_8px_rgba(255,107,0,0.35)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Split-View Reativo: Editor SQL ↔ Estúdio DER lado a lado"
+            >
+              <span className="material-symbols-outlined text-[14px]">vertical_split</span>
+              <span className="font-semibold">SQL ↔ DER</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onWorkspaceLayoutModeChange('der')}
+              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+                workspaceLayoutMode === 'der'
+                  ? 'bg-[var(--bg-surface)] text-[#29B6F6] font-bold shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              title="Exibir DER em destaque no Workspace"
+            >
+              <span className="material-symbols-outlined text-[14px]">schema</span>
+              <span className="hidden xl:inline">DER</span>
+            </button>
+          </div>
+        )}
+
         {/* Botões operacionais exclusivos do modo Workspace */}
         {activeView === 'workspace' && (
           <>
@@ -154,7 +282,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {isExecuting ? 'sync' : 'play_arrow'}
                 </span>
                 <span>{isExecuting ? 'Executando...' : 'Executar'}</span>
-                <span className="hidden xl:inline text-[10px] text-white/80 font-mono font-normal">
+                <span className="hidden 2xl:inline text-[10px] text-white/80 font-mono font-normal">
                   (Ctrl+↵)
                 </span>
               </button>
@@ -256,14 +384,10 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Limpar</span>
             </button>
 
-            {/* Excluir / Fechar Todas as Guias com Confirmação */}
+            {/* Excluir / Fechar Todas as Guias com Confirmação Segura */}
             <button
-              onClick={() => {
-                if (window.confirm('Tem certeza que deseja fechar todas as guias de scripts abertas?')) {
-                  onCloseAllTabs();
-                }
-              }}
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-xs font-medium rounded transition-all cursor-pointer"
+              onClick={handleSafeCloseAllTabs}
+              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-xs font-medium rounded transition-all cursor-pointer"
               title="Fechar todas as guias de scripts abertas (com confirmação)"
               type="button"
             >
