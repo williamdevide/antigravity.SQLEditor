@@ -10,7 +10,6 @@ import type {
   StoredExerciseProgress,
 } from '../types/erStudio';
 import { dbStorage, type StoredDatabaseState, type StoredWorkspace } from './storage';
-import { dbEngine } from './dbEngine';
 
 const PREFERENCES_STORAGE_KEY = 'sqleditor_app_preferences_v32';
 
@@ -272,6 +271,7 @@ export async function importSuperBackupJson(rawJson: string): Promise<SuperBacku
   const dbs = Array.isArray(payload.databasesState) ? payload.databasesState : [];
   if (dbs.length > 0) {
     await dbStorage.databasesState.clear();
+    const { dbEngine } = await import('./dbEngine');
     await dbEngine.importJSON(JSON.stringify(dbs));
   }
 

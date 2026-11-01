@@ -25,6 +25,10 @@ interface ERInspectorSidebarProps {
   onSelectTable: (tableName: string | null) => void;
   onCreateTable: (tableName: string, columns: VisualColumnDraft[]) => void;
   onAddColumn: (tableName: string, column: VisualColumnDraft) => void;
+  onModifyColumn?: (tableName: string, oldColName: string, column: VisualColumnDraft) => void;
+  onDeleteColumn?: (tableName: string, columnName: string) => void;
+  selectedColumn?: { tableName: string; columnName: string } | null;
+  onSelectColumn?: (tableName: string | null, columnName: string | null) => void;
   onCreateForeignKey: (
     sourceTable: string,
     sourceColumn: string,
@@ -64,6 +68,10 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
   onSelectTable,
   onCreateTable,
   onAddColumn,
+  onModifyColumn,
+  onDeleteColumn,
+  selectedColumn,
+  onSelectColumn,
   onCreateForeignKey,
   onAddSubjectArea,
   onUpdateSubjectArea,
@@ -73,6 +81,41 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
   onApplyLintFixSql,
 }) => {
   // Estados locais para formulários rápidos de modelagem visual
+  const [editingCol, setEditingCol] = useState<{
+    tableName: string;
+    oldColName: string;
+    name: string;
+    type: string;
+    isPrimary: boolean;
+    isNullable: boolean;
+    isUnique: boolean;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (!selectedColumn) {
+      setEditingCol(null);
+      return;
+    }
+    const tbl = tables.find(
+      (t) => t.name.toLowerCase() === selectedColumn.tableName.toLowerCase()
+    );
+    const col = tbl?.columns.find(
+      (c) => c.name.toLowerCase() === selectedColumn.columnName.toLowerCase()
+    );
+    if (tbl && col) {
+      setEditingCol({
+        tableName: tbl.name,
+        oldColName: col.name,
+        name: col.name,
+        type: col.type || 'VARCHAR(120)',
+        isPrimary: !!col.isPrimary,
+        isNullable: col.isNullable !== false,
+        isUnique: !!col.isUnique,
+      });
+      onTabChange('tables');
+    }
+  }, [selectedColumn, tables, onTabChange]);
+
   const [showNewTableForm, setShowNewTableForm] = useState(false);
   const [newTableName, setNewTableName] = useState('');
   const [newTablePkName, setNewTablePkName] = useState('id');
@@ -351,6 +394,181 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
               </form>
             )}
 
+{/* Form de Edição / Exclusão de Atributo Selecionado */}
+            {editingCol && (
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface)] border-2 border-[#FF6B00] shadow-md space-y-3">
+                <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">
+                      edit_note
+                    </span>
+                    <span className="text-xs font-bold text-[var(--text-primary)] truncate">
+                      Editar Atributo:{' '}
+                      <span className="font-mono text-[#FF6B00]">
+                        {editingCol.tableName}.{editingCol.oldColName}
+                      </span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCol(null);
+                      onSelectColumn?.(null, null);
+                    }}
+                    title="Fechar edição"
+                    className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!editingCol.name.trim()) return;
+                    onModifyColumn?.(editingCol.tableName, editingCol.oldColName, {
+                      name: editingCol.name.trim(),
+                      type: editingCol.type.trim() || 'VARCHAR(120)',
+                      isPrimary: editingCol.isPrimary,
+                      isNullable: editingCol.isNullable,
+                      isUnique: editingCol.isUnique,
+                    });
+                    setEditingCol(null);
+                    onSelectColumn?.(null, null);
+                  }}
+                  className="space-y-2.5"
+                >
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[var(--text-secondary)] mb-1">
+                      Nome do Campo
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editingCol.name}
+                      onChange={(e) => setEditingCol({ ...editingCol, name: e.target.value })}
+                      placeholder="nome_do_campo"
+                      className="w-full px-2.5 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[var(--text-secondary)] mb-1">
+                      Tipo de Dado SQL
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <select
+                        value={
+                          COMMON_SQL_TYPES.includes(editingCol.type.toUpperCase())
+                            ? editingCol.type.toUpperCase()
+                            : 'custom'
+                        }
+                        onChange={(e) => {
+                          if (e.target.value !== 'custom') {
+                            setEditingCol({ ...editingCol, type: e.target.value });
+                          }
+                        }}
+                        className="px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-primary)] focus:outline-none"
+                      >
+                        {COMMON_SQL_TYPES.map((tp) => (
+                          <option key={tp} value={tp}>
+                            {tp}
+                          </option>
+                        ))}
+                        <option value="custom">Personalizado...</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={editingCol.type}
+                        onChange={(e) => setEditingCol({ ...editingCol, type: e.target.value })}
+                        placeholder="Tipo exato SQL"
+                        className="px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Modificadores */}
+                  <div className="grid grid-cols-3 gap-1 pt-1 text-[11px] text-[var(--text-secondary)] font-mono">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingCol.isPrimary}
+                        onChange={(e) =>
+                          setEditingCol({ ...editingCol, isPrimary: e.target.checked })
+                        }
+                        className="w-3.5 h-3.5 accent-[#FF6B00] cursor-pointer"
+                      />
+                      <span>PK</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!editingCol.isNullable}
+                        onChange={(e) =>
+                          setEditingCol({ ...editingCol, isNullable: !e.target.checked })
+                        }
+                        className="w-3.5 h-3.5 accent-[#FF6B00] cursor-pointer"
+                      />
+                      <span>NOT NULL</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingCol.isUnique}
+                        onChange={(e) =>
+                          setEditingCol({ ...editingCol, isUnique: e.target.checked })
+                        }
+                        className="w-3.5 h-3.5 accent-[#FF6B00] cursor-pointer"
+                      />
+                      <span>UNIQUE</span>
+                    </label>
+                  </div>
+
+                  {/* Botões de Ação */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-[var(--border-color)]">
+                    <button
+                      type="submit"
+                      className="flex-1 py-1.5 px-2.5 rounded bg-[var(--status-success)] hover:bg-[#00c865] text-black font-bold text-xs flex items-center justify-center gap-1 shadow-sm cursor-pointer transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">save</span>
+                      <span>Salvar</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Tem certeza que deseja excluir o atributo "${editingCol.tableName}.${editingCol.oldColName}"? Esta ação gerará um DROP COLUMN no SQL.`
+                          )
+                        ) {
+                          onDeleteColumn?.(editingCol.tableName, editingCol.oldColName);
+                          setEditingCol(null);
+                          onSelectColumn?.(null, null);
+                        }
+                      }}
+                      className="py-1.5 px-2.5 rounded bg-[var(--status-error)]/20 hover:bg-[var(--status-error)]/30 border border-[var(--status-error)]/50 text-[var(--status-error)] font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Excluir atributo (DROP COLUMN)"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                      <span>Excluir</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCol(null);
+                        onSelectColumn?.(null, null);
+                      }}
+                      className="py-1.5 px-2 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs text-[var(--text-secondary)] cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {tables.length === 0 ? (
               <p className="text-xs text-[var(--text-muted)] text-center py-6">
                 Nenhuma tabela carregada no diagrama atual.
@@ -398,6 +616,119 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
                           </button>
                         </div>
                       </div>
+
+{/* Lista de Atributos da Tabela Selecionada no Inspetor */}
+                      {isSelected && (
+                        <div className="border-t border-[var(--border-color)]/60 divide-y divide-[var(--border-color)]/30 bg-[var(--bg-primary)]/40 max-h-56 overflow-y-auto">
+                          {tbl.columns.map((col) => {
+                            const isThisColActive =
+                              editingCol?.tableName === tbl.name &&
+                              editingCol?.oldColName === col.name;
+                            return (
+                              <div
+                                key={col.name}
+                                className={`px-2.5 py-1.5 flex items-center justify-between text-xs font-mono transition-colors ${
+                                  isThisColActive
+                                    ? 'bg-[var(--accent-orange)]/15 border-l-2 border-[#FF6B00]'
+                                    : 'hover:bg-[var(--bg-hover)]'
+                                }`}
+                              >
+                                <div
+                                  onClick={() => {
+                                    setEditingCol({
+                                      tableName: tbl.name,
+                                      oldColName: col.name,
+                                      name: col.name,
+                                      type: col.type || 'VARCHAR(120)',
+                                      isPrimary: !!col.isPrimary,
+                                      isNullable: col.isNullable !== false,
+                                      isUnique: !!col.isUnique,
+                                    });
+                                    onSelectColumn?.(tbl.name, col.name);
+                                  }}
+                                  className="flex items-center gap-1.5 min-w-0 cursor-pointer flex-1"
+                                  title="Clique para editar este atributo no painel"
+                                >
+                                  {col.isPrimary ? (
+                                    <span
+                                      className="material-symbols-outlined text-[13px] text-[var(--accent-yellow)]"
+                                      title="PK"
+                                    >
+                                      key
+                                    </span>
+                                  ) : col.isForeignKey ? (
+                                    <span
+                                      className="material-symbols-outlined text-[13px] text-[#FF6B00]"
+                                      title="FK"
+                                    >
+                                      link
+                                    </span>
+                                  ) : (
+                                    <span className="w-3 text-center text-[10px] text-[var(--text-muted)] font-bold">
+                                      •
+                                    </span>
+                                  )}
+                                  <span className="font-semibold text-[var(--text-primary)] truncate">
+                                    {col.name}
+                                  </span>
+                                  <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                    {col.type}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingCol({
+                                        tableName: tbl.name,
+                                        oldColName: col.name,
+                                        name: col.name,
+                                        type: col.type || 'VARCHAR(120)',
+                                        isPrimary: !!col.isPrimary,
+                                        isNullable: col.isNullable !== false,
+                                        isUnique: !!col.isUnique,
+                                      });
+                                      onSelectColumn?.(tbl.name, col.name);
+                                    }}
+                                    title="Editar este atributo"
+                                    className="w-5 h-5 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[#FF6B00] flex items-center justify-center cursor-pointer"
+                                  >
+                                    <span className="material-symbols-outlined text-[13px]">
+                                      edit
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `Excluir o atributo "${tbl.name}.${col.name}"? Esta ação gerará um DROP COLUMN no SQL.`
+                                        )
+                                      ) {
+                                        onDeleteColumn?.(tbl.name, col.name);
+                                        if (
+                                          editingCol?.tableName === tbl.name &&
+                                          editingCol?.oldColName === col.name
+                                        ) {
+                                          setEditingCol(null);
+                                          onSelectColumn?.(null, null);
+                                        }
+                                      }
+                                    }}
+                                    title="Excluir este atributo (DROP COLUMN)"
+                                    className="w-5 h-5 rounded hover:bg-[var(--status-error)]/20 text-[var(--text-muted)] hover:text-[var(--status-error)] flex items-center justify-center cursor-pointer"
+                                  >
+                                    <span className="material-symbols-outlined text-[13px]">
+                                      delete
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {isAddingCol && (
                         <form

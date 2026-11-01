@@ -2229,3 +2229,29 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - `npm run build` (`tsc -b && vite build`): compilação concluída em 1.10s com 0 erros.
 
 ---
+
+
+## 📌 Prompt 79 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:30  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio DER se eu clicar especificamente em um campo de uma tabela, ele abre no painel a esquerda para ser editado ou até excluido
+```
+
+### 🎯 Ações Executadas:
+- **Engenharia DDL Cirúrgica de Colunas (`visualDdlGenerator.ts`):**
+  - Implementadas as funções `buildModifyColumnPatch` e `buildDropColumnPatch` com substituição cirúrgica in-place nos blocos `CREATE TABLE` do script (e fallback para `ALTER TABLE CHANGE/MODIFY/DROP COLUMN`).
+  - Suporte à renomeação de atributos, alteração de tipos de dados SQL, redefinição de restrições (`PRIMARY KEY`, `NOT NULL`, `UNIQUE`) e remoção segura de colunas (`DROP COLUMN`) com preservação do histórico de Desfazer (`Ctrl+Z`).
+- **Interatividade no Cartão de Tabela e Canvas (`ERTableCard.tsx` & `ERInteractiveCanvas.tsx`):**
+  - Adicionado o evento `onClick` em cada linha de atributo nas tabelas com destaque visual por anel laranja (`ring-1 ring-[#FF6B00] bg-[var(--accent-orange)]/25`) quando selecionado.
+  - O clique pontual em qualquer campo agora dispara `onSelectColumn(tableName, columnName)`.
+- **Painel Lateral do Inspetor (`ERInspectorSidebar.tsx` & `ERStudioWorkspace.tsx`):**
+  - Ao clicar em qualquer atributo no canvas, o Inspetor lateral à esquerda abre automaticamente (`setInspectorOpen(true)`), navega para a aba `'tables'` e abre o formulário de edição dedicado do atributo selecionado.
+  - O formulário permite editar o nome do campo, escolher tipos comuns ou digitar livremente tipos complexos, alternar `PK`, `NOT NULL` e `UNIQUE`, salvar alterações ou excluir a coluna (`DROP COLUMN`) com confirmação de segurança.
+  - Na lista de entidades do Inspetor, a tabela selecionada exibe todos os seus atributos acompanhados de ícones (`key`, `link`, glyphs de tipo) e botões rápidos para edição (`edit`) e exclusão direta (`delete`).
+- **Validação e Testes Determinísticos:**
+  - `verify_v32.mjs`: Adicionados testes para `buildModifyColumnPatch` e `buildDropColumnPatch`, passando **18 de 18 testes** com 100% de sucesso.
+  - `oxlint`: 0 erros.
+  - `tsc -b && vite build`: compilação concluída em 879ms com 0 erros.
+
+---

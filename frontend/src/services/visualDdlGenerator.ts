@@ -196,6 +196,155 @@ export function buildAddForeignKeyPatch(
 }
 
 /**
+ * Localiza o bloco do CREATE TABLE <tableName> no script e remove a linha da coluna especificada,
+ * ajustando pontuação e vírgulas finais com precisão cirúrgica.
+ */
+function removeColumnFromSql(sql: string, tableName: string, colName: string): string | null {
+  const tableRegex = new RegExp(
+    '(CREATE\\s+(?:TEMPORARY\\s+|TEMP\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?[\\`"\']?' +
+      tableName +
+      '[\\`"\']?\\s*\\()([\\s\\S]*?)(\\);)',
+    'i'
+  );
+  const m = tableRegex.exec(sql);
+  if (!m) return null;
+  const before = sql.slice(0, m.index + m[1].length);
+  const body = m[2];
+  const after = sql.slice(m.index + m[0].length - m[3].length);
+
+  const lines = body.split('\n');
+  const colRegex = new RegExp('^\\s*[\\`"\']?' + colName + '[\\`"\']?\\s+', 'i');
+  const lineIdx = lines.findIndex((l) => colRegex.test(l.trim()));
+  if (lineIdx === -1) return null;
+
+  lines.splice(lineIdx, 1);
+  const validIndices = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i !== -1);
+  for (let k = 0; k < validIndices.length; k++) {
+    const idx = validIndices[k];
+    let trimmed = lines[idx].trimEnd();
+    if (k < validIndices.length - 1) {
+      if (!trimmed.endsWith(',')) lines[idx] = trimmed + ',';
+    } else {
+      if (trimmed.endsWith(',')) lines[idx] = trimmed.slice(0, -1);
+    }
+  }
+  return before + lines.join('\n') + after;
+}
+
+/**
+ * Localiza a definição da coluna no CREATE TABLE e a substitui cirurgicamente in-place.
+ */
+function modifyColumnInSql(
+  sql: string,
+  tableName: string,
+  oldColName: string,
+  newColLine: string
+): string | null {
+  const tableRegex = new RegExp(
+    '(CREATE\\s+(?:TEMPORARY\\s+|TEMP\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?[\\`"\']?' +
+      tableName +
+      '[\\`"\']?\\s*\\()([\\s\\S]*?)(\\);)',
+    'i'
+  );
+  const m = tableRegex.exec(sql);
+  if (!m) return null;
+  const before = sql.slice(0, m.index + m[1].length);
+  const body = m[2];
+  const after = sql.slice(m.index + m[0].length - m[3].length);
+
+  const lines = body.split('\n');
+  const colRegex = new RegExp('^\\s*[\\`"\']?' + oldColName + '[\\`"\']?\\s+', 'i');
+  const lineIdx = lines.findIndex((l) => colRegex.test(l.trim()));
+  if (lineIdx === -1) return null;
+
+  const hadComma = lines[lineIdx].trimEnd().endsWith(',');
+  lines[lineIdx] = newColLine + (hadComma ? ',' : '');
+
+  return before + lines.join('\n') + after;
+}
+
+/**
+ * Modifica ou renomeia um atributo existente na tabela de forma cirúrgica.
+ */
+export function buildModifyColumnPatch(
+  currentSql: string,
+  tableName: string,
+  oldColName: string,
+  newCol: VisualColumnDraft
+): SurgicalSqlPatch {
+  const cleanTable = sanitizeIdent(tableName);
+  const cleanOldName = sanitizeIdent(oldColName);
+  const cleanNewName = sanitizeIdent(newCol.name);
+  const colDef = formatColumnDdlLine(newCol).trim();
+
+  let executedDdlStatement = '';
+  if (cleanOldName.toLowerCase() !== cleanNewName.toLowerCase()) {
+    executedDdlStatement = `ALTER TABLE \`${cleanTable}\` RENAME COLUMN \`${cleanOldName}\` TO \`${cleanNewName}\`; ALTER TABLE \`${cleanTable}\` MODIFY COLUMN ${colDef};`;
+  } else {
+    executedDdlStatement = `ALTER TABLE \`${cleanTable}\` MODIFY COLUMN ${colDef};`;
+  }
+
+  const inPlace = modifyColumnInSql(currentSql, cleanTable, cleanOldName, `  ${colDef}`);
+  if (inPlace) {
+    return {
+      startOffset: 0,
+      endOffset: currentSql.length,
+      replacementText: inPlace,
+      newFullSql: inPlace,
+      executedDdlStatement,
+    };
+  }
+
+  const fallbackDdl =
+    cleanOldName.toLowerCase() !== cleanNewName.toLowerCase()
+      ? `ALTER TABLE \`${cleanTable}\` CHANGE COLUMN \`${cleanOldName}\` ${colDef};`
+      : `ALTER TABLE \`${cleanTable}\` MODIFY COLUMN ${colDef};`;
+  const prefix = currentSql.trimEnd().length > 0 ? '\n\n' : '';
+  const replacementText = `${prefix}${fallbackDdl}\n`;
+  return {
+    startOffset: currentSql.length,
+    endOffset: currentSql.length,
+    replacementText,
+    newFullSql: currentSql + replacementText,
+    executedDdlStatement,
+  };
+}
+
+/**
+ * Remove um atributo de uma tabela de forma cirúrgica (DROP COLUMN).
+ */
+export function buildDropColumnPatch(
+  currentSql: string,
+  tableName: string,
+  colName: string
+): SurgicalSqlPatch {
+  const cleanTable = sanitizeIdent(tableName);
+  const cleanColName = sanitizeIdent(colName);
+  const dropStmt = `ALTER TABLE \`${cleanTable}\` DROP COLUMN \`${cleanColName}\`;`;
+
+  const inPlace = removeColumnFromSql(currentSql, cleanTable, cleanColName);
+  if (inPlace) {
+    return {
+      startOffset: 0,
+      endOffset: currentSql.length,
+      replacementText: inPlace,
+      newFullSql: inPlace,
+      executedDdlStatement: dropStmt,
+    };
+  }
+
+  const prefix = currentSql.trimEnd().length > 0 ? '\n\n' : '';
+  const replacementText = `${prefix}${dropStmt}\n`;
+  return {
+    startOffset: currentSql.length,
+    endOffset: currentSql.length,
+    replacementText,
+    newFullSql: currentSql + replacementText,
+    executedDdlStatement: dropStmt,
+  };
+}
+
+/**
  * Gera o script DDL completo e padronizado a partir de um grafo ERTableNode[] + ERRelationshipEdge[].
  */
 export function generateFullDdlFromERGraph(

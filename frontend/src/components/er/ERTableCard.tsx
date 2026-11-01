@@ -44,6 +44,8 @@ interface ERTableCardProps {
   ) => void;
   onCompleteConnectColumn?: (targetTable: string, targetColumn: string) => void;
   isConnectingActive?: boolean;
+  selectedColumn?: { tableName: string; columnName: string } | null;
+  onSelectColumn?: (tableName: string, columnName: string) => void;
 }
 
 function getCategoryGlyph(category: ERColumnCategory): string {
@@ -83,6 +85,8 @@ export const ERTableCard: React.FC<ERTableCardProps> = ({
   onStartConnectColumn,
   onCompleteConnectColumn,
   isConnectingActive = false,
+  selectedColumn,
+  onSelectColumn,
 }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -298,6 +302,9 @@ export const ERTableCard: React.FC<ERTableCardProps> = ({
             className="px-2 font-mono text-xs"
           >
             {visibleColumns.map((col, idx) => {
+              const isColSelected =
+                selectedColumn?.tableName === table.name &&
+                selectedColumn?.columnName === col.name;
               const anchorYOffset =
                 ER_HEADER_HEIGHT +
                 ER_COLUMN_PADDING_Y +
@@ -308,17 +315,25 @@ export const ERTableCard: React.FC<ERTableCardProps> = ({
                 <div
                   key={col.name}
                   style={{ height: `${ER_ROW_HEIGHT}px` }}
+                  onClick={(e) => {
+                    if (isConnectingActive) return;
+                    e.stopPropagation();
+                    onSelectColumn?.(table.name, col.name);
+                  }}
                   onMouseUp={(e) => {
                     if (isConnectingActive && onCompleteConnectColumn) {
                       e.stopPropagation();
                       onCompleteConnectColumn(table.name, col.name);
                     }
                   }}
-                  className={`group/col relative flex items-center justify-between px-1.5 rounded transition-colors ${
+                  className={`group/col relative flex items-center justify-between px-1.5 rounded transition-all cursor-pointer ${
                     isConnectingActive
                       ? 'hover:bg-[var(--status-success)]/20 cursor-crosshair'
+                      : isColSelected
+                      ? 'bg-[var(--accent-orange)]/25 ring-1 ring-[#FF6B00] text-[var(--text-primary)] font-semibold'
                       : 'hover:bg-[var(--bg-hover)]'
                   }`}
+                  title={`Clique para editar ou excluir "${table.name}.${col.name}" no painel à esquerda`}
                 >
                   <div className="flex items-center gap-1.5 min-w-0 pr-1">
                     {col.isPrimary ? (

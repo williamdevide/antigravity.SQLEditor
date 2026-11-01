@@ -27,6 +27,8 @@ import {
   buildAddColumnPatch,
   buildAddForeignKeyPatch,
   buildAppendTablePatch,
+  buildModifyColumnPatch,
+  buildDropColumnPatch,
   generateFullDdlFromERGraph,
   type SurgicalSqlPatch,
   type VisualColumnDraft,
@@ -399,6 +401,11 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
   ]);
 
   // Alternância: Organizar (Auto-Layout 16:9) vs Restaurar última posição arrumada pelo usuário
+  const [selectedColumn, setSelectedColumn] = useState<{
+    tableName: string;
+    columnName: string;
+  } | null>(null);
+
   const [previousUserPositions, setPreviousUserPositions] = useState<{
     positions: Record<string, ERTablePosition>;
     lineOffsets: Record<string, { x: number; y: number }>;
@@ -577,6 +584,42 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
       executeVisualDdlMutation(
         patch,
         `Atributo "${tableName}.${column.name}" adicionado ao esquema!`
+      );
+    },
+    [liveScriptSql, executeVisualDdlMutation]
+  );
+
+  const handleSelectColumn = useCallback(
+    (tableName: string | null, columnName: string | null) => {
+      if (tableName && columnName) {
+        setSelectedTable(tableName);
+        setSelectedColumn({ tableName, columnName });
+        setInspectorTab('tables');
+        setInspectorOpen(true);
+      } else {
+        setSelectedColumn(null);
+      }
+    },
+    []
+  );
+
+  const handleVisualModifyColumn = useCallback(
+    (tableName: string, oldColName: string, column: VisualColumnDraft) => {
+      const patch = buildModifyColumnPatch(liveScriptSql, tableName, oldColName, column);
+      executeVisualDdlMutation(
+        patch,
+        `Atributo "${tableName}.${column.name}" atualizado e sincronizado com o SQL!`
+      );
+    },
+    [liveScriptSql, executeVisualDdlMutation]
+  );
+
+  const handleVisualDeleteColumn = useCallback(
+    (tableName: string, columnName: string) => {
+      const patch = buildDropColumnPatch(liveScriptSql, tableName, columnName);
+      executeVisualDdlMutation(
+        patch,
+        `Atributo "${tableName}.${columnName}" excluído do esquema!`
       );
     },
     [liveScriptSql, executeVisualDdlMutation]
@@ -1014,6 +1057,10 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
             onSelectTable={setSelectedTable}
             onCreateTable={handleVisualCreateTable}
             onAddColumn={handleVisualAddColumn}
+            selectedColumn={selectedColumn}
+            onSelectColumn={handleSelectColumn}
+            onModifyColumn={handleVisualModifyColumn}
+            onDeleteColumn={handleVisualDeleteColumn}
             onCreateForeignKey={handleVisualCreateForeignKey}
             onAddSubjectArea={(title, color) => {
               const next: ERSubjectArea[] = [
@@ -1091,6 +1138,8 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
           onRequestDataPeek={handleRequestDataPeek}
           onAutoLayout={handleAutoLayout}
           isAutoLayoutActive={isAutoLayoutActive}
+          selectedColumn={selectedColumn}
+          onSelectColumn={(tbl, col) => handleSelectColumn(tbl, col)}
           erPreferences={preferences.er}
           onUpdateErPreferences={onUpdateErPreferences}
           defaultZoom={preferences.ui.defaultErZoom}

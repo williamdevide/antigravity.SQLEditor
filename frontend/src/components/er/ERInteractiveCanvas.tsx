@@ -54,6 +54,8 @@ interface ERInteractiveCanvasProps {
   isPresentationMode: boolean;
   onTogglePresentationMode: () => void;
   enableVisualConnect?: boolean;
+  selectedColumn?: { tableName: string; columnName: string } | null;
+  onSelectColumn?: (tableName: string, columnName: string) => void;
   onCreateForeignKeyConnection?: (
     sourceTable: string,
     sourceColumn: string,
