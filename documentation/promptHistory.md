@@ -2393,3 +2393,26 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
 
 ---
+
+
+## 📌 Prompt 82 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 19:10  
+**Usuário:**
+```text
+em guia rapido e feedback, na parte de feedback, faça enviar por email para o email do desenvolvedor (williamdevide.ourinhos@gmail.com)
+```
+
+### 🎯 Ações Executadas:
+- **Integração de Envio Direto de Feedback por E-mail (`GuideAndFeedbackView.tsx`):**
+  - Configurado o e-mail oficial do desenvolvedor: `williamdevide.ourinhos@gmail.com`.
+  - **Botão Principal de Envio ("Enviar por E-mail"):** Dispara chamada `mailto:` nativa com assunto padronizado (`[SQLEditor vX.X.X] [CATEGORIA] Título`) e corpo estruturado contendo versão, módulo, tema, dados do navegador, descrição detalhada e trecho SQL.
+  - **Botão Alternativo Direto ("Gmail Web"):** Permite a alunos e professores em laboratórios de informática escolares (sem clientes de e-mail desktop instalados) abrir o rascunho preenchido diretamente no Gmail no navegador (`mail.google.com/mail/?view=cm...`).
+  - **Badge Indicadora de Destino:** Exibe com destaque no cabeçalho da seção o endereço de destino: `Destino: williamdevide.ourinhos@gmail.com`.
+  - **Cópia de Contingência & Feedback Toast:** Ao clicar para enviar, o relatório técnico em Markdown também é copiado para a área de transferência do usuário como redundância de segurança, com exibição de toast verde de confirmação na tela.
+  - Mantidas as opções de "Copiar .md" e "Issue GitHub".
+- **Validação Técnica e Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 924ms com 90 módulos transformados.
+  - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
+
+---

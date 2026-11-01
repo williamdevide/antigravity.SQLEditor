@@ -52,6 +52,8 @@ const SHORTCUTS_LIST = [
   },
 ];
 
+const DEVELOPER_EMAIL = 'williamdevide.ourinhos@gmail.com';
+
 export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
   theme,
   fontTheme,
@@ -63,14 +65,67 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
   const [reportSteps, setReportSteps] = useState<string>('');
   const [reportSql, setReportSql] = useState<string>('');
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((curr) => (curr === msg ? null : curr));
+    }, 4000);
+  };
+
+  const getReportTypeLabel = () =>
+    reportType === 'bug'
+      ? 'Reporte de Bug'
+      : reportType === 'suggestion'
+      ? 'Sugestão de Melhoria'
+      : 'Ideia Pedagógica / Exercício';
+
+  const buildEmailSubject = () => {
+    const typeLabel = getReportTypeLabel();
+    const cleanTitle = reportTitle.trim() || reportModule;
+    return `[SQLEditor v${APP_VERSION}] [${typeLabel}] ${cleanTitle}`;
+  };
+
+  const buildEmailBody = () => {
+    const typeLabel = getReportTypeLabel();
+    const lines = [
+      `Olá, William!`,
+      '',
+      `Estou enviando este feedback a partir do SQLEditor v${APP_VERSION}:`,
+      '',
+      `• Categoria: ${typeLabel}`,
+      `• Módulo Relacionado: ${reportModule}`,
+      `• Tema UI: ${theme} | Sintaxe: ${fontTheme}`,
+      `• Navegador / Plataforma: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}`,
+      '',
+      `==================================================`,
+      `DESCRIÇÃO / SUGESTÃO / PASSOS:`,
+      `==================================================`,
+      reportSteps.trim() || '(Nenhum detalhe adicional informado)',
+      '',
+    ];
+
+    if (reportSql.trim()) {
+      lines.push(
+        `==================================================`,
+        `SCRIPT SQL RELACIONADO:`,
+        `==================================================`,
+        reportSql.trim(),
+        ''
+      );
+    }
+
+    lines.push(
+      `--------------------------------------------------`,
+      `Mensagem enviada via Central de Feedback do SQLEditor`
+    );
+
+    return lines.join('\n');
+  };
 
   const buildMarkdownReport = () => {
-    const typeLabel =
-      reportType === 'bug'
-        ? 'Reporte de Bug'
-        : reportType === 'suggestion'
-        ? 'Sugestão de Melhoria'
-        : 'Ideia Pedagógica / Exercício';
+    const typeLabel = getReportTypeLabel();
 
     const lines = [
       `## [${typeLabel}] ${reportTitle.trim() || 'Sem título'}`,
@@ -95,10 +150,43 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
     try {
       await navigator.clipboard.writeText(buildMarkdownReport());
       setCopiedReport(true);
+      showToast('Relatório Markdown copiado para a área de transferência!');
       setTimeout(() => setCopiedReport(false), 2500);
     } catch {
       // Sem acesso ao clipboard
     }
+  };
+
+  const handleSendEmail = async () => {
+    const subject = buildEmailSubject();
+    const body = buildEmailBody();
+
+    try {
+      await navigator.clipboard.writeText(buildMarkdownReport());
+    } catch (_) {}
+
+    const mailtoUrl = `mailto:${DEVELOPER_EMAIL}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailtoUrl;
+    showToast(`Cliente de e-mail acionado para ${DEVELOPER_EMAIL}!`);
+  };
+
+  const handleSendViaGmailWeb = async () => {
+    const subject = buildEmailSubject();
+    const body = buildEmailBody();
+
+    try {
+      await navigator.clipboard.writeText(buildMarkdownReport());
+    } catch (_) {}
+
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${DEVELOPER_EMAIL}&su=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+
+    window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+    showToast(`Rascunho aberto no Gmail Web para ${DEVELOPER_EMAIL}!`);
   };
 
   const handleOpenGitHubIssue = () => {
@@ -248,18 +336,24 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
 
         {/* 3. Gerador Estruturado de Feedback / Reporte de Bug */}
         <section className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-[var(--text-primary)]">
                 3. Central de Feedback &amp; Reporte Técnico Estruturado
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Encontrou um comportamento inesperado ou quer sugerir um novo banco/exercício para as aulas? Gere o relatório abaixo com diagnóstico automático do ambiente.
+                Encontrou um comportamento inesperado ou quer sugerir um novo recurso ou desafio para as aulas? Envie diretamente para o desenvolvedor ou gere o relatório técnico com diagnóstico automático do ambiente.
               </p>
             </div>
-            <span className="px-2.5 py-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-              Ambiente: v{APP_VERSION} • {theme} • {fontTheme}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded bg-[#FF6B00]/15 border border-[#FF6B00]/35 text-[11px] font-mono text-[#FF6B00] flex items-center gap-1.5 font-semibold">
+                <span className="material-symbols-outlined text-[14px]">mail</span>
+                <span>Destino: <strong>{DEVELOPER_EMAIL}</strong></span>
+              </span>
+              <span className="px-2.5 py-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
+                Ambiente: v{APP_VERSION} • {theme} • {fontTheme}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -346,30 +440,62 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1">
-            <button
-              type="button"
-              onClick={handleCopyMarkdown}
-              className="px-4 py-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px] text-[var(--accent-yellow)]">
-                {copiedReport ? 'check' : 'content_copy'}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-color)]/70">
+            {toastMessage ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--status-success)] bg-[var(--status-success)]/10 border border-[var(--status-success)]/30 px-3 py-1.5 rounded-lg animate-in fade-in duration-150">
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                <span>{toastMessage}</span>
+              </div>
+            ) : (
+              <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">info</span>
+                <span>O relatório técnico do ambiente é anexado automaticamente à mensagem.</span>
               </span>
-              <span>
-                {copiedReport
-                  ? 'Relatório Copiado!'
-                  : 'Copiar Relatório Formatado (.md)'}
-              </span>
-            </button>
+            )}
 
-            <button
-              type="button"
-              onClick={handleOpenGitHubIssue}
-              className="px-4 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-              <span>Abrir Issue no GitHub</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyMarkdown}
+                title="Copiar relatório formatado em Markdown para a área de transferência"
+                className="px-3.5 py-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">
+                  {copiedReport ? 'check' : 'content_copy'}
+                </span>
+                <span>{copiedReport ? 'Copiado!' : 'Copiar .md'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenGitHubIssue}
+                title="Abrir uma nova issue pública no repositório GitHub do projeto"
+                className="px-3.5 py-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                <span>Issue GitHub</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendViaGmailWeb}
+                title={`Abrir rascunho preenchido direto no Gmail no navegador para ${DEVELOPER_EMAIL}`}
+                className="px-3.5 py-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[15px] text-[#EA4335]">mail</span>
+                <span>Gmail Web</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                title={`Enviar por e-mail para ${DEVELOPER_EMAIL} através do seu aplicativo de e-mail padrão`}
+                className="px-4 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px]">send</span>
+                <span>Enviar por E-mail</span>
+              </button>
+            </div>
           </div>
         </section>
       </div>
