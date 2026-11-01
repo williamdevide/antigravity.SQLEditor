@@ -18,24 +18,18 @@ export interface ClassroomDbScript {
 }
 
 // 1. Carrega todos os arquivos SQL de bancos de dados de aula
-const globFn = (import.meta as unknown as { glob?: <T>(pattern: string, options?: unknown) => Record<string, T> }).glob;
-
-const rawBdsModules = globFn
-  ? globFn<string>('../data/bds/*.sql', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    })
-  : {};
+const rawBdsModules = import.meta.glob<string>('../data/bds/*.sql', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
 
 // 2. Carrega todos os arquivos SQL de soluções
-const rawSolutionsModules = globFn
-  ? globFn<string>('../data/solutions/*.sql', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    })
-  : {};
+const rawSolutionsModules = import.meta.glob<string>('../data/solutions/*.sql', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
 
 const TEMA_LABEL_MAP: Record<string, string> = {
   'pizzaria streaming': 'Pizzaria & Streaming',

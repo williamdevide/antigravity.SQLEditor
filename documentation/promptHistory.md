@@ -2184,3 +2184,25 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - Ambas as branches (`main` e `feature/v3.2-central-bd`) foram alinhadas local e remotamente.
 
 ---
+
+
+## 📌 Prompt 77 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:04  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal os bancos de dados de aula e as soluções sumiram, preciso deles de volta. a barra que apareceu no navbar com galeria, dicionario, estudio DER e laboratorio SQL pode sumir dali, pois já esta no menu.
+```
+
+### 🎯 Ações Executadas:
+- **Restauração dos Bancos de Dados de Aula e Soluções (`scriptsLoader.ts`):**
+  - Diagnosticada a causa raiz: o compilador do Vite requer a sintaxe canônica direta `import.meta.glob(...)` como macro estático na AST. A indireção anterior fazia com que o Vite não empacotasse os arquivos `.sql` em tempo de compilação, resultando em listas vazias no navegador.
+  - Restaurado o macro nativo do Vite para `../data/bds/*.sql` e `../data/solutions/*.sql`.
+  - Verificada a incorporação de 100% dos bancos de aula e soluções no bundle de produção (90 módulos transformados, 1.868 kB com todos os scripts embutidos).
+- **Remoção da Barra de Pills no Navbar (`Header.tsx`, `SettingsView.tsx`, `App.tsx`):**
+  - Removida a barra `<nav>` de Pills Rápidas no cabeçalho (`Header.tsx`), despoluindo o topo do laboratório e mantendo o acesso limpo e unificado através do menu principal hambúrguer (`MainMenuDropdown.tsx`).
+  - Atualizado `SettingsView.tsx` removendo o switch redundante e alinhado o padrão `DEFAULT_APP_PREFERENCES.ui.showQuickModulePills: false`.
+- **Validação Técnica:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 1.86s com 0 erros e dados de aula validados no bundle.
+
+---

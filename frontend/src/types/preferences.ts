@@ -71,7 +71,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   ui: {
     editorFontSize: 14,
     defaultErZoom: 100,
-    showQuickModulePills: true,
+    showQuickModulePills: false,
     reducedMotionAndGlow: false,
   },
   editor: {

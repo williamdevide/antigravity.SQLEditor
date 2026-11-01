@@ -30,7 +30,6 @@ interface HeaderProps {
   onFontThemeChange: (fontTheme: FontTheme) => void;
   isExecuting: boolean;
   activeDatabase: string;
-  showQuickModulePills?: boolean;
   workspaceLayoutMode?: 'editor' | 'split' | 'der';
   onWorkspaceLayoutModeChange?: (mode: 'editor' | 'split' | 'der') => void;
   confirmBeforeCloseAllTabs?: boolean;
@@ -56,7 +55,6 @@ export const Header: React.FC<HeaderProps> = ({
   isExecuting,
   activeDatabase,
   onRunSnippet,
-  showQuickModulePills = true,
   workspaceLayoutMode = 'editor',
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
@@ -152,71 +150,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="font-semibold text-[var(--status-success)] truncate max-w-[120px]">{activeDatabase}</span>
         </div>
       </div>
-
-      {/* Quick Module Pills (Central da Disciplina) - Visível em telas médias/grandes */}
-      {showQuickModulePills && (
-        <nav aria-label="Navegação Rápida da Disciplina" className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]/70 shadow-inner">
-          {/* Galeria */}
-          <button
-            type="button"
-            onClick={() => onViewChange('gallery')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeView === 'gallery'
-                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-            }`}
-            title="Galeria de Bancos de Aula, Templates e Desafios"
-          >
-            <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">collections_bookmark</span>
-            <span>Galeria</span>
-          </button>
-
-          {/* Dicionário */}
-          <button
-            type="button"
-            onClick={() => onViewChange('er-model')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeView === 'er-model'
-                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-            }`}
-            title="Modelo Lógico, Dicionário de Dados & Checklist 1FN–3FN"
-          >
-            <span className="material-symbols-outlined text-[15px] text-[#29B6F6]">menu_book</span>
-            <span>Dicionário</span>
-          </button>
-
-          {/* Estúdio DER */}
-          <button
-            type="button"
-            onClick={() => onViewChange('er-diagram')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeView === 'er-diagram'
-                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-            }`}
-            title="Estúdio DER Dedicado (Canvas 7 Camadas)"
-          >
-            <span className="material-symbols-outlined text-[15px] text-[#FF8533]">schema</span>
-            <span>Estúdio DER</span>
-          </button>
-
-          {/* Laboratório SQL */}
-          <button
-            type="button"
-            onClick={() => onViewChange('workspace')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeView === 'workspace'
-                ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] shadow-sm border border-[var(--accent-yellow)]/30 font-bold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-            }`}
-            title="Laboratório SQL com Monaco Editor e Split-View"
-          >
-            <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">terminal</span>
-            <span>Laboratório SQL</span>
-          </button>
-        </nav>
-      )}
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2">

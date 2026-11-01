@@ -1298,7 +1298,6 @@ export const App: React.FC = () => {
             onFontThemeChange={handleFontThemeChange}
             isExecuting={isExecuting}
             activeDatabase={activeDatabase || '(nenhum)'}
-            showQuickModulePills={preferences.ui.showQuickModulePills}
             workspaceLayoutMode={workspaceLayoutMode}
             onWorkspaceLayoutModeChange={setWorkspaceLayoutMode}
             confirmBeforeCloseAllTabs={preferences.editor.confirmBeforeCloseAllTabs}

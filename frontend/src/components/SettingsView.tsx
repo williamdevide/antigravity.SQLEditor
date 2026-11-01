@@ -506,27 +506,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
 
-              {/* Toggle: Pills Rápidas no Cabeçalho */}
-              <label className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-start gap-3 cursor-pointer hover:border-[#FF6B00]/40 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={currentPrefs.ui.showQuickModulePills}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    updatePrefs((p) => ({ ...p, ui: { ...p.ui, showQuickModulePills: checked } }));
-                  }}
-                  className="mt-0.5 w-4 h-4 rounded border-[var(--border-color)] text-[#FF6B00] focus:ring-[#FF6B00] cursor-pointer"
-                />
-                <div className="space-y-0.5">
-                  <span className="text-xs font-bold text-[var(--text-primary)]">
-                    Exibir Pills Rápidas no Cabeçalho
-                  </span>
-                  <p className="text-[11px] text-[var(--text-secondary)]">
-                    Barra de atalhos diretos para Galeria, Dicionário, Estúdio DER e Laboratório SQL no topo da tela.
-                  </p>
-                </div>
-              </label>
-
               {/* Toggle: Modo Leve para Laboratório */}
               <label className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-start gap-3 cursor-pointer hover:border-[#FF6B00]/40 transition-colors">
                 <input
