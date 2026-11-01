@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { APP_VERSION } from '../config/version';
 import type { ActiveView, FontTheme, ThemeMode } from '../types';
+import { InteractiveVideoPlayer } from './video/InteractiveVideoPlayer';
 
 export interface GuideAndFeedbackViewProps {
   theme: ThemeMode;
@@ -230,10 +231,30 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
           </button>
         </div>
 
-        {/* 1. Roteiro Visual das 5 Etapas da Disciplina */}
+        {/* 1. Vídeos Tutoriais Interativos & Demonstração Rápida */}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--accent-yellow)] font-mono flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-[#FF6B00]">play_circle</span>
+                <span>1. Tutoriais em Vídeo Interativo (Legendados em PT-BR)</span>
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Assista a simulações visuais em tempo real das 5 etapas da plataforma, com legendas sincronizadas em Português e atalhos diretos para cada ferramenta.
+              </p>
+            </div>
+            <span className="px-2.5 py-1 rounded bg-[#FF6B00]/15 border border-[#FF6B00]/30 text-[11px] font-mono text-[#FF6B00] font-bold">
+              5 Módulos de Aprendizagem
+            </span>
+          </div>
+
+          <InteractiveVideoPlayer onNavigate={onNavigate} />
+        </section>
+
+        {/* 2. Roteiro Visual das 5 Etapas da Disciplina */}
         <section className="space-y-3">
           <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--accent-yellow)] font-mono">
-            1. Roteiro Prático das 5 Etapas de Banco de Dados
+            2. Roteiro Prático das 5 Etapas de Banco de Dados
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             {[
@@ -300,10 +321,10 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
           </div>
         </section>
 
-        {/* 2. Mapa de Atalhos de Teclado e Interação */}
+        {/* 3. Mapa de Atalhos de Teclado e Interação */}
         <section className="space-y-3">
           <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--accent-yellow)] font-mono">
-            2. Atalhos de Teclado &amp; Gestos do Canvas
+            3. Atalhos de Teclado &amp; Gestos do Canvas
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {SHORTCUTS_LIST.map((group) => (
@@ -334,12 +355,12 @@ export const GuideAndFeedbackView: React.FC<GuideAndFeedbackViewProps> = ({
           </div>
         </section>
 
-        {/* 3. Gerador Estruturado de Feedback / Reporte de Bug */}
+        {/* 4. Gerador Estruturado de Feedback / Reporte de Bug */}
         <section className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-[var(--text-primary)]">
-                3. Central de Feedback &amp; Reporte Técnico Estruturado
+                4. Central de Feedback &amp; Reporte Técnico Estruturado
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
                 Encontrou um comportamento inesperado ou quer sugerir um novo recurso ou desafio para as aulas? Envie diretamente para o desenvolvedor ou gere o relatório técnico com diagnóstico automático do ambiente.
