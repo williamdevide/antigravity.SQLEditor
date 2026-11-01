@@ -565,3 +565,4 @@ export const TRAINING_VIDEOS_CATALOG: TrainingVideoItem[] = [
     ],
   },
 ];
+

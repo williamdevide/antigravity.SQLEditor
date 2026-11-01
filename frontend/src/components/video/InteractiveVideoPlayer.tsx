@@ -593,3 +593,4 @@ export const InteractiveVideoPlayer: React.FC<InteractiveVideoPlayerProps> = ({
     </div>
   );
 };
+
