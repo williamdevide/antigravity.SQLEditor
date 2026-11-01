@@ -1,4 +1,5 @@
 import { APP_VERSION } from '../config/version';
+import { dbEngine } from './dbEngine';
 import {
   DEFAULT_APP_PREFERENCES,
   type AppPreferences,
@@ -271,7 +272,6 @@ export async function importSuperBackupJson(rawJson: string): Promise<SuperBacku
   const dbs = Array.isArray(payload.databasesState) ? payload.databasesState : [];
   if (dbs.length > 0) {
     await dbStorage.databasesState.clear();
-    const { dbEngine } = await import('./dbEngine');
     await dbEngine.importJSON(JSON.stringify(dbs));
   }
 

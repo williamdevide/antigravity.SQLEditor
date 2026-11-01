@@ -154,6 +154,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
   // UI de menus e feedback rápido
   const [exportMenuOpen, setExportMenuOpen] = useState<boolean>(false);
   const [saveModalOpen, setSaveModalOpen] = useState<boolean>(false);
+  const [modesHelpOpen, setModesHelpOpen] = useState<boolean>(false);
   const [customModelTitle, setCustomModelTitle] = useState<string>('');
   const [customModelDesc, setCustomModelDesc] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -774,58 +775,92 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
             )}
 
             {/* Toggle Fonte de Dados: Banco Ativo (AlaSQL) vs Script Ao Vivo */}
-            <div className="flex items-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-0.5 text-[11px] font-semibold">
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg p-0.5 text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSourceMode('active-db')}
+                  title="Renderiza o esquema real instanciado no motor AlaSQL (dados reais, contagens e Live Data Peek)"
+                  className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                    sourceMode === 'active-db'
+                      ? 'bg-[#FF6B00] text-white shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[13px]">database</span>
+                  <span>Banco Ativo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceMode('live-script')}
+                  title="Renderiza em tempo real enquanto você digita no editor (estilo LiveSchema, sem precisar executar)"
+                  className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                    sourceMode === 'live-script'
+                      ? 'bg-[#FF6B00] text-white shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[13px]">bolt</span>
+                  <span>Script Ao Vivo</span>
+                </button>
+              </div>
+
+              {/* Botão de Ajuda Didática sobre os Modos */}
               <button
                 type="button"
-                onClick={() => setSourceMode('active-db')}
-                title="Renderiza o esquema real instanciado no motor AlaSQL"
-                className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
-                  sourceMode === 'active-db'
-                    ? 'bg-[#FF6B00] text-white shadow-sm'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+                onClick={() => setModesHelpOpen(true)}
+                title="Entenda a diferença didática entre Banco Ativo e Script Ao Vivo"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[#FF6B00] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[13px]">database</span>
-                <span>Banco Ativo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSourceMode('live-script')}
-                title="Renderiza os comandos CREATE/ALTER/INSERT da aba ativa do editor enquanto você digita"
-                className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
-                  sourceMode === 'live-script'
-                    ? 'bg-[#FF6B00] text-white shadow-sm'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[13px]">bolt</span>
-                <span>Script Ao Vivo</span>
+                <span className="material-symbols-outlined text-[15px]">help</span>
               </button>
             </div>
 
             {sourceMode === 'active-db' ? (
-              <select
-                value={selectedDb}
-                onChange={(e) => {
-                  setSelectedDb(e.target.value);
-                  onSelectDatabase?.(e.target.value);
-                }}
-                className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-2.5 py-1 text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
-              >
-                {schemas.length === 0 ? (
-                  <option value="">Nenhum banco ativo</option>
-                ) : (
-                  schemas.map((db) => (
-                    <option key={db.name} value={db.name}>
-                      {db.name} ({db.tables.length} tab)
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={selectedDb}
+                  onChange={(e) => {
+                    setSelectedDb(e.target.value);
+                    onSelectDatabase?.(e.target.value);
+                  }}
+                  className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-2.5 py-1 text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                >
+                  {schemas.length === 0 ? (
+                    <option value="">Nenhum banco ativo</option>
+                  ) : (
+                    schemas.map((db) => (
+                      <option key={db.name} value={db.name}>
+                        {db.name} ({db.tables.length} tab)
+                      </option>
+                    ))
+                  )}
+                </select>
+                <span
+                  className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                  title="Motor AlaSQL: esquema e dados reais já executados no navegador"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Motor AlaSQL (Executado)
+                </span>
+              </div>
             ) : (
-              <span className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--accent-yellow)]">
-                {activeTabName}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--accent-yellow)] flex items-center gap-1"
+                  title="Aba do editor sendo analisada em tempo real"
+                >
+                  <span className="material-symbols-outlined text-[12px]">edit_note</span>
+                  {activeTabName}
+                </span>
+                <span
+                  className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                  title="Parser Reativo: analisa o código SQL em tempo de digitação (sem precisar rodar)"
+                >
+                  <span className="material-symbols-outlined text-[11px]">bolt</span>
+                  Parser Reativo (Digitação)
+                </span>
+              </div>
             )}
 
             <span className="text-[11px] font-mono text-[var(--text-muted)] hidden md:inline">
@@ -1150,8 +1185,115 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
           onCreateForeignKeyConnection={handleVisualCreateForeignKey}
           compact={isSplitPreview}
           fitTriggerKey={`${layoutRecordId}:${tables.length}`}
+          sourceMode={sourceMode}
+          contextName={sourceMode === 'live-script' ? activeTabName : (selectedDb || 'sem_banco')}
         />
       </div>
+
+      {/* Modal Didático: Entendendo os Modos de Fonte (Banco Ativo vs Script Ao Vivo) */}
+      {modesHelpOpen && (
+        <div
+          data-print-hide
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => setModesHelpOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#FF6B00] text-[24px]">
+                  help
+                </span>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  Entendendo os Modos do Estúdio DER
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModesHelpOpen(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-lg cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              O <strong>Estúdio DER</strong> oferece dois motores inteligentes para visualização e modelagem relacional. Entenda o papel de cada um e por que em alguns momentos eles podem exibir o mesmo diagrama:
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {/* Card Banco Ativo */}
+              <div className="rounded-xl bg-[var(--bg-primary)] border border-emerald-500/30 p-4 space-y-2.5">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <span className="material-symbols-outlined text-[20px]">database</span>
+                  <h4 className="text-sm font-bold">1. Banco Ativo</h4>
+                </div>
+                <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 inline-block font-semibold">
+                  Motor: AlaSQL (Executado)
+                </div>
+                <ul className="text-xs text-[var(--text-secondary)] space-y-1.5 list-disc pl-4 leading-relaxed">
+                  <li><strong>Origem:</strong> Lê o banco de dados que já foi <strong className="text-[var(--text-primary)]">executado e compilado</strong> na memória.</li>
+                  <li><strong>Dados Reais:</strong> Mostra contagens exatas de registros e permite o <strong className="text-[var(--text-primary)]">Live Data Peek (👁️)</strong> com linhas reais das tabelas.</li>
+                  <li><strong>Troca de Banco:</strong> Permite navegar por qualquer banco já criado na sessão através do menu suspenso.</li>
+                  <li><strong>Atenção:</strong> Se você digitar um novo comando SQL no editor, ele <span className="text-amber-400">NÃO aparecerá aqui</span> até você clicar em <em>Executar (Ctrl+Enter)</em>.</li>
+                </ul>
+              </div>
+
+              {/* Card Script Ao Vivo */}
+              <div className="rounded-xl bg-[var(--bg-primary)] border border-amber-500/30 p-4 space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <span className="material-symbols-outlined text-[20px]">bolt</span>
+                  <h4 className="text-sm font-bold">2. Script Ao Vivo</h4>
+                </div>
+                <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 inline-block font-semibold">
+                  Motor: Parser AST Reativo (Monaco)
+                </div>
+                <ul className="text-xs text-[var(--text-secondary)] space-y-1.5 list-disc pl-4 leading-relaxed">
+                  <li><strong>Origem:</strong> Lê diretamente o <strong className="text-[var(--text-primary)]">código SQL digitado no editor</strong> em tempo real (inspirado no <em>LiveSchema</em>).</li>
+                  <li><strong>Sem Execução:</strong> Desenha as tabelas e linhas de chave estrangeira instantaneamente enquanto você digita, sem precisar compilar.</li>
+                  <li><strong>Prototipagem Rápida:</strong> Ideal para criar modelos conceituais/físicos do zero e verificar relacionamentos antes de rodar o script.</li>
+                  <li><strong>Amostras de INSERT:</strong> Extrai amostras simuladas dos comandos <code className="text-amber-400">INSERT</code> digitados no próprio texto.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Dúvida Frequente: Por que parecem iguais? */}
+            <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-4 space-y-2">
+              <div className="flex items-center gap-2 text-[var(--accent-yellow)]">
+                <span className="material-symbols-outlined text-[18px]">lightbulb</span>
+                <h4 className="text-xs font-bold uppercase tracking-wider">
+                  Por que tive a impressão de que não há diferença entre eles?
+                </h4>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Se a aba aberta no seu editor contiver <strong>o mesmo script SQL</strong> que você executou para criar o banco de dados ativo, ambos os modos exibirão exatamente as mesmas tabelas e colunas!
+              </p>
+              <div className="bg-[var(--bg-primary)] rounded-lg p-3 text-xs text-[var(--text-muted)] space-y-1.5">
+                <p className="font-semibold text-[var(--text-primary)]">Como comprovar a diferença na prática:</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Selecione o modo <strong>Script Ao Vivo</strong>.</li>
+                  <li>No editor de código, digite uma nova tabela: <code className="font-mono text-amber-400">CREATE TABLE teste (id INT);</code></li>
+                  <li>Veja que a tabela <code>teste</code> aparece <strong>imediatamente</strong> no diagrama!</li>
+                  <li>Agora alterne para <strong>Banco Ativo</strong>: note que ela <strong>não existe</strong>, pois ainda não foi executada no banco.</li>
+                  <li>Pressione <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded text-[10px]">Ctrl+Enter</kbd> para executar o código. Agora volte para <strong>Banco Ativo</strong> e ela estará lá com dados e integridade no AlaSQL!</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setModesHelpOpen(false)}
+                className="px-5 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold cursor-pointer transition-colors shadow-md"
+              >
+                Entendido!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Rápido: Salvar em Meus Modelos */}
       {saveModalOpen && (

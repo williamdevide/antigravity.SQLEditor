@@ -64,6 +64,8 @@ interface ERInteractiveCanvasProps {
   ) => void;
   compact?: boolean;
   fitTriggerKey?: string;
+  sourceMode?: 'active-db' | 'live-script';
+  contextName?: string;
 }
 
 export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
@@ -92,9 +94,13 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
   isPresentationMode,
   onTogglePresentationMode,
   enableVisualConnect = false,
+  selectedColumn = null,
+  onSelectColumn,
   onCreateForeignKeyConnection,
   compact = false,
   fitTriggerKey,
+  sourceMode = 'active-db',
+  contextName = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<number>(defaultZoom);
@@ -666,15 +672,27 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
       {tables.length === 0 ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center pointer-events-none">
           <div className="w-14 h-14 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-center text-[var(--accent-yellow)] mb-3 shadow-lg">
-            <span className="material-symbols-outlined text-[30px]">account_tree</span>
+            <span className="material-symbols-outlined text-[30px]">
+              {sourceMode === 'live-script' ? 'bolt' : 'account_tree'}
+            </span>
           </div>
           <h3 className="text-sm font-bold text-[var(--text-primary)] mb-1">
-            Nenhuma Entidade no Diagrama Atual
+            {sourceMode === 'live-script'
+              ? `Nenhuma Entidade Detectada no Script (${contextName || 'Aba Ativa'})`
+              : `Nenhuma Entidade no Banco Ativo (${contextName || 'Sem Banco'})`}
           </h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-md leading-relaxed">
-            Carregue um banco na <strong>Galeria &amp; Prática</strong>, escreva comandos{' '}
-            <code className="font-mono text-[var(--accent-yellow)]">CREATE TABLE</code> no{' '}
-            <strong>Laboratório SQL</strong> ou crie tabelas visualmente pelo Inspetor Lateral.
+            {sourceMode === 'live-script' ? (
+              <>
+                O modo <strong>Script Ao Vivo</strong> desenha entidades automaticamente em tempo real enquanto você digita comandos{' '}
+                <code className="font-mono text-[var(--accent-yellow)]">CREATE TABLE</code> no editor. Se você deseja inspecionar um banco já executado no motor relacional, alterne para o modo <strong>Banco Ativo</strong> acima.
+              </>
+            ) : (
+              <>
+                O modo <strong>Banco Ativo</strong> lê o esquema compilado e instanciado no motor <strong>AlaSQL</strong>. Execute um script com{' '}
+                <code className="font-mono text-[var(--accent-yellow)]">CREATE TABLE</code> no Laboratório SQL ou selecione outro banco existente na lista acima.
+              </>
+            )}
           </p>
         </div>
       ) : (
@@ -791,6 +809,7 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
                 meta={tableMeta[table.name]}
                 isDragging={draggingTable === table.name}
                 isSelected={selectedTable === table.name}
+                selectedColumn={selectedColumn}
                 isSearchMatch={isMatch}
                 isDimmed={isDimmedBySearch || isDimmedBySpotlight}
                 isPresentationMode={isPresentationMode}
@@ -798,6 +817,7 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
                 onMouseDownHeader={handleTableMouseDown}
                 onHoverTable={setHoveredTable}
                 onSelectTable={onSelectTable}
+                onSelectColumn={onSelectColumn}
                 onDoubleClickQuery={onDoubleClickTableQuery}
                 onUpdateMeta={onUpdateTableMeta}
                 onRequestDataPeek={onRequestDataPeek}

@@ -2255,3 +2255,33 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - `tsc -b && vite build`: compilação concluída em 879ms com 0 erros.
 
 ---
+
+
+## 📌 Prompt 80 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:44  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio der não entendi o papel dos 2 botões banco ativo / script ao vivo, tenho a impressão que não faz diferença entre eles, verifique e me esclareça
+```
+
+### 🎯 Ações Executadas:
+- **Análise Arquitetural e Esclarecimento Didático (Perfil SENAI):**
+  - **Banco Ativo (`active-db`):** Conectado diretamente ao motor relacional compilado na memória do navegador (**AlaSQL / IndexedDB**). Lê as tabelas que já foram de fato executadas (`Ctrl+Enter` no editor), reflete dados reais populados, contadores exatos de registros (`N registros`), suporta o *Live Data Peek (👁️)* e permite alternar entre os bancos criados na sessão através do menu suspenso.
+  - **Script Ao Vivo (`live-script`):** Conectado ao **Parser AST Reativo tolerante** (`liveSqlSchemaParser.ts`), inspirado na filosofia do *LiveSchema Studio*. Analisa o texto do Monaco Editor em tempo real à medida que o aluno digita, desenhando entidades e relacionamentos antes mesmo de compilar, rodar ou popular o banco.
+  - **Diagnóstico da Percepção de "Nenhuma Diferença":** Quando a aba aberta no Monaco Editor contém o mesmo script DDL que foi executado para criar o banco de dados ativo selecionado, ambos os motores geram exatamente a mesma estrutura relacional. A interface anterior não evidenciava com clareza a engine de dados por trás de cada visualização.
+- **Aprimoramentos de UI/UX no Estúdio DER (`ERStudioWorkspace.tsx` & `ERInteractiveCanvas.tsx`):**
+  - **Badges de Engine com Status Visual:**
+    - Modo *Banco Ativo*: Exibe a badge `Motor AlaSQL (Executado)` com pulso esmeralda e o seletor de banco de dados.
+    - Modo *Script Ao Vivo*: Exibe a badge `Parser Reativo (Digitação)` com ícone âmbar e o nome da aba ativa do editor sendo analisada.
+  - **Botão de Ajuda Pedagógica (`help_outline`) & Modal Explicativo:**
+    - Adicionado botão de ajuda ao lado do controle segmentado de modos.
+    - Criado o modal didático `Entendendo os Modos do Estúdio DER` com cards comparativos, detalhes da engine, explicações passo a passo e um guia prático ensinando o aluno a testar a diferença instantaneamente digitando uma tabela no editor sem executá-la.
+  - **Empty States Contextuais Inteligentes:**
+    - Se o canvas estiver vazio no modo *Script Ao Vivo*, orienta o aluno a escrever comandos `CREATE TABLE` no editor para vê-los se desenhar ao vivo ou mudar para *Banco Ativo*.
+    - Se estiver vazio no modo *Banco Ativo*, orienta o aluno a executar um script no Laboratório SQL ou selecionar outro banco populado.
+- **Validação Técnica e Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 848ms com 90 módulos transformados.
+  - Sincronização e push no Git para `main` e `feature/v3.2-central-bd`.
+
+---
