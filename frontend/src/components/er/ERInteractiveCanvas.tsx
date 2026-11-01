@@ -46,6 +46,7 @@ interface ERInteractiveCanvasProps {
   onDoubleClickTableQuery?: (tableName: string) => void;
   onRequestDataPeek?: (tableName: string) => void;
   onAutoLayout: () => void;
+  isAutoLayoutActive?: boolean;
   erPreferences: ERStudioPreferences;
   onUpdateErPreferences?: (patch: Partial<ERStudioPreferences>) => void;
   defaultZoom?: number;
@@ -81,6 +82,7 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
   onDoubleClickTableQuery,
   onRequestDataPeek,
   onAutoLayout,
+  isAutoLayoutActive = false,
   erPreferences,
   onUpdateErPreferences,
   defaultZoom = 100,
@@ -648,6 +650,7 @@ export const ERInteractiveCanvas: React.FC<ERInteractiveCanvasProps> = ({
         onZoomReset={() => setZoom(100)}
         onFitToView={handleFitToView}
         onAutoLayout={onAutoLayout}
+        isAutoLayoutActive={isAutoLayoutActive}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         erPreferences={erPreferences}

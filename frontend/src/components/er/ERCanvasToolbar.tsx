@@ -11,6 +11,7 @@ interface ERCanvasToolbarProps {
   onZoomReset: () => void;
   onFitToView: () => void;
   onAutoLayout: () => void;
+  isAutoLayoutActive?: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   erPreferences: ERStudioPreferences;
@@ -33,6 +34,7 @@ export const ERCanvasToolbar: React.FC<ERCanvasToolbarProps> = ({
   onZoomReset,
   onFitToView,
   onAutoLayout,
+  isAutoLayoutActive = false,
   searchQuery,
   onSearchChange,
   erPreferences,
@@ -137,17 +139,35 @@ export const ERCanvasToolbar: React.FC<ERCanvasToolbarProps> = ({
           {!compact && <span className="hidden sm:inline">Ajustar</span>}
         </button>
 
-        {/* Auto-Layout 16:9 */}
+        {/* Auto-Layout 16:9 / Restaurar Posições Salvas */}
         <button
           type="button"
           onClick={onAutoLayout}
-          title="Reorganizar layout topológico 16:9 sem sobreposições"
-          className="h-7 px-2 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-medium text-[var(--text-primary)] flex items-center gap-1 cursor-pointer"
+          title={
+            isAutoLayoutActive
+              ? 'Retornar à última posição salva que você arrumou (Desfazer Organizar)'
+              : 'Reorganizar layout topológico 16:9 sem sobreposições'
+          }
+          className={`h-7 px-2 rounded border text-xs font-medium flex items-center gap-1 cursor-pointer transition-all ${
+            isAutoLayoutActive
+              ? 'bg-[var(--accent-orange)]/15 hover:bg-[var(--accent-orange)]/25 border-[var(--accent-orange)]/50 text-[var(--accent-orange)] shadow-sm'
+              : 'bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border-[var(--border-color)] text-[var(--text-primary)]'
+          }`}
         >
-          <span className="material-symbols-outlined text-[15px] text-[var(--status-success)]">
-            auto_awesome
+          <span
+            className={`material-symbols-outlined text-[15px] ${
+              isAutoLayoutActive
+                ? 'text-[var(--accent-orange)]'
+                : 'text-[var(--status-success)]'
+            }`}
+          >
+            {isAutoLayoutActive ? 'restore' : 'auto_awesome'}
           </span>
-          {!compact && <span className="hidden sm:inline">Organizar</span>}
+          {!compact && (
+            <span className="hidden sm:inline">
+              {isAutoLayoutActive ? 'Restaurar' : 'Organizar'}
+            </span>
+          )}
         </button>
 
         {/* Toggles Rápidos Espelhados com Configurações (Pilar 3) */}

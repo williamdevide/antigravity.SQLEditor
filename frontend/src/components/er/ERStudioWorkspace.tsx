@@ -319,6 +319,9 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
         const saved = await dbStorage.erDiagrams.get(layoutRecordId).catch(() => undefined);
         if (cancelled) return;
 
+        setPreviousUserPositions(null);
+        setIsAutoLayoutActive(false);
+
         if (saved) {
           // Garante coordenadas para novas tabelas adicionadas desde o último salvamento
           const autoFallback = calculateTopologicalLayout(
@@ -395,11 +398,19 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
     preferences.er.snapToGrid,
   ]);
 
+  // Alternância: Organizar (Auto-Layout 16:9) vs Restaurar última posição arrumada pelo usuário
+  const [previousUserPositions, setPreviousUserPositions] = useState<{
+    positions: Record<string, ERTablePosition>;
+    lineOffsets: Record<string, { x: number; y: number }>;
+  } | null>(null);
+  const [isAutoLayoutActive, setIsAutoLayoutActive] = useState(false);
+
   const handlePositionsChange = useCallback(
     (next: Record<string, ERTablePosition>, commitPersist?: boolean) => {
       setPositions(next);
       if (commitPersist) {
         persistDiagramState({ positions: next });
+        setIsAutoLayoutActive(false);
       }
     },
     [persistDiagramState]
@@ -410,6 +421,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
       setLineOffsets(next);
       if (commitPersist) {
         persistDiagramState({ lineOffsets: next });
+        setIsAutoLayoutActive(false);
       }
     },
     [persistDiagramState]
@@ -450,6 +462,25 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
   );
 
   const handleAutoLayout = useCallback(() => {
+    // 1. Se já estiver no modo organizado, restaura a última posição salva que o usuário arrumou
+    if (isAutoLayoutActive && previousUserPositions) {
+      setPositions(previousUserPositions.positions);
+      setLineOffsets(previousUserPositions.lineOffsets);
+      persistDiagramState({
+        positions: previousUserPositions.positions,
+        lineOffsets: previousUserPositions.lineOffsets,
+      });
+      setIsAutoLayoutActive(false);
+      showToast('Posições manuais anteriores restauradas com sucesso!');
+      return;
+    }
+
+    // 2. Se for organizar: salva snapshot das posições e offsets atuais do usuário
+    setPreviousUserPositions({
+      positions: { ...positions },
+      lineOffsets: { ...lineOffsets },
+    });
+
     const unlockedPos = calculateTopologicalLayout(
       tables,
       relationships,
@@ -466,18 +497,22 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
     setPositions(merged);
     setLineOffsets({});
     persistDiagramState({ positions: merged, lineOffsets: {} });
-    showToast('Layout topológico 16:9 reorganizado.');
+    setIsAutoLayoutActive(true);
+    showToast('Layout topológico 16:9 reorganizado. Clique em "Restaurar" para voltar às posições anteriores.');
   }, [
+    isAutoLayoutActive,
+    previousUserPositions,
+    positions,
+    lineOffsets,
     tables,
     relationships,
     tableMeta,
     preferences.er.snapToGrid,
-    positions,
     persistDiagramState,
     showToast,
   ]);
 
-  // Lazy-load de 5 registros reais do AlaSQL ao clicar em "Live Data Peek (👁️)"
+    // Lazy-load de 5 registros reais do AlaSQL ao clicar em "Live Data Peek (👁️)"
   const handleRequestDataPeek = useCallback(
     async (tableName: string) => {
       if (sourceMode !== 'active-db' || !selectedDb) return;
@@ -1055,6 +1090,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
           }
           onRequestDataPeek={handleRequestDataPeek}
           onAutoLayout={handleAutoLayout}
+          isAutoLayoutActive={isAutoLayoutActive}
           erPreferences={preferences.er}
           onUpdateErPreferences={onUpdateErPreferences}
           defaultZoom={preferences.ui.defaultErZoom}

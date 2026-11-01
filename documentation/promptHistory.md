@@ -2206,3 +2206,26 @@ perfeito, vamos lá, começar as grandes mudanças. (contudo fiz um backup da pa
   - `npm run build` (`tsc -b && vite build`): compilação concluída em 1.86s com 0 erros e dados de aula validados no bundle.
 
 ---
+
+
+## 📌 Prompt 78 (Sessão: 01/11/2026)
+**Data:** 01/11/2026 - 18:28  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no estudio der o botão organizar alterna entre o organizar e retornar a ultima posição salva, assim se eu tiver reposicionado tudo e clicar no organizar e não gostar posso clicar de novo e voltar as posições que eu arrumei
+```
+
+### 🎯 Ações Executadas:
+- **Implementação do Mecanismo de Alternância Organizar ↔ Restaurar no Estúdio DER:**
+  - Em `ERStudioWorkspace.tsx`, criados os estados `previousUserPositions` (snapshot das posições e offsets de linhas manuais anteriores) e `isAutoLayoutActive`.
+  - Atualizado `handleAutoLayout`: ao clicar pela primeira vez, captura as posições arrumadas pelo usuário, aplica o layout topológico 16:9, ativa o modo organizado e emite toast explicativo; ao clicar novamente no estado ativo, restaura com precisão atômica as posições e offsets que o usuário havia montado e persiste no Dexie (`showToast('Posições manuais anteriores restauradas com sucesso!')`).
+  - Em `handlePositionsChange` e `handleLineOffsetsChange`, configurado para redefinir `isAutoLayoutActive: false` caso o usuário arraste manualmente algum cartão após organizar, estabelecendo a nova montagem manual como o novo ponto de restauração.
+  - No `hydrateLayout`, o estado de snapshot é limpo automaticamente ao alternar de banco de dados ou carregar um novo diagrama.
+  - Em `ERCanvasToolbar.tsx` e `ERInteractiveCanvas.tsx`, adicionada a prop `isAutoLayoutActive`. O botão na barra flutuante agora alterna visualmente entre:
+    - **Modo Padrão:** Ícone `auto_awesome` verde, texto `"Organizar"` e tooltip informativo.
+    - **Modo Organizado Ativo:** Ícone `restore` laranja (`--accent-orange`), texto `"Restaurar"`, borda destacada e tooltip `"Retornar à última posição salva que você arrumou (Desfazer Organizar)"`.
+- **Validação Técnica:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação concluída em 1.10s com 0 erros.
+
+---
