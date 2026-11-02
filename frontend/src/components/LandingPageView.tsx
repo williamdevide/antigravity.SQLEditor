@@ -569,7 +569,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 
       {/* 2. Hero Section com Background do Logo Milkfed Semitransparente */}
       <section
-        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative rounded-3xl my-6 border border-[var(--border-color)]/60 shadow-xl overflow-hidden bg-[var(--bg-surface)]/75 backdrop-blur-md"
+        className="pt-14 pb-12 px-4 sm:px-8 max-w-6xl mx-auto text-center relative rounded-3xl my-6 border border-[var(--border-color)]/60 shadow-xl overflow-hidden bg-[var(--bg-surface)]/75 backdrop-blur-md"
       >
         {/* Marca d'água / Background Logo Milkfed Semitransparente */}
         <div
@@ -1562,7 +1562,7 @@ CREATE TABLE itens_pedido (
       </section>
 
       {/* 10. Quickstart / Terminal Local */}
-      <section className="px-4 sm:px-8 max-w-4xl mx-auto py-16 border-t border-[var(--border-color)]">
+      <section className="px-4 sm:px-8 max-w-6xl mx-auto py-16 border-t border-[var(--border-color)]">
         <div className="text-center mb-8">
           <div className="text-xs font-mono font-semibold text-[#FF6B00] uppercase tracking-wider mb-2">
             Execução Local
@@ -1612,7 +1612,7 @@ CREATE TABLE itens_pedido (
       </section>
 
       {/* 11. CTA Final */}
-      <section className="px-4 sm:px-8 max-w-5xl mx-auto py-16 text-center">
+      <section className="px-4 sm:px-8 max-w-6xl mx-auto py-16 text-center">
         <div className="bg-gradient-to-b from-[#FF6B00]/15 to-[var(--bg-surface)] border border-[#FF6B00]/30 rounded-3xl p-8 sm:p-14 shadow-2xl relative overflow-hidden">
           <h2 className="text-3xl sm:text-5xl font-black text-[var(--text-primary)] tracking-tight mb-4">
             Pronto para dominar Banco de Dados?
@@ -1639,65 +1639,197 @@ CREATE TABLE itens_pedido (
         </div>
       </section>
 
-      {/* 12. Footer */}
-      <footer className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] py-10 px-4 sm:px-8 text-xs text-[var(--text-muted)]">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#FF6B00] text-[20px]">bolt</span>
-            <span className="font-bold text-sm text-[var(--text-primary)]">SQLEditor</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)]">
-              v{APP_VERSION}
-            </span>
-            <span>• Milkfed Devs &amp;&amp; Reqs Lords</span>
+      {/* 12. Footer Moderno Reformulado (Padrão SENAI / Milkfed Devs) */}
+      <footer className="border-t border-[var(--border-color)] bg-[var(--bg-surface)] pt-14 pb-8 px-4 sm:px-8 text-xs text-[var(--text-secondary)]">
+        <div className="max-w-6xl mx-auto space-y-12">
+          {/* Top Grid: 4 Colunas Estruturadas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6">
+            {/* Coluna 1 & 2: Identidade, Logo, Milkfed e Propósito */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center shadow-[0_0_12px_rgba(255,107,0,0.4)]">
+                  <span className="material-symbols-outlined text-black font-bold text-[19px]">bolt</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-lg tracking-tight text-[var(--text-primary)]">
+                    SQL<span className="text-[#FF6B00]">Editor</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/20">
+                    v{APP_VERSION}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed max-w-sm">
+                A plataforma educacional e profissional completa para a disciplina de Banco de Dados Relacional. Do modelo conceitual no Estúdio DER 90° à execução ao vivo de consultas SQL, 100% offline-first no navegador.
+              </p>
+
+              {/* Card Institucional da Milkfed */}
+              <div
+                onClick={() => setIsLogoModalOpen(true)}
+                className="inline-flex items-center gap-3 p-2.5 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-color)] hover:border-[#FF6B00]/60 transition-all cursor-zoom-in group shadow-sm max-w-sm"
+                title="Clique para ver detalhes institucionais da Milkfed Devs"
+              >
+                <div className="w-9 h-9 rounded-xl bg-white/10 p-1 flex items-center justify-center shrink-0 border border-white/10 group-hover:border-[#FF6B00]/40 transition-colors">
+                  <img src="/logo-milkfed.png" alt="Milkfed Devs" className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-[var(--text-primary)] group-hover:text-[#FF6B00] transition-colors">
+                    Milkfed Devs &amp;&amp; Reqs Lords
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                    Engenharia de Software &amp; Soluções de Alta Precisão
+                  </div>
+                </div>
+                <span className="material-symbols-outlined text-[14px] text-[#FF6B00] ml-auto group-hover:scale-110 transition-transform">zoom_in</span>
+              </div>
+
+              {/* Badges de Tecnologias */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="px-2 py-0.5 rounded bg-[#61DAFB]/10 text-[#61DAFB] border border-[#61DAFB]/20 text-[10px] font-mono">React 18</span>
+                <span className="px-2 py-0.5 rounded bg-[#3178C6]/10 text-[#3178C6] border border-[#3178C6]/20 text-[10px] font-mono">TypeScript</span>
+                <span className="px-2 py-0.5 rounded bg-[#FF6B00]/10 text-[#FF6B00] border border-[#FF6B00]/20 text-[10px] font-mono">AlaSQL</span>
+                <span className="px-2 py-0.5 rounded bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 text-[10px] font-mono">Dexie.js</span>
+                <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono">Google Antigravity</span>
+              </div>
+            </div>
+
+            {/* Coluna 3: As 5 Etapas de Banco de Dados */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider font-mono">
+                5 Etapas de BD
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <button type="button" onClick={() => onOpenView('er-diagram')} className="hover:text-[#FF6B00] transition-colors cursor-pointer text-left">
+                    1. Conceitual: Estúdio DER
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('er-model')} className="hover:text-[#FF6B00] transition-colors cursor-pointer text-left">
+                    2. Lógico: Dicionário &amp; 3FN
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={onOpenEditor} className="hover:text-[#FF6B00] transition-colors cursor-pointer text-left">
+                    3. Físico: DDL &amp; Estrutura
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={onOpenEditor} className="hover:text-[#FF6B00] transition-colors cursor-pointer text-left">
+                    4. Manipulação: DML &amp; Consultas
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('gallery')} className="hover:text-[#FF6B00] transition-colors cursor-pointer text-left">
+                    5. Desafios &amp; Auto-Correção
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Coluna 4: Navegação & Módulos */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider font-mono">
+                Central &amp; Módulos
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <button type="button" onClick={onOpenEditor} className="hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left">
+                    Laboratório SQL
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('gallery')} className="hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left">
+                    Galeria de Modelos
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('guide')} className="hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left flex items-center gap-1.5">
+                    <span>Guia Rápido &amp; Vídeos</span>
+                    <span className="px-1.5 py-0.2 rounded bg-[#29B6F6]/15 text-[#29B6F6] text-[9px] font-mono">#guia</span>
+                  </button>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('feedback')} className="hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left flex items-center gap-1.5">
+                    <span>Feedback do Desenvolvedor</span>
+                    <span className="px-1.5 py-0.2 rounded bg-[#00E676]/15 text-[#00E676] text-[9px] font-mono">#feedback</span>
+                  </button>
+                </li>
+                <li>
+                  <a href="#changelog" className="hover:text-[var(--text-primary)] transition-colors block">
+                    Notas de Versão (Changelog)
+                  </a>
+                </li>
+                <li>
+                  <button type="button" onClick={() => onOpenView('about')} className="hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left">
+                    Sobre &amp; Stack Tecnológica
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {/* Coluna 5: Institucional, SENAI & Contato */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider font-mono">
+                Institucional &amp; Autor
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li className="text-[var(--text-primary)] font-semibold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">school</span>
+                  <span>SENAI Ourinhos / SP</span>
+                </li>
+                <li className="text-[var(--text-muted)]">
+                  Educação Profissional &amp; Tecnologia da Informação
+                </li>
+                <li className="pt-1 text-[var(--text-primary)] font-medium">
+                  Prof. William Devidé Komel
+                </li>
+                <li>
+                  <a
+                    href="mailto:williamdevide.ourinhos@gmail.com"
+                    className="hover:text-[#FF6B00] transition-colors flex items-center gap-1 truncate text-[11px]"
+                    title="Enviar e-mail para o desenvolvedor"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">mail</span>
+                    <span className="truncate">williamdevide.ourinhos@gmail.com</span>
+                  </a>
+                </li>
+                <li className="pt-1 flex items-center gap-2">
+                  <a
+                    href="https://github.com/williamdevide/antigravity.SQLEditor"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] text-[var(--text-primary)] font-semibold transition-all shadow-sm"
+                  >
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                    </svg>
+                    <span>Repositório GitHub</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-5">
-            <button
-              type="button"
-              onClick={() => onOpenView('gallery')}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Galeria &amp; Prática
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenView('er-diagram')}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Estúdio DER
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenView('er-model')}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Dicionário 1FN–3FN
-            </button>
-            <button
-              type="button"
-              onClick={onOpenEditor}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Laboratório SQL
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenView('guide-feedback')}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Guia &amp; Atalhos
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenView('about')}
-              className="hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-            >
-              Sobre
-            </button>
-          </div>
+          {/* Bottom Bar: Copyright e Status Offline-First */}
+          <div className="pt-8 border-t border-[var(--border-color)] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[var(--text-muted)] font-mono">
+            <div className="flex flex-wrap items-center gap-2 text-center sm:text-left">
+              <span>© 2026 SQLEditor • Milkfed Devs &amp;&amp; Reqs Lords.</span>
+              <span className="hidden sm:inline">•</span>
+              <span>Todos os direitos reservados.</span>
+            </div>
 
-          <div>
-            © {new Date().getFullYear()} SQLEditor • Professor William Devidé Komel.
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-[#00E676]">
+                <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse" />
+                <span>100% Offline-First</span>
+              </span>
+              <span>•</span>
+              <span className="text-[var(--text-secondary)]">
+                Desenvolvido com Google Antigravity
+              </span>
+            </div>
           </div>
         </div>
       </footer>
