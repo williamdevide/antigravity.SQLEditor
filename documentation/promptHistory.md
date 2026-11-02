@@ -2633,3 +2633,32 @@ no modo sql-der o botão de alternancia (banco ativo/script ao vivo) deixe só o
 - **6. Validação e Deploy:**
   - `npm run lint` (`oxlint`): 0 erros.
   - `npm run build` (`tsc -b && vite build`): compilação de produção finalizada com sucesso em 1.30s.
+
+
+## 📌 Prompt 88 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 09:10  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal em que casos os teste de 1FN, 2FN e 3FN vão acusar erro em uma tabela? criei uma tabela tab1 com os campos id, nome, id_cargo e nome_cargo. não deveria apontar erro nesses testes?
+em estudio DER, criei duas tabelas e ele inferiu um relacionamento, cliquei em formalizar  foreign key, até deu a mensagem que formalizou, mas continua aparecendo inferida. alem disso, não consigo editar ou excluir o relacionamento
+```
+
+### 🎯 Ações Executadas:
+- **1. Esclarecimento Teórico e Pedagógico (Perfil SENAI / Álgebra Relacional):**
+  - **1ª Forma Normal (1FN):** Exige atomicidade de atributos e ausência de grupos repetitivos. O linter acusa violação quando há colunas que sugerem listas/valores compostos (`telefones`, `emails`, `dependentes`, `_csv`, `_json`) ou colunas numeradas sequenciais (`telefone1`, `telefone2`, `email1`, `email2`).
+  - **2ª Forma Normal (2FN):** Exige que a tabela esteja na 1FN e que nenhum atributo não-chave possua dependência parcial da chave primária. **Por definição matemática da teoria relacional, a 2FN só se aplica a tabelas com Chave Primária Composta (2 ou mais PKs)**. Quando uma tabela possui chave simples (ex: apenas `id`), ela já está automaticamente na 2FN, pois uma chave única não pode ser fracionada.
+  - **3ª Forma Normal (3FN):** Exige que a tabela esteja na 2FN e que **nenhum atributo não-chave dependa de outro atributo não-chave (ausência de dependência transitiva)**. No caso `tab1 (id, nome, id_cargo, nome_cargo)`: `id ➔ id_cargo` e `id_cargo ➔ nome_cargo`. Portanto, há a dependência transitiva `id ➔ id_cargo ➔ nome_cargo`. O atributo `nome_cargo` depende funcionalmente de `id_cargo` e não diretamente da chave primária `id`. Trata-se de uma **violação clássica da 3FN**, que deve ser resolvida decompondo em duas tabelas: `cargos (id_cargo, nome_cargo)` e `tab1 (id, nome, id_cargo)`.
+- **2. Aprimoramento do Linter Pedagógico (`schemaLinter.ts`):**
+  - O linter anteriormente apenas detectava 3FN em clusters de endereço (`cep + cidade/uf`).
+  - Implementada a regra geral de **Dependência Transitiva de Entidades Estrangeiras**: identifica pares onde há um identificador estrangeiro (`id_<entidade>`, `<entidade>_id`, `cod_<entidade>`) e colunas descritivas associadas (`nome_<entidade>`, `descricao_<entidade>`, `salario_<entidade>`, etc.) coexistindo na mesma tabela não-mestre.
+  - Testado e validado: a tabela `tab1` agora dispara imediatamente o aviso com severidade `warning`, explicação didática e sugestão de correção em DDL SQL.
+- **3. Correção da Formalização de Foreign Keys no Estúdio DER (`dbEngine.ts`):**
+  - *Diagnóstico da causa raiz:* O parser do AlaSQL gerava erro interno de sintaxe (`Expecting 'COLUMN', got 'CONSTRAINT'`) ao receber comandos `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...`. Como o comando falhava silenciosamente no AlaSQL, a coluna não recebia a propriedade `foreignkey`, fazendo com que, ao recarregar os esquemas, o DER caísse na heurística de convenção de nomes e exibisse o relacionamento como "Inferida".
+  - *Solução implementada:* O `dbEngine.ts` agora intercepta cirurgicamente comandos DDL estruturais de constraints (`ADD CONSTRAINT ... FOREIGN KEY`, `DROP FOREIGN KEY`, `ADD UNIQUE`, `DROP INDEX` e `CREATE TABLE ... FOREIGN KEY`), atualizando diretamente o catálogo de metadados das tabelas em memória (`t.columns[i].foreignkey` e `t.xcolumns`).
+  - Resultado: ao clicar em `+ Formalizar FOREIGN KEY no SQL`, o relacionamento torna-se imediatamente **Explícito** (badge verde) em tempo real, sem persistir como inferido.
+- **4. Capacidade de Editar e Excluir Relacionamentos no Estúdio DER (`visualDdlGenerator.ts`, `ERInspectorSidebar.tsx`, `ERStudioWorkspace.tsx`):**
+  - **Exclusão de Relacionamentos:** Criada a função `buildDropForeignKeyPatch` em `visualDdlGenerator.ts` e adicionado botão de lixeira ("Excluir") com confirmação de dois passos no inspetor lateral (`ERInspectorSidebar.tsx`), removendo a constraint cirurgicamente tanto do script SQL quanto do motor AlaSQL.
+  - **Edição de Cardinalidade (1:N ⇄ 1:1):** Criada a função `buildModifyRelationshipCardinalityPatch` e adicionado botão alternador no inspetor lateral, permitindo comutar a relação entre 1:N e 1:1 (adicionando/removendo constraint `UNIQUE` na chave estrangeira).
+- **5. Validação de Qualidade & Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção concluída com sucesso em 1.18s.

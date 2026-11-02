@@ -136,7 +136,8 @@ export function runPedagogicalSchemaLinter(
         }
       }
 
-      // C. Detecção de Violação da 3ª Forma Normal (3FN): dependência transitiva clássica (ex: cep + cidade/uf/bairro na mesma tabela de pessoa/pedido)
+      // C. Detecção de Violação da 3ª Forma Normal (3FN): dependência transitiva
+      // Caso 1: Endereço clássico (ex: cep + cidade/uf/bairro na mesma tabela de pessoa/pedido)
       const colNamesLower = new Set(tbl.columns.map((c) => c.name.toLowerCase()));
       const hasAddressCluster =
         colNamesLower.has('cep') &&
@@ -156,6 +157,74 @@ export function runPedagogicalSchemaLinter(
           pedagogicalTip:
             'Na 3ª Forma Normal (3FN), atributos não-chave não devem determinar outros atributos não-chave (dependência transitiva). Avalie extrair Endereços/Cidades se o domínio exigir normalização estrita.',
         });
+      }
+
+      // Caso 2: Dependência transitiva de Entidade Estrangeira / Secundária
+      // (ex: id_cargo + nome_cargo, cargo_id + cargo_nome, cod_depto + nome_depto na mesma tabela tab1/funcionarios)
+      const ownTblStem = tbl.name
+        .toLowerCase()
+        .replace(/^(tb_|tbl_|tab_)/, '')
+        .replace(/s$/, '')
+        .trim();
+
+      const nonPkCols = tbl.columns.filter((c) => !c.isPrimary);
+
+      for (const colA of nonPkCols) {
+        const colALow = colA.name.toLowerCase();
+        let foreignStem = '';
+
+        const mPrefix = colALow.match(/^(?:id_|cod_|fk_)([a-zA-Z0-9_]+)$/);
+        const mSuffix = colALow.match(/^([a-zA-Z0-9_]+)_(?:id|cod|codigo)$/);
+
+        if (mPrefix) {
+          foreignStem = mPrefix[1];
+        } else if (mSuffix) {
+          foreignStem = mSuffix[1];
+        } else if (colA.isForeignKey && colA.fkTarget?.table) {
+          foreignStem = colA.fkTarget.table.toLowerCase().replace(/^(tb_|tbl_|tab_)/, '').replace(/s$/, '');
+        }
+
+        foreignStem = foreignStem
+          .replace(/^(tb_|tbl_|tab_)/, '')
+          .replace(/s$/, '')
+          .trim();
+
+        if (foreignStem.length >= 3 && foreignStem !== ownTblStem) {
+          for (const colB of nonPkCols) {
+            if (colB.name.toLowerCase() === colALow) continue;
+            const colBLow = colB.name.toLowerCase();
+
+            // colB não deve ser ela mesma uma chave primária ou id
+            if (colBLow.endsWith('_id') || colBLow.startsWith('id_') || colBLow.startsWith('cod_') || colBLow.startsWith('fk_')) {
+              continue;
+            }
+
+            const containsStem = colBLow.includes(foreignStem);
+            const isDescriptor =
+              colBLow.includes('nome') ||
+              colBLow.includes('desc') ||
+              colBLow.includes('titulo') ||
+              colBLow.includes('title') ||
+              colBLow.includes('salario') ||
+              colBLow.includes('sigla') ||
+              colBLow.includes('tipo') ||
+              colBLow.includes('valor');
+
+            if (containsStem && (isDescriptor || colBLow.length <= foreignStem.length + 8)) {
+              issues.push({
+                id: `3nf-transitive-${tbl.name}-${colA.name}-${colB.name}`,
+                severity: 'warning',
+                code: 'NORMALIZATION_3NF',
+                tableName: tbl.name,
+                columnName: colB.name,
+                title: `Suspeita de Dependência Transitiva em "${tbl.name}.${colB.name}" (3FN)`,
+                message: `O atributo "${colB.name}" aparenta depender funcionalmente de "${colA.name}" (e não diretamente da chave primária). Há uma dependência transitiva: PK ➔ ${colA.name} ➔ ${colB.name}.`,
+                pedagogicalTip: `A 3ª Forma Normal (3FN) exige que todo atributo não-chave dependa única e exclusivamente da chave primária. Crie uma tabela dedicada para "${foreignStem}" (ex: "${foreignStem}s") com PK "${colA.name}" e atributos descritivos como "${colB.name}", mantendo em "${tbl.name}" apenas a FOREIGN KEY "${colA.name}".`,
+                suggestedFixSql: `CREATE TABLE IF NOT EXISTS \`${foreignStem}s\` (\n  \`${colA.name}\` INT PRIMARY KEY,\n  \`${colB.name}\` VARCHAR(100)\n);\nALTER TABLE \`${tbl.name}\` DROP COLUMN \`${colB.name}\`;`,
+              });
+            }
+          }
+        }
       }
     }
   }

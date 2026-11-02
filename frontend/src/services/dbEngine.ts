@@ -887,6 +887,196 @@ class DatabaseEngine {
         }
       } catch (_) {}
 
+      // Interceptação de comandos DDL estruturais de constraints não suportados nativamente pelo parser do AlaSQL
+      // 1. ALTER TABLE <tbl> ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...
+      const alterFkMatch = cleanStmt.match(
+        /^ALTER\s+TABLE\s+[`'"]?(\w+)[`'"]?\s+ADD\s+(?:CONSTRAINT\s+[`'"]?(\w+)[`'"]?\s+)?FOREIGN\s+KEY\s*\(\s*[`'"]?(\w+)[`'"]?\s*\)\s*REFERENCES\s+[`'"]?(\w+)[`'"]?\s*(?:\(\s*[`'"]?(\w+)[`'"]?\s*\))?/i
+      );
+      if (alterFkMatch) {
+        const srcTable = alterFkMatch[1];
+        const fkName = alterFkMatch[2] || `fk_${srcTable}_${alterFkMatch[3]}`;
+        const srcCol = alterFkMatch[3];
+        const refTable = alterFkMatch[4];
+        const refCol = alterFkMatch[5] || 'id';
+
+        const dbObj = (alasql as any).databases[this.activeDatabase];
+        if (dbObj?.tables) {
+          const tblKey = Object.keys(dbObj.tables).find(t => t.toLowerCase() === srcTable.toLowerCase());
+          if (tblKey) {
+            const t = dbObj.tables[tblKey];
+            if (Array.isArray(t.columns)) {
+              const col = t.columns.find((c: any) => (c.columnid || c.name || '').toLowerCase() === srcCol.toLowerCase());
+              if (col) {
+                col.foreignkey = { tableid: refTable, columnid: refCol, name: fkName };
+              }
+            }
+            if (t.xcolumns) {
+              const xKey = Object.keys(t.xcolumns).find(k => k.toLowerCase() === srcCol.toLowerCase());
+              if (xKey) {
+                t.xcolumns[xKey].foreignkey = { tableid: refTable, columnid: refCol, name: fkName };
+              }
+            }
+            hasMutated = true;
+          }
+        }
+
+        const execTime = Math.round(performance.now() - startTime);
+        results.push({
+          statement: stmt,
+          columns: ['Status'],
+          rows: [{ 'Status': `Constraint FOREIGN KEY '${fkName}' formalizada com sucesso.` }],
+          affectedRows: 0,
+          executionTimeMs: execTime,
+          status: 'success',
+          timestamp,
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery: false,
+        });
+        continue;
+      }
+
+      // 2. ALTER TABLE <tbl> DROP FOREIGN KEY / DROP CONSTRAINT <name>
+      const dropFkMatch = cleanStmt.match(
+        /^ALTER\s+TABLE\s+[`'"]?(\w+)[`'"]?\s+DROP\s+(?:CONSTRAINT|FOREIGN\s+KEY)\s+[`'"]?(\w+)[`'"]?/i
+      );
+      if (dropFkMatch) {
+        const srcTable = dropFkMatch[1];
+        const targetName = dropFkMatch[2];
+        const dbObj = (alasql as any).databases[this.activeDatabase];
+        if (dbObj?.tables) {
+          const tblKey = Object.keys(dbObj.tables).find(t => t.toLowerCase() === srcTable.toLowerCase());
+          if (tblKey) {
+            const t = dbObj.tables[tblKey];
+            if (Array.isArray(t.columns)) {
+              for (const c of t.columns) {
+                if (
+                  c.foreignkey?.name?.toLowerCase() === targetName.toLowerCase() ||
+                  (c.columnid || c.name || '').toLowerCase() === targetName.toLowerCase()
+                ) {
+                  delete c.foreignkey;
+                }
+              }
+            }
+            if (t.xcolumns) {
+              for (const k of Object.keys(t.xcolumns)) {
+                const xc = t.xcolumns[k];
+                if (
+                  xc?.foreignkey?.name?.toLowerCase() === targetName.toLowerCase() ||
+                  k.toLowerCase() === targetName.toLowerCase()
+                ) {
+                  delete xc.foreignkey;
+                }
+              }
+            }
+            hasMutated = true;
+          }
+        }
+
+        const execTime = Math.round(performance.now() - startTime);
+        results.push({
+          statement: stmt,
+          columns: ['Status'],
+          rows: [{ 'Status': `Constraint '${targetName}' removida com sucesso.` }],
+          affectedRows: 0,
+          executionTimeMs: execTime,
+          status: 'success',
+          timestamp,
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery: false,
+        });
+        continue;
+      }
+
+      // 3. ALTER TABLE <tbl> ADD UNIQUE (<col>)
+      const addUniqueMatch = cleanStmt.match(
+        /^ALTER\s+TABLE\s+[`'"]?(\w+)[`'"]?\s+ADD\s+UNIQUE\s*\(\s*[`'"]?(\w+)[`'"]?\s*\)/i
+      );
+      if (addUniqueMatch) {
+        const srcTable = addUniqueMatch[1];
+        const targetCol = addUniqueMatch[2];
+        const dbObj = (alasql as any).databases[this.activeDatabase];
+        if (dbObj?.tables) {
+          const tblKey = Object.keys(dbObj.tables).find(t => t.toLowerCase() === srcTable.toLowerCase());
+          if (tblKey) {
+            const t = dbObj.tables[tblKey];
+            if (Array.isArray(t.columns)) {
+              const col = t.columns.find((c: any) => (c.columnid || c.name || '').toLowerCase() === targetCol.toLowerCase());
+              if (col) col.unique = true;
+            }
+            if (t.xcolumns) {
+              const xKey = Object.keys(t.xcolumns).find(k => k.toLowerCase() === targetCol.toLowerCase());
+              if (xKey) t.xcolumns[xKey].unique = true;
+            }
+            hasMutated = true;
+          }
+        }
+
+        const execTime = Math.round(performance.now() - startTime);
+        results.push({
+          statement: stmt,
+          columns: ['Status'],
+          rows: [{ 'Status': `Constraint UNIQUE adicionada à coluna '${targetCol}'.` }],
+          affectedRows: 0,
+          executionTimeMs: execTime,
+          status: 'success',
+          timestamp,
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery: false,
+        });
+        continue;
+      }
+
+      // 4. ALTER TABLE <tbl> DROP INDEX / DROP KEY / DROP UNIQUE <col>
+      const dropUniqueMatch = cleanStmt.match(
+        /^ALTER\s+TABLE\s+[`'"]?(\w+)[`'"]?\s+DROP\s+(?:INDEX|KEY|UNIQUE)\s+[`'"]?(\w+)[`'"]?/i
+      );
+      if (dropUniqueMatch) {
+        const srcTable = dropUniqueMatch[1];
+        const targetCol = dropUniqueMatch[2];
+        const dbObj = (alasql as any).databases[this.activeDatabase];
+        if (dbObj?.tables) {
+          const tblKey = Object.keys(dbObj.tables).find(t => t.toLowerCase() === srcTable.toLowerCase());
+          if (tblKey) {
+            const t = dbObj.tables[tblKey];
+            if (Array.isArray(t.columns)) {
+              const col = t.columns.find((c: any) => (c.columnid || c.name || '').toLowerCase() === targetCol.toLowerCase());
+              if (col) col.unique = false;
+            }
+            if (t.xcolumns) {
+              const xKey = Object.keys(t.xcolumns).find(k => k.toLowerCase() === targetCol.toLowerCase());
+              if (xKey) t.xcolumns[xKey].unique = false;
+            }
+            hasMutated = true;
+          }
+        }
+
+        const execTime = Math.round(performance.now() - startTime);
+        results.push({
+          statement: stmt,
+          columns: ['Status'],
+          rows: [{ 'Status': `Constraint UNIQUE removida da coluna '${targetCol}'.` }],
+          affectedRows: 0,
+          executionTimeMs: execTime,
+          status: 'success',
+          timestamp,
+          database: this.activeDatabase,
+          commandIndex,
+          startLine,
+          endLine,
+          isSelectQuery: false,
+        });
+        continue;
+      }
+
       // Executa consulta normal
       try {
         const processedStmt = preprocessSqlQuery(stmt);
@@ -901,6 +1091,39 @@ class DatabaseEngine {
           this.activeDatabase = newDb;
           try { alasql(`USE \`${newDb}\`;`); } catch (_) {}
           hasMutated = true;
+        }
+
+        // Se criou tabela com FOREIGN KEY, assegura catalogação no AlaSQL
+        const createTableMatch = cleanStmt.match(/^CREATE\s+(?:TEMPORARY\s+|TEMP\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"]?\w+[`'"]?)/i);
+        if (createTableMatch) {
+          const rawTbl = createTableMatch[1].replace(/[`'"]/g, '');
+          const dbObj = (alasql as any).databases[this.activeDatabase];
+          if (dbObj?.tables) {
+            const tblKey = Object.keys(dbObj.tables).find(t => t.toLowerCase() === rawTbl.toLowerCase());
+            if (tblKey) {
+              const t = dbObj.tables[tblKey];
+              const fkMatches = Array.from(cleanStmt.matchAll(/(?:CONSTRAINT\s+[`'"]?(\w+)[`'"]?\s+)?FOREIGN\s+KEY\s*\(\s*[`'"]?(\w+)[`'"]?\s*\)\s*REFERENCES\s+[`'"]?(\w+)[`'"]?\s*(?:\(\s*[`'"]?(\w+)[`'"]?\s*\))?/gi));
+              for (const fkm of fkMatches) {
+                const fkName = fkm[1] || `fk_${rawTbl}_${fkm[2]}`;
+                const srcCol = fkm[2];
+                const refTable = fkm[3];
+                const refCol = fkm[4] || 'id';
+                if (Array.isArray(t.columns)) {
+                  const col = t.columns.find((c: any) => (c.columnid || c.name || '').toLowerCase() === srcCol.toLowerCase());
+                  if (col) {
+                    col.foreignkey = { tableid: refTable, columnid: refCol, name: fkName };
+                  }
+                }
+                if (t.xcolumns) {
+                  const xKey = Object.keys(t.xcolumns).find(k => k.toLowerCase() === srcCol.toLowerCase());
+                  if (xKey) {
+                    t.xcolumns[xKey].foreignkey = { tableid: refTable, columnid: refCol, name: fkName };
+                  }
+                }
+              }
+              hasMutated = true;
+            }
+          }
         }
 
         let columns: string[] = [];

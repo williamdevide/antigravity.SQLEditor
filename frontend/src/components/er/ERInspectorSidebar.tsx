@@ -35,6 +35,19 @@ interface ERInspectorSidebarProps {
     targetTable: string,
     targetColumn: string
   ) => void;
+  onDeleteForeignKey?: (
+    sourceTable: string,
+    sourceColumn: string,
+    targetTable?: string,
+    targetColumn?: string
+  ) => void;
+  onModifyRelationship?: (
+    sourceTable: string,
+    sourceColumn: string,
+    targetTable: string,
+    targetColumn: string,
+    newCardinality: '1:1' | '1:N'
+  ) => void;
   onAddSubjectArea: (title: string, color: string) => void;
   onUpdateSubjectArea: (id: string, patch: Partial<ERSubjectArea>) => void;
   onDeleteSubjectArea: (id: string) => void;
@@ -73,6 +86,8 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
   selectedColumn,
   onSelectColumn,
   onCreateForeignKey,
+  onDeleteForeignKey,
+  onModifyRelationship,
   onAddSubjectArea,
   onUpdateSubjectArea,
   onDeleteSubjectArea,
@@ -80,6 +95,9 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
   onDeleteStickyNote,
   onApplyLintFixSql,
 }) => {
+  // Estado para confirmação de exclusão de relacionamento
+  const [confirmDeleteRelId, setConfirmDeleteRelId] = useState<string | null>(null);
+
   // Estados locais para formulários rápidos de modelagem visual
   const [editingCol, setEditingCol] = useState<{
     tableName: string;
@@ -894,10 +912,10 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
                 relationships.map((rel) => (
                   <div
                     key={rel.id}
-                    className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-1.5"
+                    className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-2"
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[11px] font-mono font-bold text-[var(--text-primary)] truncate">
+                      <span className="text-[11px] font-mono font-bold text-[var(--text-primary)] truncate" title={`${rel.sourceTable}.${rel.sourceColumn}`}>
                         {rel.sourceTable}.{rel.sourceColumn}
                       </span>
                       <span
@@ -910,16 +928,21 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
                         {rel.isExplicit ? 'Explícita' : 'Inferida'}
                       </span>
                     </div>
-                    <div className="text-[10px] font-mono text-[var(--text-secondary)] flex items-center gap-1">
-                      <span>➔</span>
-                      <span>
-                        {rel.targetTable}.{rel.targetColumn} ({rel.cardinality})
-                      </span>
-                      {rel.isSelfJoin && (
-                        <span className="px-1 rounded bg-[#29B6F6]/15 text-[#29B6F6] text-[9px]">
-                          Auto-Relação
+                    <div className="text-[10px] font-mono text-[var(--text-secondary)] flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 truncate" title={`${rel.targetTable}.${rel.targetColumn}`}>
+                        <span>➔</span>
+                        <span className="truncate">
+                          {rel.targetTable}.{rel.targetColumn}
                         </span>
-                      )}
+                        {rel.isSelfJoin && (
+                          <span className="px-1 rounded bg-[#29B6F6]/15 text-[#29B6F6] text-[9px] shrink-0">
+                            Auto
+                          </span>
+                        )}
+                      </div>
+                      <span className="px-1.5 py-0.2 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[9px] font-bold text-[var(--text-primary)] shrink-0">
+                        {rel.cardinality}
+                      </span>
                     </div>
                     {!rel.isExplicit && (
                       <button
@@ -932,11 +955,73 @@ export const ERInspectorSidebar: React.FC<ERInspectorSidebarProps> = ({
                             rel.targetColumn
                           )
                         }
-                        className="w-full mt-1 py-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[10px] font-semibold text-[var(--accent-yellow)] cursor-pointer"
+                        className="w-full py-1 rounded bg-[#FF6B00]/15 hover:bg-[#FF6B00]/25 border border-[#FF6B00]/40 text-[10px] font-semibold text-[#FF8533] cursor-pointer flex items-center justify-center gap-1 transition-colors"
                       >
-                        + Formalizar FOREIGN KEY no SQL
+                        <span>✓</span> Formalizar FOREIGN KEY no SQL
                       </button>
                     )}
+
+                    {/* Controles de Ação: Editar Cardinalidade (1:1 / 1:N) & Excluir Relacionamento */}
+                    <div className="pt-1.5 border-t border-[var(--border-color)]/60 flex items-center justify-between gap-1.5 text-[10px]">
+                      {onModifyRelationship && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onModifyRelationship(
+                              rel.sourceTable,
+                              rel.sourceColumn,
+                              rel.targetTable,
+                              rel.targetColumn,
+                              rel.cardinality === '1:1' ? '1:N' : '1:1'
+                            )
+                          }
+                          title={`Alterar cardinalidade para ${rel.cardinality === '1:1' ? '1:N (Padrão)' : '1:1 (Exige UNIQUE na FK)'}`}
+                          className="px-2 py-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>⇄</span>
+                          <span>{rel.cardinality === '1:1' ? 'Tornar 1:N' : 'Tornar 1:1'}</span>
+                        </button>
+                      )}
+
+                      {onDeleteForeignKey && (
+                        confirmDeleteRelId === rel.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onDeleteForeignKey(
+                                  rel.sourceTable,
+                                  rel.sourceColumn,
+                                  rel.targetTable,
+                                  rel.targetColumn
+                                );
+                                setConfirmDeleteRelId(null);
+                              }}
+                              className="px-2 py-1 rounded bg-[var(--status-error)] hover:bg-[var(--status-error)]/80 text-white font-bold text-[9px] cursor-pointer transition-colors"
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteRelId(null)}
+                              className="px-1.5 py-1 rounded bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] text-[9px] cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteRelId(rel.id)}
+                            title="Excluir este relacionamento do esquema"
+                            className="px-2 py-1 rounded bg-transparent hover:bg-[var(--status-error)]/10 text-[var(--text-muted)] hover:text-[var(--status-error)] border border-transparent hover:border-[var(--status-error)]/30 font-medium flex items-center gap-1 cursor-pointer transition-colors ml-auto"
+                          >
+                            <span>🗑️</span>
+                            <span>Excluir</span>
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 ))
               )}

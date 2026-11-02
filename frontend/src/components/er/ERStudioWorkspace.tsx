@@ -26,6 +26,8 @@ import { dbStorage } from '../../services/storage';
 import {
   buildAddColumnPatch,
   buildAddForeignKeyPatch,
+  buildDropForeignKeyPatch,
+  buildModifyRelationshipCardinalityPatch,
   buildAppendTablePatch,
   buildModifyColumnPatch,
   buildDropColumnPatch,
@@ -642,7 +644,51 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
       );
       executeVisualDdlMutation(
         patch,
-        `Relacionamento ${sourceTable}.${sourceColumn} ➔ ${targetTable}.${targetColumn} criado!`
+        `Relacionamento ${sourceTable}.${sourceColumn} ➔ ${targetTable}.${targetColumn} formalizado!`
+      );
+    },
+    [liveScriptSql, executeVisualDdlMutation]
+  );
+
+  const handleVisualDeleteForeignKey = useCallback(
+    (
+      sourceTable: string,
+      sourceColumn: string,
+      targetTable?: string,
+      targetColumn?: string
+    ) => {
+      const patch = buildDropForeignKeyPatch(
+        liveScriptSql,
+        sourceTable,
+        sourceColumn
+      );
+      executeVisualDdlMutation(
+        patch,
+        `Relacionamento ${sourceTable}.${sourceColumn} ➔ ${targetTable || ''}.${targetColumn || ''} excluído!`
+      );
+    },
+    [liveScriptSql, executeVisualDdlMutation]
+  );
+
+  const handleVisualModifyRelationship = useCallback(
+    (
+      sourceTable: string,
+      sourceColumn: string,
+      targetTable: string,
+      targetColumn: string,
+      newCardinality: '1:1' | '1:N'
+    ) => {
+      const patch = buildModifyRelationshipCardinalityPatch(
+        liveScriptSql,
+        sourceTable,
+        sourceColumn,
+        targetTable,
+        targetColumn,
+        newCardinality
+      );
+      executeVisualDdlMutation(
+        patch,
+        `Cardinalidade alterada para ${newCardinality} (${sourceTable}.${sourceColumn} ➔ ${targetTable}.${targetColumn})!`
       );
     },
     [liveScriptSql, executeVisualDdlMutation]
@@ -1114,6 +1160,8 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
             onModifyColumn={handleVisualModifyColumn}
             onDeleteColumn={handleVisualDeleteColumn}
             onCreateForeignKey={handleVisualCreateForeignKey}
+            onDeleteForeignKey={handleVisualDeleteForeignKey}
+            onModifyRelationship={handleVisualModifyRelationship}
             onAddSubjectArea={(title, color) => {
               const next: ERSubjectArea[] = [
                 ...subjectAreas,
