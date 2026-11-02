@@ -757,9 +757,9 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
       {!isPresentationMode && (
         <div
           data-print-hide
-          className={`shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-between ${
+          className={`shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-between relative z-30 ${
             isSplitPreview
-              ? 'flex-nowrap overflow-x-auto no-scrollbar px-2 py-1 gap-1.5'
+              ? 'flex-nowrap px-2 py-1 gap-1 overflow-visible'
               : 'flex-wrap px-4 py-2.5 gap-2'
           }`}
         >
@@ -782,28 +782,28 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 <button
                   type="button"
                   onClick={() => setSourceMode('active-db')}
-                  title="Renderiza o esquema real instanciado no motor AlaSQL (dados reais, contagens e Live Data Peek)"
-                  className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                  title="Banco Ativo (AlaSQL) - Esquema e dados reais instanciados"
+                  className={`${isSplitPreview ? 'p-1' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
                     sourceMode === 'active-db'
                       ? 'bg-[#FF6B00] text-white shadow-sm'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[11px]' : 'text-[13px]'}`}>database</span>
-                  <span>Banco Ativo</span>
+                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[13px]' : 'text-[13px]'}`}>database</span>
+                  {!isSplitPreview && <span>Banco Ativo</span>}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSourceMode('live-script')}
-                  title="Renderiza em tempo real enquanto você digita no editor (estilo LiveSchema, sem precisar executar)"
-                  className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                  title="Script Ao Vivo - Parser reativo em tempo de digitação"
+                  className={`${isSplitPreview ? 'p-1' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
                     sourceMode === 'live-script'
                       ? 'bg-[#FF6B00] text-white shadow-sm'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[11px]' : 'text-[13px]'}`}>bolt</span>
-                  <span>Script Ao Vivo</span>
+                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[13px]' : 'text-[13px]'}`}>bolt</span>
+                  {!isSplitPreview && <span>Script Ao Vivo</span>}
                 </button>
               </div>
 
@@ -839,28 +839,36 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                   )}
                 </select>
                 <span
-                  className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                  className={`${
+                    isSplitPreview
+                      ? 'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-mono'
+                      : 'hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium'
+                  } bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0`}
                   title="Motor AlaSQL: esquema e dados reais já executados no navegador"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Motor AlaSQL (Executado)
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>AlaSQL</span>
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <span
-                  className="px-2 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--accent-yellow)] flex items-center gap-1"
+                  className={`px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] ${isSplitPreview ? 'text-[9.5px] max-w-[85px] truncate' : 'text-[11px]'} font-mono text-[var(--accent-yellow)] flex items-center gap-1`}
                   title="Aba do editor sendo analisada em tempo real"
                 >
-                  <span className="material-symbols-outlined text-[12px]">edit_note</span>
+                  <span className="material-symbols-outlined text-[11px]">edit_note</span>
                   {activeTabName}
                 </span>
                 <span
-                  className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                  className={`${
+                    isSplitPreview
+                      ? 'inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-mono'
+                      : 'hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium'
+                  } bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0`}
                   title="Parser Reativo: analisa o código SQL em tempo de digitação (sem precisar rodar)"
                 >
-                  <span className="material-symbols-outlined text-[11px]">bolt</span>
-                  Parser Reativo (Digitação)
+                  <span className="material-symbols-outlined text-[9px]">bolt</span>
+                  <span>Reativo</span>
                 </span>
               </div>
             )}
@@ -874,7 +882,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
 
           {/* Direita: Saúde/Linter, Compartilhar #z., Salvar Modelo e 5 Exportadores */}
           <div className={`flex items-center ${isSplitPreview ? 'flex-nowrap gap-1 shrink-0' : 'gap-1.5'}`}>
-            {/* Badge de Saúde do Esquema */}
+            {/* Badge de Saúde do Esquema - Muito menor em split */}
             <button
               type="button"
               onClick={() => {
@@ -885,8 +893,10 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 setInspectorOpen(true);
                 setInspectorTab('linter');
               }}
-              title="Ver auditoria completa do Linter Pedagógico (PK/FK e 1FN–3FN)"
-              className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-lg border font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
+              title="Auditoria do Linter Pedagógico (PK/FK e 1FN–3FN)"
+              className={`${
+                isSplitPreview ? 'px-1 py-0.5 text-[8.5px]' : 'px-2.5 py-1 text-[11px]'
+              } rounded border font-semibold flex items-center gap-0.5 shrink-0 cursor-pointer transition-colors ${
                 lintIssues.length === 0
                   ? 'bg-[var(--status-success)]/10 border-[var(--status-success)]/40 text-[var(--status-success)]'
                   : errorCount > 0
@@ -894,11 +904,13 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                   : 'bg-[#FF6B00]/10 border-[#FF6B00]/40 text-[#FF6B00]'
               }`}
             >
-              <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[12px]' : 'text-[14px]'}`}>
+              <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[10px]' : 'text-[14px]'}`}>
                 {lintIssues.length === 0 ? 'verified' : 'warning'}
               </span>
-              <span className={isSplitPreview ? 'hidden xl:inline' : 'hidden sm:inline'}>
-                {lintIssues.length === 0 ? 'Íntegro' : `${lintIssues.length} alerta(s)`}
+              <span>
+                {lintIssues.length === 0
+                  ? (isSplitPreview ? 'OK' : 'Íntegro')
+                  : (isSplitPreview ? `${lintIssues.length}!` : `${lintIssues.length} alerta(s)`)}
               </span>
             </button>
 
@@ -950,7 +962,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
               </button>
 
               {exportMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-60 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-2xl py-1.5 z-50 text-xs">
+                <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-[0_12px_36px_rgba(0,0,0,0.5)] py-1.5 z-[9999] text-xs animate-in fade-in duration-100">
                   <button
                     type="button"
                     onClick={async () => {

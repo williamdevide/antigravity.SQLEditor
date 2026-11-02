@@ -2597,3 +2597,39 @@ no sqleditor na repartição de janela sql -> der diminua os botões de alerta, 
 - **11. Validação & Controle de Qualidade:**
   - `npm run lint` (`oxlint`): 0 erros.
   - `npm run build` (`tsc -b && vite build`): compilação de produção realizada com sucesso em 1.28s.
+
+
+## 📌 Prompt 87 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 08:50  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal a versão no site não atualizou para 3.2.5
+o clicar para ampliar a logo na pagina principal ainda não esta igual ao da pagina sobre
+imagens não apareceram
+no sql editor a caixa no navbar com os 3 alternadores (editor/sql-der/der) está grande, diminua um pouco pois sql-der esta ficando em 2 linhas (diminua tudo na navbar em 10%)
+no modo sql-der o botão de alternancia (banco ativo/script ao vivo) deixe só os icones. os shapes de motor alasql executado e integro devem ficar muito menores, e o botão exportar esta abrindo algum menu, mas ficou escondido pela barra de rolagem
+```
+
+### 🎯 Ações Executadas:
+- **1. Atualização Oficial da Versão para v3.2.5 em Todo o Sistema:**
+  - Atualizado `APP_VERSION = '3.2.5'` no arquivo central [frontend/src/config/version.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/config/version.ts).
+  - Sincronizado `version: 3.2.5` no [frontend/package.json](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/package.json).
+  - Incorporada a entrada oficial da versão `v3.2.5` no histórico `CHANGELOG_HISTORY` do [LandingPageView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/LandingPageView.tsx).
+- **2. Unificação Total do Modal Ampliado do Logo Milkfed:**
+  - O modal de zoom em `LandingPageView.tsx` foi reescrito para ficar 100% idêntico ao da página Sobre (`AboutView.tsx`): remoção da caixa cinza restritiva, exibição fluida da imagem oficial até `max-h-[55vh]` com drop-shadow âmbar (`drop-shadow-[0_10px_35px_rgba(255,107,0,0.45)]`), botão de fechar flutuante, textos institucionais e suporte à tecla <kbd>ESC</kbd>.
+- **3. Correção de Imagens e Criação de Logotipos Reais:**
+  - Criada a pasta [frontend/public/logos/](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/public/logos/) com arquivos de logotipos oficiais vetoriais: `react.svg`, `typescript.svg`, `mysql.svg`, `indexeddb.svg`, `vscode.svg`, `tailwind.svg`, `antigravity.svg` e `vite.svg`.
+  - Atualizado o [AboutView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/AboutView.tsx) para carregar imagens reais (`<img src="/logos/..." />`) em alta definição, com iluminação neon e efeitos de profundidade.
+  - Reescritos os 10 arquivos SVG de background em [frontend/public/backgrounds/](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/public/backgrounds/) com alto contraste, traços geométricos mais espessos (2.5px a 4px) e opacidade nítida.
+  - Aplicados backgrounds em camadas completas com `bg-cover` e adicionada uma seção de vitrine visual dos 10 temas em `LandingPageView.tsx`.
+- **4. Compactação da Navbar do SQL Editor em 10% & Prevenção de Quebra:**
+  - Reduzida a altura do cabeçalho em [Header.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/Header.tsx) de `52px` para `46px`.
+  - Caixa dos 3 alternadores (Editor / SQL ↔ DER / DER) ajustada para `text-[10px]`, `px-1.5 py-0.5`, `whitespace-nowrap`, `flex-nowrap` e `shrink-0`, impedindo categoricamente que "SQL ↔ DER" quebre em 2 linhas.
+  - Dimensionamento compacto reduzido em ~10% para botões de ação (Executar, Nova Aba, Limpar, Fechar Todas, Resetar, Tema e Painéis).
+- **5. Otimizações Cirúrgicas no Split-View (Modo SQL ↔ DER):**
+  - **Botão de Alternância (Banco Ativo / Script Ao Vivo):** Reduzido estritamente para exibir apenas os ícones (`database` e `bolt`) com tooltips explicativos completos.
+  - **Shapes Ultra-Compactos:** O shape do Motor AlaSQL Executado foi reduzido para uma pill discreta com ponto pulsante de 1px e texto `AlaSQL` (`text-[8px]`); o shape de Íntegro/Alertas foi condensado para `px-1 py-0.5 text-[8.5px]`.
+  - **Menu Exportar sem Ocultamento:** Removido o `overflow-x-auto` da barra de ferramentas e aplicado `relative z-30 overflow-visible`, garantindo que o dropdown de exportação (`z-[9999]`) flutue livremente sobre o canvas e o editor sem ser cortado por barra de rolagem.
+- **6. Validação e Deploy:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção finalizada com sucesso em 1.30s.

@@ -1,52 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
   <defs>
-    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.35"/>
-      <stop offset="50%" stop-color="#FFE600" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0.25"/>
-    </linearGradient>
     <radialGradient id="meshCenter" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.18"/>
-      <stop offset="60%" stop-color="#0F1117" stop-opacity="0.0"/>
+      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.35"/>
+      <stop offset="40%" stop-color="#FF8533" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="laserGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B00"/>
+      <stop offset="50%" stop-color="#FFE600"/>
+      <stop offset="100%" stop-color="#00E5FF"/>
+    </linearGradient>
   </defs>
-  <rect width="1920" height="1080" fill="transparent"/>
-  <circle cx="960" cy="540" r="700" fill="url(#meshCenter)"/>
-  
-  <!-- Isometric Database Cylinders & Connections -->
-  <g stroke="url(#dbGrad)" stroke-width="1.2" fill="none" opacity="0.6">
-    <!-- Center Node Cluster -->
-    <ellipse cx="960" cy="380" rx="140" ry="45"/>
-    <path d="M820,380 v90 a140,45 0 0,0 280,0 v-90"/>
-    <path d="M820,425 a140,45 0 0,0 280,0"/>
-    <path d="M820,470 a140,45 0 0,0 280,0"/>
-
-    <!-- Left Node -->
-    <ellipse cx="480" cy="580" rx="100" ry="32"/>
-    <path d="M380,580 v70 a100,32 0 0,0 200,0 v-70"/>
-    <path d="M380,615 a100,32 0 0,0 200,0"/>
-
-    <!-- Right Node -->
-    <ellipse cx="1440" cy="580" rx="100" ry="32"/>
-    <path d="M1340,580 v70 a100,32 0 0,0 200,0 v-70"/>
-    <path d="M1340,615 a100,32 0 0,0 200,0"/>
-
-    <!-- Bottom Center Node -->
-    <ellipse cx="960" cy="780" rx="110" ry="36"/>
-    <path d="M850,780 v70 a110,36 0 0,0 220,0 v-70"/>
-
-    <!-- Interconnecting Laser Paths -->
-    <path d="M960,470 L480,580 M960,470 L1440,580 M480,650 L960,780 M1440,650 L960,780" stroke-dasharray="6,6" stroke-width="1.5" stroke="#FFE600" opacity="0.5"/>
+  <circle cx="960" cy="540" r="750" fill="url(#meshCenter)"/>
+  <!-- Central Cluster -->
+  <g stroke="url(#laserGrad)" stroke-width="2.5" fill="none">
+    <ellipse cx="960" cy="360" rx="180" ry="60" stroke="#FF6B00" stroke-width="3"/>
+    <path d="M780,360 v120 a180,60 0 0,0 360,0 v-120" stroke="#FF6B00" stroke-width="3"/>
+    <path d="M780,420 a180,60 0 0,0 360,0" stroke="#FFE600" stroke-width="2"/>
+    <path d="M780,480 a180,60 0 0,0 360,0" stroke="#00E5FF" stroke-width="2"/>
+    <!-- Left Cluster -->
+    <ellipse cx="440" cy="620" rx="140" ry="45" stroke="#00E5FF" stroke-width="2.5"/>
+    <path d="M300,620 v90 a140,45 0 0,0 280,0 v-90" stroke="#00E5FF" stroke-width="2.5"/>
+    <path d="M300,665 a140,45 0 0,0 280,0" stroke="#00E5FF" stroke-width="2"/>
+    <!-- Right Cluster -->
+    <ellipse cx="1480" cy="620" rx="140" ry="45" stroke="#FFE600" stroke-width="2.5"/>
+    <path d="M1340,620 v90 a140,45 0 0,0 280,0 v-90" stroke="#FFE600" stroke-width="2.5"/>
+    <path d="M1340,665 a140,45 0 0,0 280,0" stroke="#FFE600" stroke-width="2"/>
+    <!-- Connections -->
+    <path d="M960,480 L440,620" stroke="#FF6B00" stroke-width="3" stroke-dasharray="8,6"/>
+    <path d="M960,480 L1480,620" stroke="#FFE600" stroke-width="3" stroke-dasharray="8,6"/>
+    <path d="M440,710 L960,860 L1480,710" stroke="#00E5FF" stroke-width="2.5"/>
   </g>
-
-  <!-- Glowing Particles -->
-  <g fill="#00E5FF" opacity="0.5">
-    <circle cx="960" cy="470" r="4"/>
-    <circle cx="480" cy="580" r="3.5"/>
-    <circle cx="1440" cy="580" r="3.5"/>
-    <circle cx="960" cy="780" r="4"/>
-    <circle cx="720" cy="525" r="2.5" fill="#FF6B00"/>
-    <circle cx="1200" cy="525" r="2.5" fill="#FF6B00"/>
+  <!-- Bright Nodes -->
+  <g fill="#FFF">
+    <circle cx="960" cy="480" r="7" fill="#FF6B00"/>
+    <circle cx="440" cy="620" r="6" fill="#00E5FF"/>
+    <circle cx="1480" cy="620" r="6" fill="#FFE600"/>
+    <circle cx="960" cy="860" r="6" fill="#00E676"/>
   </g>
 </svg>
-

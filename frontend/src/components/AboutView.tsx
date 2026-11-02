@@ -270,20 +270,9 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo Real React + TypeScript Badge */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#20232A] to-[#282C34] border-2 border-[#61DAFB]/60 shadow-[0_0_24px_rgba(97,218,251,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      {/* React Atom SVG */}
-                      <svg className="w-12 h-12" viewBox="-11.5 -10.23174 23 20.46348">
-                        <circle cx="0" cy="0" r="2.05" fill="#61DAFB"/>
-                        <g stroke="#61DAFB" strokeWidth="1" fill="none">
-                          <ellipse rx="11" ry="4.2"/>
-                          <ellipse rx="11" ry="4.2" transform="rotate(60)"/>
-                          <ellipse rx="11" ry="4.2" transform="rotate(120)"/>
-                        </g>
-                      </svg>
-                      {/* TypeScript Mini Badge */}
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#3178C6] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
-                        TS
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#20232A] border-2 border-[#61DAFB]/70 shadow-[0_0_25px_rgba(97,218,251,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/react.svg" alt="React 18" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(97,218,251,0.6)]" />
+                      <img src="/logos/typescript.svg" alt="TypeScript" className="w-6 h-6 absolute -bottom-1 -right-1 rounded-md shadow-md border border-white/20" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Frontend Core</h4>
@@ -328,15 +317,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo Autêntico MySQL Dolphin */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#005E86]/30 to-[#F29111]/30 border-2 border-[#F29111]/70 shadow-[0_0_24px_rgba(242,145,17,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      <svg className="w-12 h-12" viewBox="0 0 128 128" fill="none">
-                        <circle cx="64" cy="64" r="56" fill="#005E86" opacity="0.15"/>
-                        <path d="M72 32C56 32 46 44 46 58C46 72 58 84 76 84C86 84 94 78 98 72L90 66C86 70 82 74 76 74C64 74 56 66 56 58C56 50 64 42 72 42C80 42 86 46 90 50L98 44C92 36 84 32 72 32Z" fill="#F29111"/>
-                        <path d="M40 78C32 72 26 62 26 50C26 38 34 26 48 20L44 12C26 20 16 34 16 50C16 66 24 80 34 88L40 78Z" fill="#00758F"/>
-                      </svg>
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#F29111] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
-                        SQL
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#005E86]/40 border-2 border-[#F29111]/80 shadow-[0_0_25px_rgba(242,145,17,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/mysql.svg" alt="MySQL & AlaSQL" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(242,145,17,0.6)]" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Motor SQL Client-Side</h4>
@@ -381,16 +363,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo IndexedDB / Storage Autêntico */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#FF6B00]/25 to-[#E65100]/30 border-2 border-[#FF6B00]/70 shadow-[0_0_24px_rgba(255,107,0,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none">
-                        <ellipse cx="12" cy="6" rx="9" ry="3" fill="#FF8533"/>
-                        <path d="M3 6V10C3 11.66 7.03 13 12 13C16.97 13 21 11.66 21 10V6" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round"/>
-                        <path d="M3 10V14C3 15.66 7.03 17 12 17C16.97 17 21 15.66 21 14V10" stroke="#FF8533" strokeWidth="2" strokeLinecap="round"/>
-                        <path d="M3 14V18C3 19.66 7.03 21 12 21C16.97 21 21 19.66 21 18V14" stroke="#FFA726" strokeWidth="2" strokeLinecap="round"/>
-                      </svg>
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#00E676] border border-white/30 text-black font-mono font-bold text-[9px] shadow-md">
-                        Dexie
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#1C1E24] border-2 border-[#FF6B00]/80 shadow-[0_0_25px_rgba(255,107,0,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/indexeddb.svg" alt="IndexedDB & Dexie" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(255,107,0,0.6)]" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Persistência Offline</h4>
@@ -435,14 +409,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo Autêntico VS Code Origami */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#1E1E1E] to-[#252526] border-2 border-[#007ACC]/70 shadow-[0_0_24px_rgba(0,122,204,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      <svg className="w-12 h-12" viewBox="0 0 100 100" fill="none">
-                        <path d="M72.2 97.4L96.8 84.7C98.8 83.7 100 81.7 100 79.5V20.5C100 18.3 98.8 16.3 96.8 15.3L72.2 2.6C70.6 1.8 68.7 2.1 67.4 3.3L31.2 37.8L15.3 25.8C14.1 24.9 12.4 24.9 11.2 25.9L2 33.3C0.8 34.3 0 35.8 0 37.4V62.6C0 64.2 0.8 65.7 2 66.7L11.2 74.1C12.4 75.1 14.1 75.1 15.3 74.2L31.2 62.2L67.4 96.7C68.7 97.9 70.6 98.2 72.2 97.4Z" fill="#007ACC"/>
-                        <path d="M67.4 3.3C68.7 2.1 70.6 1.8 72.2 2.6L96.8 15.3C98.8 16.3 100 18.3 100 20.5V79.5C100 81.7 98.8 83.7 96.8 84.7L72.2 97.4C70.6 98.2 68.7 97.9 67.4 96.7L31.2 62.2L67.4 3.3Z" fill="#1F9CF0"/>
-                      </svg>
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#007ACC] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
-                        Monaco
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#1E1E1E] border-2 border-[#007ACC]/80 shadow-[0_0_25px_rgba(0,122,204,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/vscode.svg" alt="Monaco Editor & VS Code" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(0,122,204,0.6)]" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Editor Profissional</h4>
@@ -487,13 +455,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo Autêntico Tailwind CSS */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#0F172A] to-[#1E293B] border-2 border-[#38BDF8]/70 shadow-[0_0_24px_rgba(56,189,248,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      <svg className="w-12 h-12 fill-[#38BDF8]" viewBox="0 0 24 24">
-                        <path d="M12.001,4.8c-3.2,0-5.2,1.6-6,4.8c1.2-1.6,2.6-2.2,4.2-1.8c0.913,0.228,1.565,0.89,2.288,1.624 C13.666,10.618,15.027,12,18.001,12c3.2,0,5.2-1.6,6-4.8c-1.2,1.6-2.6,2.2-4.2,1.8c-0.913-0.228-1.565-0.89-2.288-1.624 C16.337,6.182,14.976,4.8,12.001,4.8z M6.001,12c-3.2,0-5.2,1.6-6,4.8c1.2-1.6,2.6-2.2,4.2-1.8c0.913,0.228,1.565,0.89,2.288,1.624 c1.177,1.194,2.538,2.576,5.512,2.576c3.2,0,5.2-1.6,6-4.8c-1.2,1.6-2.6,2.2-4.2,1.8c-0.913-0.228-1.565-0.89-2.288-1.624 C10.337,13.382,8.976,12,6.001,12z"/>
-                      </svg>
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#38BDF8] border border-white/30 text-slate-900 font-mono font-bold text-[9px] shadow-md">
-                        Stitch
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#0F172A] border-2 border-[#38BDF8]/80 shadow-[0_0_25px_rgba(56,189,248,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/tailwind.svg" alt="Tailwind CSS & Google Stitch" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(56,189,248,0.6)]" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Design System</h4>
@@ -538,23 +501,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
                   </div>
                   <div className="flex flex-col items-center gap-3 my-auto">
                     {/* Logotipo Autêntico Google Antigravity 4 Cores */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#1E293B] via-[#0F172A] to-[#1E1E38] border-2 border-indigo-400/70 shadow-[0_0_24px_rgba(99,102,241,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
-                      <svg className="w-12 h-12" viewBox="0 0 48 48" fill="none">
-                        <path d="M24 4L29 17L42 22L29 27L24 40L19 27L6 22L19 17L24 4Z" fill="url(#google-grad)"/>
-                        <circle cx="38" cy="10" r="4" fill="#34A853"/>
-                        <circle cx="10" cy="38" r="3" fill="#FBBC05"/>
-                        <defs>
-                          <linearGradient id="google-grad" x1="6" y1="4" x2="42" y2="40" gradientUnits="userSpaceOnUse">
-                            <stop stopColor="#4285F4"/>
-                            <stop offset="0.33" stopColor="#EA4335"/>
-                            <stop offset="0.66" stopColor="#FBBC05"/>
-                            <stop offset="1" stopColor="#34A853"/>
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-indigo-600 border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
-                        Antigravity
-                      </div>
+                    <div className="w-20 h-20 rounded-2xl bg-[#0B0F19] border-2 border-indigo-500/80 shadow-[0_0_25px_rgba(99,102,241,0.5)] flex items-center justify-center relative group-hover:scale-110 transition-transform p-2">
+                      <img src="/logos/antigravity.svg" alt="Google Antigravity & DeepMind" className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(99,102,241,0.6)]" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">IA &amp; Engenharia</h4>

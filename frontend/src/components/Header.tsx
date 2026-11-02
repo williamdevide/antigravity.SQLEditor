@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-[52px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-3 sm:px-4 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
+    <header className="h-[46px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-2.5 sm:px-3 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
       {/* Brand & Main Hamburger Menu */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Menu Hambúrguer ao lado esquerdo do logo */}
@@ -130,21 +130,21 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => onViewChange('landing')}
           title="Ir para a Página Inicial (Landing Page)"
         >
-          <span className="material-symbols-outlined text-[var(--accent-yellow)] text-[22px] drop-shadow-[0_0_8px_var(--glow-yellow)] group-hover:scale-110 transition-transform">
+          <span className="material-symbols-outlined text-[var(--accent-yellow)] text-[19px] drop-shadow-[0_0_8px_var(--glow-yellow)] group-hover:scale-110 transition-transform">
             bolt
           </span>
-          <span className="text-[16px] text-[var(--text-primary)] tracking-tight font-bold">
+          <span className="text-[14.5px] text-[var(--text-primary)] tracking-tight font-bold">
             SQLEditor
           </span>
         </div>
 
         {/* Versão */}
-        <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[10px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
+        <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] text-[9px] font-mono font-semibold border border-[var(--accent-yellow)]/30 shadow-[0_0_8px_var(--glow-yellow)]">
           v{APP_VERSION}
         </span>
 
         {/* Indicador de Banco Ativo */}
-        <div className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--status-success)] shadow-sm">
+        <div className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[10px] font-mono text-[var(--status-success)] shadow-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shadow-[0_0_6px_var(--glow-success)]"></span>
           <span className="text-[var(--text-muted)]">db:</span>
           <span className="font-semibold text-[var(--status-success)] truncate max-w-[120px]">{activeDatabase}</span>
@@ -152,48 +152,48 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-2">
-        {/* Alternador de Layout do Workspace [Editor | SQL ↔ DER | DER] */}
+      <div className="flex items-center gap-1.5">
+        {/* Alternador de Layout do Workspace [Editor | SQL ↔ DER | DER] - Compacto 10% */}
         {activeView === 'workspace' && onWorkspaceLayoutModeChange && (
-          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs">
+          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] text-[10px] whitespace-nowrap flex-nowrap shrink-0 shadow-inner">
             <button
               type="button"
               onClick={() => onWorkspaceLayoutModeChange('editor')}
-              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                 workspaceLayoutMode === 'editor'
                   ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] font-bold shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
               title="Exibir apenas o Editor de Scripts SQL"
             >
-              <span className="material-symbols-outlined text-[14px]">code</span>
-              <span className="hidden xl:inline">Editor</span>
+              <span className="material-symbols-outlined text-[13px]">code</span>
+              <span className="hidden xl:inline text-[9.5px]">Editor</span>
             </button>
             <button
               type="button"
               onClick={() => onWorkspaceLayoutModeChange('split')}
-              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                 workspaceLayoutMode === 'split'
                   ? 'bg-[#FF6B00] text-white font-bold shadow-[0_0_8px_rgba(255,107,0,0.35)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
               title="Split-View Reativo: Editor SQL ↔ Estúdio DER lado a lado"
             >
-              <span className="material-symbols-outlined text-[14px]">vertical_split</span>
-              <span className="font-semibold">SQL ↔ DER</span>
+              <span className="material-symbols-outlined text-[13px]">vertical_split</span>
+              <span className="font-semibold text-[9.5px] whitespace-nowrap">SQL ↔ DER</span>
             </button>
             <button
               type="button"
               onClick={() => onWorkspaceLayoutModeChange('der')}
-              className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                 workspaceLayoutMode === 'der'
                   ? 'bg-[var(--bg-surface)] text-[#29B6F6] font-bold shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
               title="Exibir DER em destaque no Workspace"
             >
-              <span className="material-symbols-outlined text-[14px]">schema</span>
-              <span className="hidden xl:inline">DER</span>
+              <span className="material-symbols-outlined text-[13px]">schema</span>
+              <span className="hidden xl:inline text-[9.5px]">DER</span>
             </button>
           </div>
         )}
@@ -207,7 +207,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onRunQuery}
                 disabled={isExecuting}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-xs font-semibold rounded-l transition-all cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-[11px] font-semibold rounded-l transition-all cursor-pointer disabled:opacity-50"
                 title="Executar Script SQL Completo (Ctrl+Enter)"
                 type="button"
               >
@@ -227,7 +227,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => setRunDropdownOpen(prev => !prev)}
                 disabled={isExecuting}
-                className={`px-1 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white rounded-r transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center ${
+                className={`px-1 py-1 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white rounded-r transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center ${
                   runDropdownOpen ? 'bg-[#FF8533]' : ''
                 }`}
                 title="Mais opções de execução"
@@ -274,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] rounded transition-colors shadow-sm">
               <button
                 onClick={onNewBlankTab}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[var(--text-primary)] hover:text-[var(--accent-yellow)] text-xs font-medium rounded-l transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1 text-[var(--text-primary)] hover:text-[var(--accent-yellow)] text-[11px] font-medium rounded-l transition-colors cursor-pointer"
                 title="Nova Aba em Branco (Ctrl+T)"
                 type="button"
               >
@@ -292,7 +292,7 @@ export const Header: React.FC<HeaderProps> = ({
                 triggerButton={({ isOpen, toggle }) => (
                   <button
                     onClick={toggle}
-                    className={`px-1 py-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-r transition-colors cursor-pointer flex items-center justify-center ${
+                    className={`px-1 py-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-r transition-colors cursor-pointer flex items-center justify-center ${
                       isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)]' : ''
                     }`}
                     title="Mais opções de Nova Aba (Carregar Soluções)"
@@ -309,7 +309,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Limpar */}
             <button
               onClick={onClearEditor}
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-xs font-medium rounded transition-colors cursor-pointer"
+              className="hidden md:flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-[11px] font-medium rounded transition-colors cursor-pointer"
               title="Limpar Conteúdo do Editor Atual (com confirmação)"
               type="button"
             >
@@ -320,7 +320,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Excluir / Fechar Todas as Guias com Confirmação Segura */}
             <button
               onClick={handleSafeCloseAllTabs}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-xs font-medium rounded transition-all cursor-pointer"
+              className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-[11px] font-medium rounded transition-all cursor-pointer"
               title="Fechar todas as guias de scripts abertas (com confirmação)"
               type="button"
             >
@@ -331,7 +331,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Resetar Banco */}
             <button
               onClick={onResetDb}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-[var(--bg-surface)] hover:bg-[#FF3366]/15 text-[#FF3366] border border-[#FF3366]/40 hover:border-[#FF3366] text-xs font-medium rounded transition-all cursor-pointer shadow-[0_0_8px_rgba(255,51,102,0.15)]"
+              className="flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/15 text-[#FF3366] border border-[#FF3366]/40 hover:border-[#FF3366] text-[11px] font-medium rounded transition-all cursor-pointer shadow-[0_0_8px_rgba(255,51,102,0.15)]"
               title="Restaurar Padrões e Bancos Iniciais"
               type="button"
             >
@@ -348,7 +348,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onToggleTheme}
           aria-label="Alternar Tema"
           title={`Tema Atual: ${currentThemeObj?.name || theme}. Clique ou pressione Alt+T para alternar temas.`}
-          className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[#FFE600] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer"
+          className="w-7 h-7 flex items-center justify-center text-[var(--text-secondary)] hover:text-[#FFE600] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer"
           type="button"
         >
           <span className="material-symbols-outlined text-[18px]">
@@ -363,7 +363,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => onTogglePanel('sidebar')}
               type="button"
-              className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+              className={`w-6 h-6 flex items-center justify-center rounded transition-all cursor-pointer ${
                 visiblePanels.sidebar
                   ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)] border border-[var(--accent-yellow)]/30 shadow-[0_0_6px_var(--glow-yellow)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent opacity-60'
@@ -380,7 +380,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => onTogglePanel('scripts')}
               type="button"
-              className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+              className={`w-6 h-6 flex items-center justify-center rounded transition-all cursor-pointer ${
                 visiblePanels.scripts
                   ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)] border border-[var(--accent-yellow)]/30 shadow-[0_0_6px_var(--glow-yellow)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent opacity-60'
@@ -397,7 +397,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => onTogglePanel('info')}
               type="button"
-              className={`w-7 h-7 flex items-center justify-center rounded transition-all cursor-pointer ${
+              className={`w-6 h-6 flex items-center justify-center rounded transition-all cursor-pointer ${
                 visiblePanels.info
                   ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)] border border-[var(--accent-yellow)]/30 shadow-[0_0_6px_var(--glow-yellow)]'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent opacity-60'

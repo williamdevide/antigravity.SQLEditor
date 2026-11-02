@@ -1,37 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
   <defs>
-    <linearGradient id="codeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#00E676" stop-opacity="0.35"/>
-      <stop offset="50%" stop-color="#00E5FF" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+    <linearGradient id="codeGrad" x1="0" y1="0" x2="0" y2="100%">
+      <stop offset="0%" stop-color="#00E676" stop-opacity="0.8"/>
+      <stop offset="80%" stop-color="#00E676" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
     </linearGradient>
   </defs>
-
-  <!-- Cascading Binary & Matrix Bars -->
-  <g fill="url(#codeGrad)" opacity="0.35">
-    <rect x="180" y="50" width="2" height="280"/>
-    <rect x="220" y="180" width="2" height="340"/>
-    <rect x="360" y="80" width="2" height="420"/>
-    <rect x="420" y="320" width="2" height="260"/>
-    <rect x="580" y="120" width="2" height="380"/>
-    <rect x="740" y="240" width="2" height="460"/>
-    <rect x="860" y="60" width="2" height="350"/>
-    <rect x="990" y="190" width="2" height="520"/>
-    <rect x="1140" y="90" width="2" height="400"/>
-    <rect x="1280" y="270" width="2" height="310"/>
-    <rect x="1420" y="110" width="2" height="440"/>
-    <rect x="1560" y="220" width="2" height="360"/>
-    <rect x="1700" y="70" width="2" height="480"/>
-  </g>
-
-  <!-- Terminal Characters Dots -->
-  <g fill="#00E676" opacity="0.4">
-    <circle cx="180" cy="50" r="2.5"/>
-    <circle cx="360" cy="80" r="3"/>
-    <circle cx="740" cy="240" r="3"/>
-    <circle cx="990" cy="190" r="3.5" fill="#FFE600"/>
-    <circle cx="1420" cy="110" r="3"/>
-    <circle cx="1700" cy="70" r="3"/>
+  <g fill="url(#codeGrad)" font-family="monospace" font-size="20" font-weight="bold">
+    <text x="120" y="100">SELECT * FROM schema_der WHERE id = 1;</text>
+    <text x="120" y="140">CREATE TABLE aluno (id INT PRIMARY KEY);</text>
+    <text x="120" y="180">ALTER TABLE curso ADD CONSTRAINT fk_aluno;</text>
+    <text x="800" y="240">NORMALIZATION 1FN -> 2FN -> 3FN AUDIT OK</text>
+    <text x="800" y="280">ALASQL ENGINE RUNNING IN-MEMORY AT 0MS</text>
+    <text x="1400" y="120">INDEXEDDB DEXIE PERSISTENCE ACTIVE</text>
+    <text x="1400" y="160">RELATIONAL ORTHOGONAL 90 DEGREE LINKS</text>
   </g>
 </svg>
-

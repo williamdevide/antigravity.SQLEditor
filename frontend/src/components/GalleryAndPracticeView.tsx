@@ -399,7 +399,10 @@ CREATE TABLE IF NOT EXISTS alunos (
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden relative">
+    <div
+      style={{ backgroundImage: "url('/backgrounds/bg-relational-galaxy.svg')" }}
+      className="flex-1 flex flex-col bg-[var(--bg-primary)] bg-cover bg-center text-[var(--text-primary)] overflow-hidden relative"
+    >
       {/* Barra de Progresso de Carregamento Flutuante */}
       {instantiationProgress && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-150">

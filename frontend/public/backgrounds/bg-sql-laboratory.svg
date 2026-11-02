@@ -1,32 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
-  <defs>
-    <linearGradient id="labOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#FF9E80" stop-opacity="0.05"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Honeycomb Hexagonal Geometry -->
-  <g stroke="url(#labOrange)" stroke-width="1.2" fill="none" opacity="0.3">
-    <!-- Row 1 -->
-    <polygon points="400,200 450,230 450,290 400,320 350,290 350,230"/>
-    <polygon points="520,200 570,230 570,290 520,320 470,290 470,230"/>
-    <polygon points="640,200 690,230 690,290 640,320 590,290 590,230"/>
-
-    <!-- Row 2 -->
-    <polygon points="460,305 510,335 510,395 460,425 410,395 410,335"/>
-    <polygon points="580,305 630,335 630,395 580,425 530,395 530,335"/>
-
-    <!-- Right Cluster -->
-    <polygon points="1400,600 1450,630 1450,690 1400,720 1350,690 1350,630"/>
-    <polygon points="1520,600 1570,630 1570,690 1520,720 1470,690 1470,630"/>
-    <polygon points="1460,705 1510,735 1510,795 1460,825 1410,795 1410,735"/>
-  </g>
-
-  <!-- Laser Vector Guides -->
-  <g stroke="#FFE600" stroke-width="1" stroke-dasharray="8,6" opacity="0.25">
-    <line x1="100" y1="540" x2="1820" y2="540"/>
-    <line x1="460" y1="425" x2="1400" y2="600"/>
+  <g stroke="#FF6B00" stroke-width="2.5" fill="none" opacity="0.6">
+    <rect x="200" y="150" width="400" height="280" rx="16"/>
+    <line x1="200" y1="210" x2="600" y2="210"/>
+    <rect x="800" y="250" width="400" height="320" rx="16" stroke="#00E5FF"/>
+    <line x1="800" y1="310" x2="1200" y2="310" stroke="#00E5FF"/>
+    <rect x="1400" y="150" width="360" height="260" rx="16" stroke="#FFE600"/>
+    <line x1="1400" y1="200" x2="1760" y2="200" stroke="#FFE600"/>
+    <path d="M600,280 H800" stroke-dasharray="8,6" stroke="#FF6B00" stroke-width="3"/>
+    <path d="M1200,380 H1400" stroke-dasharray="8,6" stroke="#00E5FF" stroke-width="3"/>
   </g>
 </svg>
-

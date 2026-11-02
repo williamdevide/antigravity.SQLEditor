@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <rect width="128" height="128" rx="24" fill="#005E86"/>
+  <ellipse cx="64" cy="34" rx="42" ry="14" fill="#F29111"/>
+  <path d="M22 34v30c0 7.7 18.8 14 42 14s42-6.3 42-14V34" fill="none" stroke="#F29111" stroke-width="6"/>
+  <path d="M22 64v30c0 7.7 18.8 14 42 14s42-6.3 42-14V64" fill="none" stroke="#F29111" stroke-width="6"/>
+  <path d="M78 50c-6-12-16-16-24-16-14 0-26 12-26 28 0 12 7 22 17 26 2-4 6-10 11-13 4-2 9-2 13-1-3-4-5-9-5-14 0-4 1-7 4-10z" fill="#00758F"/>
+  <circle cx="56" cy="48" r="2.5" fill="#FFF"/>
+  <text x="64" y="118" font-family="Arial, sans-serif" font-weight="900" font-size="20" fill="#FFF" text-anchor="middle">MySQL</text>
+</svg>

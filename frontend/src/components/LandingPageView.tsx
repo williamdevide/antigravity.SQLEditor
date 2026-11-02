@@ -25,12 +25,27 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.2.5',
+    date: '02/11/2026',
+    title:
+      'Navegação Institucional na Raiz, Módulos Especializados (Guia Rápido & Feedback), 10 Backgrounds Futuristas, Desafios com Filtros e Split-View Compacto',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco v3.2.5',
+    items: [
+      'Roteamento Raiz & Inicialização Institucional: Acesso à raiz (/) agora abre sempre a Página Inicial Institucional com changelogs recolhidos por padrão.',
+      'Módulos Independentes: Separação de Guia Rápido (#guia) com tutoriais em vídeo legendados a 60 FPS e canal direto de Feedback & Suporte (#feedback) com envio via email.',
+      'Identidade Visual & Backgrounds Futuristas: 10 planos de fundo vetoriais neon de alta tecnologia (malhas de dados, circuitos, galáxias relacionais e matriz de código) e logotipos autênticos de tecnologias.',
+      'Galeria de Modelos & Prática Guiada: Alternância instantânea de cards para Bancos de Exemplo (ecommerce_db, universidade_db) e novos desafios baseados nas listas das aulas.',
+      'SQL Editor & Estúdio DER Otimizados: Resolução de repetição no autocomplete Monaco, navbar 10% mais compacta sem quebra de linha em "SQL ↔ DER", botões de alternância apenas com ícones e dropdown de exportação suspenso sem cortes.',
+    ],
+  },
+  {
     version: 'v3.2.4',
     date: '01/11/2026',
     title:
       'Central da Disciplina de Banco de Dados: Estúdio DER 7 Camadas, Split-View Reativo SQL ↔ DER, Dicionário 1FN–3FN, Linter Pedagógico, Galeria com Desafios Autocorrigíveis e Super-Backup (.sqleditor.json)',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Estúdio DER Dedicado com Motor SVG de 7 Camadas: rotas ortogonais 90° arredondadas (com opção Bézier), hit-area invisível de 22px, trilha de contraste, Spotlight 22%, fluxo laser direcional FK ➔ PK, alça recursiva "C" para Self-Join, garfo fork-trunk-fork para FKs compostas e notações Pé-de-Galinha, 1:N ou Pinos.',
       'Cards Ricos & Canvas de Modelagem: faixa superior colorida customizável, trava de posição (🔒), colapso inteligente mantendo PK/FK ancoradas, amostra viva de registros (👁️ Live Data Peek), seção de Triggers (⚡), Áreas Temáticas com arraste solidário, Notas Adesivas com canto dobrado e Drag-to-Connect FK.',
@@ -315,45 +330,49 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans selection:bg-[#FF6B00] selection:text-white transition-colors duration-300 relative overflow-x-hidden">
-      {/* Modal Ampliado do Logo Milkfed */}
+      {/* Modal Ampliado do Logo Milkfed (Identico ao da Pagina Sobre) */}
       {isLogoModalOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
           onClick={() => setIsLogoModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 cursor-zoom-out"
         >
           <div
-            className="relative max-w-xl w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
+            className="relative max-w-xl w-full p-6 sm:p-8 bg-[var(--bg-secondary)] border border-[#FF6B00]/40 rounded-2xl shadow-2xl shadow-black/80 flex flex-col items-center cursor-default animate-in zoom-in-95 duration-200"
           >
+            {/* Botão de Fechar */}
             <button
               onClick={() => setIsLogoModalOpen(false)}
-              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center justify-center transition-colors border border-[var(--border-color)] cursor-pointer"
-              aria-label="Fechar"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-[var(--bg-surface)] hover:bg-[#FF6B00] text-[var(--text-secondary)] hover:text-white border border-[var(--border-color)] flex items-center justify-center transition-all cursor-pointer shadow-md"
+              title="Fechar (Esc)"
               type="button"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
 
-            <div className="w-44 h-44 sm:w-56 sm:h-56 p-4 rounded-3xl bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-inner flex items-center justify-center my-2">
+            {/* Logo da Milkfed em Alta Definição */}
+            <div className="p-4 my-2 flex items-center justify-center">
               <img
                 src="/logo-milkfed.png"
-                alt="Milkfed Devs && Reqs Lords Logo"
-                className="w-full h-full object-contain drop-shadow-[0_8px_24px_rgba(255,107,0,0.45)]"
+                alt="Milkfed Devs && Reqs Lords Logo Ampliado"
+                className="max-h-[55vh] max-w-full object-contain drop-shadow-[0_10px_35px_rgba(255,107,0,0.45)] select-none"
               />
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-black text-[var(--text-primary)] tracking-tight mt-3">
-              Milkfed Devs <span className="text-[#FF6B00]">&amp;&amp;</span> Reqs Lords
-            </h3>
-            <p className="text-xs sm:text-sm text-[var(--accent-yellow)] font-mono font-medium mt-1">
-              Software House &amp; Tech Consulting • Engineering &amp; Requirements Mastery
-            </p>
-            <p className="text-xs text-[var(--text-secondary)] mt-3 leading-relaxed max-w-md">
-              Engenharia de software de precisão, arquiteturas offline-first resilientes e soluções de dados orquestradas com Inteligência Artificial.
-            </p>
-            <p className="text-[11px] text-[var(--text-muted)] mt-4">
-              Clique fora do card ou no botão fechar para voltar à página inicial.
-            </p>
+            {/* Informações no Modal */}
+            <div className="text-center mt-3 space-y-1">
+              <h3 className="text-xl font-extrabold tracking-tight text-[var(--text-primary)]">
+                Milkfed Devs <span className="text-[#FF6B00]">&amp;&amp;</span> Reqs Lords
+              </h3>
+              <p className="text-xs text-[var(--accent-yellow)] font-mono">
+                Software House • Requirements Mastery • AI Architecture
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)] pt-2">
+                Clique fora deste modal ou pressione <kbd className="px-1.5 py-0.5 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded text-[10px] font-mono">Esc</kbd> para fechar.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -551,7 +570,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       {/* 2. Hero Section com Background Futurista de Malha Vetorial */}
       <section
         style={{ backgroundImage: "url('/backgrounds/bg-database-mesh.svg')" }}
-        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative bg-contain bg-center bg-no-repeat"
+        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative bg-cover bg-center rounded-3xl my-6 border border-[var(--border-color)]/60 shadow-xl"
       >
         {/* Barra superior de status e Logo Milkfed com fundo semi-transparente */}
         <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
@@ -680,7 +699,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       </section>
 
       {/* 3. Live Interactive Showcase com Canvas Real Arrastável a 60fps */}
-      <section className="px-4 sm:px-8 max-w-6xl mx-auto pb-16">
+      <section style={{ backgroundImage: "url('/backgrounds/bg-sql-laboratory.svg')" }} className="px-4 sm:px-8 max-w-6xl mx-auto pb-16 bg-cover bg-center rounded-3xl relative my-6">
         <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-3 sm:p-5 shadow-2xl relative overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border-color)]">
             <div className="hidden sm:flex items-center gap-1.5 px-2">
@@ -912,7 +931,8 @@ CREATE TABLE itens_pedido (
       {/* 4. Trilha Interativa das 5 Etapas da Disciplina de Banco de Dados */}
       <section
         id="trilha"
-        className="px-4 sm:px-8 max-w-6xl mx-auto py-16 border-t border-[var(--border-color)]"
+        style={{ backgroundImage: "url('/backgrounds/bg-cyber-grid.svg')" }}
+        className="px-4 sm:px-8 max-w-6xl mx-auto py-16 border-t border-[var(--border-color)] bg-cover bg-center rounded-3xl relative my-6"
       >
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="text-xs font-mono font-semibold text-[#FF6B00] uppercase tracking-wider mb-2">
@@ -1009,7 +1029,8 @@ CREATE TABLE itens_pedido (
       {/* 5. Bento Grid Expandido de 12 Recursos Profissionais */}
       <section
         id="recursos"
-        className="px-4 sm:px-8 max-w-6xl mx-auto py-16 border-t border-[var(--border-color)]"
+        style={{ backgroundImage: "url('/backgrounds/bg-circuit-board.svg')" }}
+        className="px-4 sm:px-8 max-w-6xl mx-auto py-16 border-t border-[var(--border-color)] bg-cover bg-center rounded-3xl relative my-6"
       >
         <div className="text-center max-w-2xl mx-auto mb-12">
           <div className="text-xs font-mono font-semibold text-[#FF6B00] uppercase tracking-wider mb-2">
@@ -1269,7 +1290,8 @@ CREATE TABLE itens_pedido (
       {/* 8. Changelog Interativo Completo */}
       <section
         id="changelog"
-        className="px-4 sm:px-8 max-w-5xl mx-auto py-20 border-t border-[var(--border-color)]"
+        style={{ backgroundImage: "url('/backgrounds/bg-matrix-code.svg')" }}
+        className="px-4 sm:px-8 max-w-5xl mx-auto py-20 border-t border-[var(--border-color)] bg-cover bg-center rounded-3xl relative my-6"
       >
         <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between mb-8 gap-4">
           <div>
@@ -1379,7 +1401,8 @@ CREATE TABLE itens_pedido (
       {/* 9. Seção Institucional Preservada Integralmente: Milkfed Devs && Reqs Lords & Prof. William Devidé Komel */}
       <section
         id="institucional"
-        className="px-4 sm:px-8 max-w-6xl mx-auto py-20 border-t border-[var(--border-color)]"
+        style={{ backgroundImage: "url('/backgrounds/bg-neural-flow.svg')" }}
+        className="px-4 sm:px-8 max-w-6xl mx-auto py-20 border-t border-[var(--border-color)] bg-cover bg-center rounded-3xl relative my-6"
       >
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FF6B00]/10 text-[#FF6B00] text-xs font-mono font-semibold uppercase tracking-wider mb-4 border border-[#FF6B00]/30">

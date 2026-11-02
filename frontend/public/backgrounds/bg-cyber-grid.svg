@@ -1,46 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
   <defs>
     <linearGradient id="horizonGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.25"/>
-      <stop offset="40%" stop-color="#FF4081" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#0F1117" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="gridLines" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0.02"/>
+      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.4"/>
+      <stop offset="50%" stop-color="#FFE600" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </linearGradient>
   </defs>
-
-  <!-- Horizon Atmospheric Glow -->
-  <rect x="0" y="320" width="1920" height="300" fill="url(#horizonGlow)"/>
-
-  <!-- Perspective Perspective Grid Lines (Floor) -->
-  <g stroke="url(#gridLines)" stroke-width="1.2">
-    <!-- Vanishing point at 960, 480 -->
-    <line x1="960" y1="480" x2="-200" y2="1100"/>
-    <line x1="960" y1="480" x2="100" y2="1100"/>
-    <line x1="960" y1="480" x2="350" y2="1100"/>
-    <line x1="960" y1="480" x2="580" y2="1100"/>
-    <line x1="960" y1="480" x2="780" y2="1100"/>
-    <line x1="960" y1="480" x2="960" y2="1100"/>
-    <line x1="960" y1="480" x2="1140" y2="1100"/>
-    <line x1="960" y1="480" x2="1340" y2="1100"/>
-    <line x1="960" y1="480" x2="1570" y2="1100"/>
-    <line x1="960" y1="480" x2="1820" y2="1100"/>
-    <line x1="960" y1="480" x2="2120" y2="1100"/>
-
-    <!-- Transverse Horizontal Grid Lines -->
-    <line x1="760" y1="500" x2="1160" y2="500" stroke-opacity="0.15"/>
-    <line x1="680" y1="525" x2="1240" y2="525" stroke-opacity="0.2"/>
-    <line x1="570" y1="560" x2="1350" y2="560" stroke-opacity="0.25"/>
-    <line x1="430" y1="610" x2="1490" y2="610" stroke-opacity="0.3"/>
-    <line x1="250" y1="680" x2="1670" y2="680" stroke-opacity="0.35"/>
-    <line x1="40" y1="780" x2="1880" y2="780" stroke-opacity="0.4"/>
-    <line x1="-200" y1="920" x2="2120" y2="920" stroke-opacity="0.45"/>
-    <line x1="-400" y1="1080" x2="2320" y2="1080" stroke-opacity="0.5"/>
+  <rect width="1920" height="1080" fill="transparent"/>
+  <rect x="0" y="300" width="1920" height="780" fill="url(#horizonGlow)"/>
+  <!-- Perspective Floor Grid -->
+  <g stroke="#FF6B00" stroke-width="2" opacity="0.65">
+    <line x1="960" y1="400" x2="-200" y2="1080"/>
+    <line x1="960" y1="400" x2="200" y2="1080"/>
+    <line x1="960" y1="400" x2="600" y2="1080"/>
+    <line x1="960" y1="400" x2="960" y2="1080"/>
+    <line x1="960" y1="400" x2="1320" y2="1080"/>
+    <line x1="960" y1="400" x2="1720" y2="1080"/>
+    <line x1="960" y1="400" x2="2120" y2="1080"/>
+    <!-- Horizon Transversals -->
+    <line x1="0" y1="450" x2="1920" y2="450" stroke="#FFE600" stroke-width="1.5"/>
+    <line x1="0" y1="520" x2="1920" y2="520" stroke="#FFE600" stroke-width="1.8"/>
+    <line x1="0" y1="620" x2="1920" y2="620" stroke="#FF6B00" stroke-width="2.2"/>
+    <line x1="0" y1="760" x2="1920" y2="760" stroke="#FF6B00" stroke-width="2.5"/>
+    <line x1="0" y1="940" x2="1920" y2="940" stroke="#00E5FF" stroke-width="3"/>
   </g>
-
-  <!-- Cyber Horizon Line -->
-  <line x1="0" y1="480" x2="1920" y2="480" stroke="#FF6B00" stroke-width="2" opacity="0.45"/>
 </svg>
-
