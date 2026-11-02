@@ -85,7 +85,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   {
     id: 'dark',
     name: 'Escuro Noturno (Dark Obsidian)',
-    description: 'Contraste profundo com preto e cinza escuro para programação noturna.',
+    description: 'Contraste profundo com preto e cinza escuro para programaÃ§Ã£o noturna.',
     bgPreview: '#0F1117',
     surfacePreview: '#1E222D',
   },
@@ -99,14 +99,14 @@ export const THEME_OPTIONS: ThemeOption[] = [
   {
     id: 'beige',
     name: 'Bege Conforto (Warm Sepia)',
-    description: 'Tons de sépia e creme suave que reduzem a fadiga ocular em leituras longas.',
+    description: 'Tons de sÃ©pia e creme suave que reduzem a fadiga ocular em leituras longas.',
     bgPreview: '#F5EFEB',
     surfacePreview: '#FAF6F1',
   },
   {
     id: 'graphite',
-    name: 'Grafite Titânio (Slate Charcoal)',
-    description: 'Escuro equilibrado e elegante em tons de ardósia, mais suave que o preto total.',
+    name: 'Grafite TitÃ¢nio (Slate Charcoal)',
+    description: 'Escuro equilibrado e elegante em tons de ardÃ³sia, mais suave que o preto total.',
     bgPreview: '#1E232B',
     surfacePreview: '#2F3642',
   },
@@ -115,29 +115,29 @@ export const THEME_OPTIONS: ThemeOption[] = [
 export const FONT_THEME_OPTIONS: FontThemeOption[] = [
   {
     id: 'solar',
-    name: 'Âmbar Solar (Padrão Antigravity)',
-    description: 'Destaques quentes em amarelo e laranja elétrico característicos da IDE.',
+    name: 'Ã‚mbar Solar (PadrÃ£o Antigravity)',
+    description: 'Destaques quentes em amarelo e laranja elÃ©trico caracterÃ­sticos da IDE.',
     accentPreview: '#FFE600',
     secondaryPreview: '#FF6B00',
   },
   {
     id: 'cyber',
-    name: 'Ciano Cibernético (Cyber Neon)',
-    description: 'Visual futurista neon com tons de azul ciano e azul elétrico cintilante.',
+    name: 'Ciano CibernÃ©tico (Cyber Neon)',
+    description: 'Visual futurista neon com tons de azul ciano e azul elÃ©trico cintilante.',
     accentPreview: '#00E5FF',
     secondaryPreview: '#00B0FF',
   },
   {
     id: 'matrix',
     name: 'Esmeralda Matrix (Terminal Hacker)',
-    description: 'Estilo clássico de terminal hacker com verdes esmeralda fosforescentes.',
+    description: 'Estilo clÃ¡ssico de terminal hacker com verdes esmeralda fosforescentes.',
     accentPreview: '#00FF66',
     secondaryPreview: '#00E676',
   },
   {
     id: 'synthwave',
-    name: 'Púrpura Synthwave (Orquídea & Violeta)',
-    description: 'Estética retro-synthwave com degradê de magenta e violeta suave.',
+    name: 'PÃºrpura Synthwave (OrquÃ­dea & Violeta)',
+    description: 'EstÃ©tica retro-synthwave com degradÃª de magenta e violeta suave.',
     accentPreview: '#E040FB',
     secondaryPreview: '#FF4081',
   },
@@ -151,6 +151,8 @@ export type ActiveView =
   | 'workspace'
   | 'history'
   | 'settings'
+  | 'guide'
+  | 'feedback'
   | 'guide-feedback'
   | 'about';
 

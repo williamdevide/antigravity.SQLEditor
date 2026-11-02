@@ -9,7 +9,8 @@ import { ERDiagramView } from './components/ERDiagramView';
 import { ERModelView } from './components/ERModelView';
 import { ERStudioWorkspace } from './components/er/ERStudioWorkspace';
 import { GalleryAndPracticeView, ActiveChallengeBanner } from './components/GalleryAndPracticeView';
-import { GuideAndFeedbackView } from './components/GuideAndFeedbackView';
+import { GuideView } from './components/GuideView';
+import { FeedbackView } from './components/FeedbackView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
 import { LandingPageView } from './components/LandingPageView';
@@ -71,13 +72,15 @@ const INITIAL_TABS: TabItem[] = [
 function parseActiveViewFromHash(rawHash: string): ActiveView | null {
   const raw = (rawHash || '').replace(/^#\/?/, '').toLowerCase().trim();
   if (!raw) return null;
-  if (raw === 'editor' || raw === 'workspace') return 'workspace';
+  if (raw === 'editor' || raw === 'workspace' || raw === 'laboratorio') return 'workspace';
   if (raw === 'galeria' || raw === 'gallery') return 'gallery';
   if (raw === 'modelo' || raw === 'er-model' || raw === 'dicionario') return 'er-model';
-  if (raw === 'der' || raw === 'er-diagram') return 'er-diagram';
+  if (raw === 'der' || raw === 'er-diagram' || raw === 'estudio') return 'er-diagram';
   if (raw === 'historico' || raw === 'history') return 'history';
   if (raw === 'configuracoes' || raw === 'config' || raw === 'settings') return 'settings';
-  if (raw === 'guia' || raw === 'guide' || raw === 'guide-feedback' || raw === 'feedback') return 'guide-feedback';
+  if (raw === 'guia' || raw === 'guide') return 'guide';
+  if (raw === 'feedback' || raw === 'suporte') return 'feedback';
+  if (raw === 'guide-feedback') return 'guide';
   if (raw === 'sobre' || raw === 'about') return 'about';
   if (raw === 'landing' || raw === 'home') return 'landing';
   return null;
@@ -91,24 +94,10 @@ export const App: React.FC = () => {
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
       const fromHash = parseActiveViewFromHash(window.location.hash);
+      // Se há rota explícita por hash (ex: #editor, #der, #guia, #feedback), honra o hash
       if (fromHash) return fromHash;
-      const saved = localStorage.getItem('sqleditor_active_view') as ActiveView;
-      if (
-        saved &&
-        [
-          'landing',
-          'gallery',
-          'er-model',
-          'er-diagram',
-          'workspace',
-          'history',
-          'settings',
-          'guide-feedback',
-          'about',
-        ].includes(saved)
-      ) {
-        return saved;
-      }
+      // Ao entrar no endereço raiz sem hash, SEMPRE abre a página inicial institucional (landing)
+      return 'landing';
     } catch (_) {}
     return 'landing';
   });
@@ -129,6 +118,10 @@ export const App: React.FC = () => {
         window.location.hash = '#historico';
       } else if (view === 'settings') {
         window.location.hash = '#configuracoes';
+      } else if (view === 'guide') {
+        window.location.hash = '#guia';
+      } else if (view === 'feedback') {
+        window.location.hash = '#feedback';
       } else if (view === 'guide-feedback') {
         window.location.hash = '#guia';
       } else if (view === 'about') {
@@ -1413,8 +1406,20 @@ export const App: React.FC = () => {
               onUpdatePreferences={handleUpdatePreferences}
               onRestoreSuperBackup={handleRestoreSuperBackup}
             />
+          ) : activeView === 'guide' ? (
+            <GuideView
+              theme={theme}
+              fontTheme={fontTheme}
+              onNavigate={setActiveView}
+            />
+          ) : activeView === 'feedback' ? (
+            <FeedbackView
+              theme={theme}
+              fontTheme={fontTheme}
+              onNavigate={setActiveView}
+            />
           ) : activeView === 'guide-feedback' ? (
-            <GuideAndFeedbackView
+            <GuideView
               theme={theme}
               fontTheme={fontTheme}
               onNavigate={setActiveView}

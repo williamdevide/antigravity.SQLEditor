@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <linearGradient id="circuitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#FFE600" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0.25"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circuit Microchip Traces -->
+  <g stroke="url(#circuitGrad)" stroke-width="1.5" fill="none" opacity="0.4">
+    <!-- Top-Left Bus -->
+    <path d="M0,150 L350,150 L450,250 L750,250 L800,200 L1100,200"/>
+    <path d="M0,180 L320,180 L420,280 L650,280 L700,330 L950,330"/>
+    <path d="M0,210 L300,210 L380,290 L380,450 L480,550 L820,550"/>
+
+    <!-- Bottom-Right Bus -->
+    <path d="M1920,900 L1600,900 L1500,800 L1200,800 L1150,850 L850,850"/>
+    <path d="M1920,870 L1620,870 L1530,780 L1350,780 L1300,730 L1050,730"/>
+    <path d="M1920,840 L1650,840 L1560,750 L1560,600 L1450,490 L1100,490"/>
+
+    <!-- Vertical Data Arteries -->
+    <path d="M550,0 L550,180 L620,250 L620,600 L720,700 L720,1080"/>
+    <path d="M1400,1080 L1400,900 L1320,820 L1320,500 L1220,400 L1220,0"/>
+  </g>
+
+  <!-- Chip Connection Pads -->
+  <g fill="#FF6B00" opacity="0.5">
+    <circle cx="1100" cy="200" r="4"/>
+    <circle cx="950" cy="330" r="4"/>
+    <circle cx="820" cy="550" r="4.5"/>
+    <circle cx="850" cy="850" r="4"/>
+    <circle cx="1050" cy="730" r="4"/>
+    <circle cx="1100" cy="490" r="4.5"/>
+    <circle cx="550" cy="180" r="3.5" fill="#00E5FF"/>
+    <circle cx="1400" cy="900" r="3.5" fill="#00E5FF"/>
+  </g>
+
+  <!-- Surface Mount Square Packages -->
+  <rect x="730" y="235" width="30" height="30" rx="4" fill="none" stroke="#FFE600" stroke-width="1.2" opacity="0.35"/>
+  <rect x="1185" y="785" width="30" height="30" rx="4" fill="none" stroke="#00E5FF" stroke-width="1.2" opacity="0.35"/>
+</svg>

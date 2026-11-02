@@ -2551,3 +2551,49 @@ agora preciso que você prepare uma superpostagem para o linkedin para vendermos
   - Commit das alterações e push sincronizado para os branches `origin/main` e `origin/feature/v3.2-central-bd`.
 
 ---
+
+
+## 📌 Prompt 86 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 08:23  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal quero que sempre que o usuário entrar com o endereço raiz da página abra nossa página inicial e não o editor. 
+na pagina inicial, por padrão todos os changelogs aparecem fechados, só quando clicar é que abre.
+na página inicial quero o logo da milkfed com fundo semi transparente na seção hero. e tambem já deve haver links rapidos para a seção de guia rápido e feedback. Crie pelo menos 10 imagens de tecnologia e banco de dados modernas e futuristas e use-as de background em sessões e páginas do nosso site.
+na página sobre o logotipo das tecnologias devem aparecer de forma mais chamativas para dar enfase, utilize imagens reais dos logotipos. 
+na pagina principal, na sessão que fala da milkfed o comportamento de quando clica no logo deve ser igual ao que acontece na pagina sobre.
+separe a pagina de guia rapido da pagina de feedback.
+crie uma sessão.
+na galeria de modelos e práticas guiadas está carregando os bancos de aula, mas quando clico em bancos de exemplos carrega o bd, mas não altera os cards. em desafios praticos quero opções de desafios baseados nas nossas listas de exercicios que estão nas soluções dos bd aulas.
+no sql editor, os autocompletes voltaram a aparecer 6 vezes repetidos cada termo do autocomplete, corrija
+no sqleditor na repartição de janela sql -> der diminua os botões de alerta, compartilhar, exportar e ampliar para caber tudo em uma só linha desde o botão banco ativo/script ao vivo (não suma com nenhum dos botões, só melhore)
+```
+
+### 🎯 Ações Executadas:
+- **1. Roteamento Raiz & Inicialização Institucional:**
+  - Configurada inicialização padrão determinística no `App.tsx`: ao entrar na raiz do sistema (`/` sem hash explícito), a aplicação sempre abre a **Página Inicial Institucional** (`landing`), ignorando valores prévios de sessão no `localStorage`. Rotas específicas com hash (`#editor`, `#der`, `#guia`, `#feedback`, etc.) continuam sendo honradas.
+- **2. Colapso Padrão dos Changelogs:**
+  - Inicializado o estado `expandedVersions` no `LandingPageView.tsx` como objeto vazio (`{}`), mantendo todos os históricos de versões recolhidos por padrão para visualização limpa e expansão sob demanda ao clicar.
+- **3. Logo Milkfed com Fundo Semi-Transparente & Ações Rápidas no Hero:**
+  - Adicionado pill/card do logotipo oficial da **Milkfed Devs && Reqs Lords** na seção Hero com fundo translúcido (`bg-black/40 backdrop-blur-md`), borda com glow âmbar e clique com zoom idêntico ao da página Sobre (suporte à tecla ESC).
+  - Incluídos botões de atalho rápido direto na Hero para o **Guia Rápido & Treinamentos** (`#guia`) e para o canal de **Feedback Direto** (`#feedback`).
+- **4. 10 Imagens/Backgrounds Futuristas de Tecnologia e Bancos de Dados:**
+  - Criados 10 arquivos SVG vetoriais modernos de alta fidelidade em `frontend/public/backgrounds/`: `bg-database-mesh.svg`, `bg-cyber-grid.svg`, `bg-quantum-data.svg`, `bg-circuit-board.svg`, `bg-neural-flow.svg`, `bg-relational-galaxy.svg`, `bg-holographic-studio.svg`, `bg-matrix-code.svg`, `bg-sql-laboratory.svg` e `bg-geometric-poly.svg`.
+  - Aplicados como planos de fundo temáticos nas seções Hero, Trilha 5 Etapas, Recursos, Changelog, Milkfed Institucional, Sobre, Guia e Feedback.
+- **5. Logotipos Autênticos e Destaque Visual na Página Sobre (`AboutView.tsx`):**
+  - Modernização dos 6 flip-cards com logotipos reais e chamativos: React 18 (com átomo colorido oficial e badge TS), AlaSQL & MySQL (com silhueta do golfinho oficial e badge SQL), Dexie & IndexedDB (cilindros de persistência local), Monaco Editor (origami dobrado oficial do VS Code), Tailwind CSS (ondas cyan duplas e badge Stitch) e Google Antigravity (estrela AI quadricolor com constelação DeepMind).
+- **6. Separação de Guia Rápido e Feedback em Páginas Dedicadas:**
+  - Criados dois novos componentes especializados: `GuideView.tsx` (`#guia`) com reprodutor de vídeo interativo a 60 FPS, roteiro das 5 etapas e atalhos; e `FeedbackView.tsx` (`#feedback`) com canal direto por email (`williamdevide.ourinhos@gmail.com`), Gmail Web, issue no GitHub e formulário estruturado de diagnóstico.
+  - Atualizado o menu dropdown principal (`MainMenuDropdown.tsx`) e o roteador de hash (`App.tsx`) para gerenciar ambas as rotas de forma independente.
+- **7. Galeria: Atualização Imediata dos Cards nos Bancos de Exemplo:**
+  - Adicionado suporte completo aos bancos de exemplo rápidos (`ecommerce_db` e `universidade_db`) com cartões interativos pré-parseados (`sampleCards`), miniatura vetorial viva `<ERThumbnailSvg />`, seletor de categorias em lote e alternância imediata da grade de cards ao clicar em "Carregar Exemplos".
+- **8. Desafios Práticos com Opções Baseadas nas Soluções das Aulas:**
+  - Expandido o catálogo em `practiceExercisesCatalog.ts` com 8 novos exercícios avançados baseados nos bancos das aulas (`db_streamflix`, `db_escolaidiomas`, `db_rh`, `db_pizzaria`).
+  - Adicionada barra de filtros por banco de dados de origem nos Desafios Práticos da Galeria, permitindo filtrar desafios por banco específico com badges temáticos.
+- **9. Correção da Multiplicação de Sugestões de Autocomplete (6x) no Monaco:**
+  - Resolvido o acúmulo de instâncias do `registerCompletionItemProvider` no `EditorWorkspace.tsx` mediante controle de ciclo de vida com `IDisposable`, descarte no desmonte do componente e deduplicação determinística com `Set`.
+- **10. Barra do Split-View SQL ➔ DER Compactada em Linha Única:**
+  - Otimizada a barra de ferramentas do modo `split-preview` em `ERStudioWorkspace.tsx`: `flex-nowrap`, overflow suave sem scrollbar, diminuição de espaçamentos e dimensionamento dos botões (Alerta de Integridade, Compartilhar #z., Exportar 5 Formatos e Ampliar DER), acomodando todos os controles perfeitamente lado a lado sem quebra de linha.
+- **11. Validação & Controle de Qualidade:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção realizada com sucesso em 1.28s.

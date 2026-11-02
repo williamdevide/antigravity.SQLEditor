@@ -170,6 +170,8 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
   onRestoreSavedDiagram,
 }) => {
   const [activeTab, setActiveTab] = useState<GalleryTabId>('classroom');
+  const [classroomCategory, setClassroomCategory] = useState<'classroom' | 'samples'>('classroom');
+  const [challengeDbFilter, setChallengeDbFilter] = useState<string>('all');
   const [templateFilter, setTemplateFilter] = useState<
     'all' | 'template' | 'normalization-lab'
   >('all');
@@ -270,6 +272,91 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
     });
   }, []);
 
+  // Bancos de Exemplo Rápidos (ecommerce_db e universidade_db)
+  const sampleCards = useMemo(() => {
+    const samples = [
+      {
+        dbName: 'ecommerce_db',
+        sourceFile: 'Exemplo Integrado • E-Commerce (Semana 09)',
+        sql: `CREATE DATABASE IF NOT EXISTS ecommerce_db;
+USE ecommerce_db;
+CREATE TABLE IF NOT EXISTS categorias (
+  id INT PRIMARY KEY,
+  nome VARCHAR(100),
+  descricao VARCHAR(255)
+);
+CREATE TABLE IF NOT EXISTS produtos (
+  id INT PRIMARY KEY,
+  nome VARCHAR(150),
+  preco DECIMAL(10,2),
+  estoque INT,
+  categoria_id INT,
+  FOREIGN KEY (categoria_id) REFERENCES categorias(id)
+);
+CREATE TABLE IF NOT EXISTS usuarios (
+  id INT PRIMARY KEY,
+  nome VARCHAR(120),
+  email VARCHAR(150),
+  nivel VARCHAR(20),
+  cidade VARCHAR(80),
+  ativo INT
+);
+CREATE TABLE IF NOT EXISTS pedidos (
+  id INT PRIMARY KEY,
+  usuario_id INT,
+  data_pedido DATE,
+  valor_total DECIMAL(10,2),
+  status VARCHAR(30),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+CREATE TABLE IF NOT EXISTS itens_pedido (
+  id INT PRIMARY KEY,
+  pedido_id INT,
+  produto_id INT,
+  quantidade INT,
+  preco_unitario DECIMAL(10,2),
+  FOREIGN KEY (pedido_id) REFERENCES pedidos(id),
+  FOREIGN KEY (produto_id) REFERENCES produtos(id)
+);`,
+      },
+      {
+        dbName: 'universidade_db',
+        sourceFile: 'Exemplo Integrado • Gestão Universitária',
+        sql: `CREATE DATABASE IF NOT EXISTS universidade_db;
+USE universidade_db;
+CREATE TABLE IF NOT EXISTS cursos (
+  id INT PRIMARY KEY,
+  nome_curso VARCHAR(100),
+  departamento VARCHAR(80),
+  duracao_anos INT
+);
+CREATE TABLE IF NOT EXISTS alunos (
+  id INT PRIMARY KEY,
+  nome VARCHAR(120),
+  matricula VARCHAR(20),
+  semestre INT,
+  curso_id INT,
+  FOREIGN KEY (curso_id) REFERENCES cursos(id)
+);`,
+      },
+    ];
+
+    return samples.map((grp) => {
+      const parsed = parseLiveSqlSchema(grp.sql, {
+        inferImplicitForeignKeys: true,
+      });
+      return {
+        dbName: grp.dbName,
+        sourceFile: grp.sourceFile,
+        sql: grp.sql,
+        tables: parsed.tables,
+        relationships: parsed.relationships,
+      };
+    });
+  }, []);
+
+  const displayedDbCards = classroomCategory === 'classroom' ? classroomCards : sampleCards;
+
   // Templates curados pré-parseados com silhueta vetorial viva
   const parsedTemplates = useMemo(() => {
     return ER_TEMPLATES_CATALOG.map((tpl) => {
@@ -290,9 +377,15 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
   }, [parsedTemplates, templateFilter]);
 
   const filteredExercises = useMemo(() => {
-    if (stageFilter === 0) return PRACTICE_EXERCISES_CATALOG;
-    return PRACTICE_EXERCISES_CATALOG.filter((e) => e.stageNumber === stageFilter);
-  }, [stageFilter]);
+    let list = PRACTICE_EXERCISES_CATALOG;
+    if (stageFilter !== 0) {
+      list = list.filter((e) => e.stageNumber === stageFilter);
+    }
+    if (challengeDbFilter !== 'all') {
+      list = list.filter((e) => e.databaseOrigin === challengeDbFilter);
+    }
+    return list;
+  }, [stageFilter, challengeDbFilter]);
 
   const completedCount = useMemo(
     () =>
@@ -444,7 +537,11 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
             <>
               {/* Atalhos de Carga em Lote */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between gap-4">
+                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 transition-all ${
+                  classroomCategory === 'classroom'
+                    ? 'bg-[var(--bg-surface)] border-[#FF6B00]/70 shadow-md ring-1 ring-[#FF6B00]/30'
+                    : 'bg-[var(--bg-surface)] border-[var(--border-color)]'
+                }`}>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-[#FF6B00] text-[20px]">
@@ -455,19 +552,26 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                       </h3>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)]">
-                      Instancia simultaneamente todos os esquemas utilizados nas semanas de aula no motor local AlaSQL.
+                      Instancia simultaneamente todos os esquemas das semanas de aula (Streamflix, Idiomas, RH, Pizzaria).
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => onLoadPreset('class')}
-                    className="px-3.5 py-2 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold shrink-0 cursor-pointer"
+                    onClick={() => {
+                      setClassroomCategory('classroom');
+                      onLoadPreset('class');
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] text-white text-xs font-bold shrink-0 cursor-pointer shadow-sm"
                   >
                     Carregar Todos
                   </button>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between gap-4">
+                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 transition-all ${
+                  classroomCategory === 'samples'
+                    ? 'bg-[var(--bg-surface)] border-[var(--accent-yellow)]/70 shadow-md ring-1 ring-[var(--accent-yellow)]/30'
+                    : 'bg-[var(--bg-surface)] border-[var(--border-color)]'
+                }`}>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-[var(--accent-yellow)] text-[20px]">
@@ -478,22 +582,60 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                       </h3>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)]">
-                      Carrega `ecommerce_db` e `universidade_db` prontos para treino rápido de consultas e diagramas.
+                      Carrega `ecommerce_db` e `universidade_db` e atualiza a grade de cards com as miniaturas DER.
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => onLoadPreset('samples')}
-                    className="px-3.5 py-2 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--accent-yellow)] text-xs font-bold shrink-0 cursor-pointer"
+                    onClick={() => {
+                      setClassroomCategory('samples');
+                      onLoadPreset('samples');
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--accent-yellow)] text-xs font-bold shrink-0 cursor-pointer shadow-sm"
                   >
                     Carregar Exemplos
                   </button>
                 </div>
               </div>
 
+              {/* Seletor Rápido de Categoria de Bancos */}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClassroomCategory('classroom')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-all flex items-center gap-1.5 ${
+                      classroomCategory === 'classroom'
+                        ? 'bg-[#FF6B00]/15 border-[#FF6B00] text-[#FF6B00] shadow-sm'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">school</span>
+                    <span>Bancos de Aula SENAI ({classroomCards.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setClassroomCategory('samples')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-all flex items-center gap-1.5 ${
+                      classroomCategory === 'samples'
+                        ? 'bg-[var(--accent-yellow)]/15 border-[var(--accent-yellow)] text-[var(--accent-yellow)] shadow-sm'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">dataset</span>
+                    <span>Bancos de Exemplo Rápidos ({sampleCards.length})</span>
+                  </button>
+                </div>
+
+                <span className="text-xs font-mono text-[var(--text-muted)] hidden sm:inline">
+                  Exibindo {displayedDbCards.length} banco(s) configurado(s)
+                </span>
+              </div>
+
               {/* Cards Individuais com Miniatura Vetorial Viva (<ERThumbnailSvg />) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {classroomCards.map((item) => (
+                {displayedDbCards.map((item) => (
                   <div
                     key={item.dbName}
                     className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6B00]/60 overflow-hidden flex flex-col shadow-sm transition-all"
@@ -738,28 +880,58 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
           {/* ================================================================ */}
           {activeTab === 'challenges' && (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { num: 0, label: 'Todas as Etapas' },
-                  { num: 1, label: '1. Modelagem & DDL' },
-                  { num: 2, label: '2. Normalização 1FN' },
-                  { num: 3, label: '3. Consultas & Filtros' },
-                  { num: 4, label: '4. Junções (JOIN)' },
-                  { num: 5, label: '5. Agregações (GROUP BY)' },
-                ].map((st) => (
-                  <button
-                    key={st.num}
-                    type="button"
-                    onClick={() => setStageFilter(st.num)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors ${
-                      stageFilter === st.num
-                        ? 'bg-[#FF6B00]/15 border-[#FF6B00] text-[var(--accent-yellow)]'
-                        : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {st.label}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                {/* Filtro por Etapas da Disciplina */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { num: 0, label: 'Todas as Etapas' },
+                    { num: 1, label: '1. Modelagem & DDL' },
+                    { num: 2, label: '2. Normalização 1FN' },
+                    { num: 3, label: '3. Consultas & Filtros' },
+                    { num: 4, label: '4. Junções (JOIN)' },
+                    { num: 5, label: '5. Agregações (GROUP BY)' },
+                  ].map((st) => (
+                    <button
+                      key={st.num}
+                      type="button"
+                      onClick={() => setStageFilter(st.num)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors ${
+                        stageFilter === st.num
+                          ? 'bg-[#FF6B00]/15 border-[#FF6B00] text-[var(--accent-yellow)]'
+                          : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Filtro por Banco de Dados das Aulas */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-xs font-mono text-[var(--text-muted)] mr-1">Banco Origem:</span>
+                  {[
+                    { id: 'all', label: 'Todos os Bancos' },
+                    { id: 'db_streamflix', label: 'Streamflix (Semana 08)' },
+                    { id: 'db_escolaidiomas', label: 'Escola de Idiomas' },
+                    { id: 'db_rh', label: 'RH & Funcionários' },
+                    { id: 'db_pizzaria', label: 'Pizzaria Delivery' },
+                    { id: 'ecommerce_db', label: 'E-Commerce' },
+                    { id: 'universidade_db', label: 'Universidade' },
+                  ].map((dbOpt) => (
+                    <button
+                      key={dbOpt.id}
+                      type="button"
+                      onClick={() => setChallengeDbFilter(dbOpt.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border cursor-pointer transition-colors ${
+                        challengeDbFilter === dbOpt.id
+                          ? 'bg-[#29B6F6]/15 border-[#29B6F6] text-[#29B6F6] font-bold shadow-sm'
+                          : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {dbOpt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -778,9 +950,16 @@ export const GalleryAndPracticeView: React.FC<GalleryAndPracticeViewProps> = ({
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[10px] font-mono font-bold text-[var(--accent-yellow)]">
-                            {ex.stageLabel}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[10px] font-mono font-bold text-[var(--accent-yellow)]">
+                              {ex.stageLabel}
+                            </span>
+                            {ex.databaseOrigin && (
+                              <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono font-bold text-cyan-400">
+                                {ex.databaseOrigin}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[10px] font-mono text-[var(--text-muted)]">
                               {ex.difficulty}

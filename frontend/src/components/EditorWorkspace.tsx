@@ -314,6 +314,9 @@ interface EditorWorkspaceProps {
   preferences?: AppPreferences;
 }
 
+// Registro global de provedores de autocompletar do Monaco para evitar duplicação em re-renderizações e troca de abas
+let globalMonacoCompletionDisposables: { dispose: () => void }[] = [];
+
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   tabs,
   activeTabId,
@@ -472,6 +475,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   currentTabIdRef.current = activeTabId;
   const isAutoCapitalizingRef = useRef<boolean>(false);
   const completionProviderRef = useRef<any>(null);
+
+  // Limpa disposables globais de autocompletar ao desmontar o componente
+  useEffect(() => {
+    return () => {
+      globalMonacoCompletionDisposables.forEach((d) => {
+        try {
+          d.dispose();
+        } catch (_) {}
+      });
+      globalMonacoCompletionDisposables = [];
+    };
+  }, []);
 
   // Sistema de buffer e debounce de digitação para garantir 120 FPS e eliminar 100% do atraso do cursor
   const contentDebounceTimerRef = useRef<any>(null);
@@ -1259,11 +1274,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
 
     // Provedor de autocompletar dinâmico estrito ao BANCO ATIVO e com filtro pelo INÍCIO digitado
+    globalMonacoCompletionDisposables.forEach((d: any) => {
+      try {
+        d?.dispose();
+      } catch (_) {}
+    });
+    globalMonacoCompletionDisposables = [];
     if (completionProviderRef.current) {
       if (Array.isArray(completionProviderRef.current)) {
         completionProviderRef.current.forEach((d: any) => d?.dispose());
       } else {
-        completionProviderRef.current.dispose();
+        completionProviderRef.current?.dispose();
       }
     }
     const completionProviderConfig = {
@@ -1422,14 +1443,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           }
         }
 
-        return { suggestions };
+        // Deduplicação estrita de sugestões para impedir repetições de autocompletar
+        const seenSuggestionKeys = new Set<string>();
+        const uniqueSuggestions: any[] = [];
+        for (const item of suggestions) {
+          const rawLabel = typeof item.label === 'string' ? item.label : item.label?.label || '';
+          const dedupeKey = `${item.kind}_${rawLabel.trim().toLowerCase()}`;
+          if (!seenSuggestionKeys.has(dedupeKey)) {
+            seenSuggestionKeys.add(dedupeKey);
+            uniqueSuggestions.push(item);
+          }
+        }
+
+        return { suggestions: uniqueSuggestions };
       },
     };
 
-    completionProviderRef.current = [
-      monaco.languages.registerCompletionItemProvider('sql', completionProviderConfig),
-      monaco.languages.registerCompletionItemProvider('mysql', completionProviderConfig),
-    ];
+    const registeredDisposable = monaco.languages.registerCompletionItemProvider('sql', completionProviderConfig);
+    globalMonacoCompletionDisposables = [registeredDisposable];
+    completionProviderRef.current = [registeredDisposable];
   };
 
   const baseFontSize = preferences?.ui?.editorFontSize || 14;

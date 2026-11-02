@@ -610,25 +610,47 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
             )}
           </button>
 
-          {/* Guia Rápido, Atalhos & Report (#guia) */}
+          {/* Guia Rápido & Treinamentos em Vídeo (#guia) */}
           <button
-            onClick={() => handleNavClick('guide-feedback')}
+            onClick={() => handleNavClick('guide')}
             className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
-              activeView === 'guide-feedback' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+              activeView === 'guide' ? 'bg-[var(--bg-hover)]/70 text-[#29B6F6] font-semibold' : ''
             }`}
             type="button"
           >
             <div className="flex items-center gap-2.5">
               <span className="material-symbols-outlined text-[17px] text-[#29B6F6]">
-                help_outline
+                menu_book
               </span>
               <div className="flex flex-col">
-                <span className="leading-tight">Guia Rápido & Feedback</span>
-                <span className="text-[10px] text-[var(--text-muted)] font-normal">Atalhos & relatórios em markdown</span>
+                <span className="leading-tight">Guia Rápido &amp; Treinamentos</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Vídeos legendados e 5 etapas de BD</span>
               </div>
             </div>
-            {activeView === 'guide-feedback' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+            {activeView === 'guide' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#29B6F6] shadow-[0_0_6px_#29B6F6]" />
+            )}
+          </button>
+
+          {/* Feedback & Canal Direto (#feedback) */}
+          <button
+            onClick={() => handleNavClick('feedback')}
+            className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+              activeView === 'feedback' ? 'bg-[var(--bg-hover)]/70 text-[#00E676] font-semibold' : ''
+            }`}
+            type="button"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[17px] text-[#00E676]">
+                send
+              </span>
+              <div className="flex flex-col">
+                <span className="leading-tight">Feedback &amp; Canal Direto</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-normal">Envio de sugestões ao desenvolvedor</span>
+              </div>
+            </div>
+            {activeView === 'feedback' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00E676] shadow-[0_0_6px_#00E676]" />
             )}
           </button>
 

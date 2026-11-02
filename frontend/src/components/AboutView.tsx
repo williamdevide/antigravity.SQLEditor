@@ -241,310 +241,346 @@ export const AboutView: React.FC<AboutViewProps> = ({ onBackToWorkspace }) => {
           </div>
         </div>
 
-        {/* Informações da Stack Tecnológica com 3D Flip Cards */}
+        {/* Informações da Stack Tecnológica com 3D Flip Cards com Logotipos Autênticos e Chamativos */}
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] text-[var(--accent-yellow)]">layers</span>
               <h3 className="text-base font-bold text-[var(--text-primary)]">
-                Stack Tecnológica e Arquitetura do Sistema
+                Stack Tecnológica &amp; Arquitetura Oficial do Sistema
               </h3>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
               <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)] animate-spin">sync</span>
-              <span>Passe o mouse sobre os cards para virar</span>
+              <span>Passe o cursor para virar os cards e ver a arquitetura</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* 1. Frontend Core - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 1. Frontend Core - React 18 & TypeScript (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-cyan-400/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#61DAFB] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold">SPA</span>
+                    <span className="bg-[#61DAFB]/15 text-[#61DAFB] border border-[#61DAFB]/40 px-2 py-0.5 rounded-full font-bold">REACT 18 &amp; TS</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo React */}
-                    <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9 fill-none stroke-current" viewBox="-11.5 -10.23174 23 20.46348">
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo Real React + TypeScript Badge */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#20232A] to-[#282C34] border-2 border-[#61DAFB]/60 shadow-[0_0_24px_rgba(97,218,251,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      {/* React Atom SVG */}
+                      <svg className="w-12 h-12" viewBox="-11.5 -10.23174 23 20.46348">
                         <circle cx="0" cy="0" r="2.05" fill="#61DAFB"/>
-                        <g stroke="#61DAFB" strokeWidth="1">
+                        <g stroke="#61DAFB" strokeWidth="1" fill="none">
                           <ellipse rx="11" ry="4.2"/>
                           <ellipse rx="11" ry="4.2" transform="rotate(60)"/>
                           <ellipse rx="11" ry="4.2" transform="rotate(120)"/>
                         </g>
                       </svg>
+                      {/* TypeScript Mini Badge */}
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#3178C6] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
+                        TS
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">Frontend Core</h4>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Frontend Core</h4>
                       <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">React 18 • TypeScript • Vite</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-cyan-400/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#61DAFB] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-cyan-400/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#61DAFB] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-cyan-400">Frontend Core</span>
-                      <span className="text-[10px] font-mono bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold">
-                        SPA
+                      <span className="font-bold text-sm text-[#61DAFB]">Frontend Core</span>
+                      <span className="text-[10px] font-mono bg-[#61DAFB]/15 text-[#61DAFB] border border-[#61DAFB]/30 px-2 py-0.5 rounded-full font-bold">
+                        Vite + React
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      Construído com <strong>React 18</strong>, <strong>TypeScript</strong> e <strong>Vite</strong> para máxima performance, tipagem rigorosa e recarregamento instantâneo.
+                      Construído com <strong>React 18</strong>, <strong>TypeScript</strong> rigoroso e <strong>Vite</strong>. Renderização em árvore eficiente, estados atômicos e hot module replacement instantâneo.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    React • TypeScript • Vite
+                    React 18 • TypeScript 5 • Vite 6
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 2. Motor SQL & Dialeto - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+            {/* 2. Motor SQL Client-Side - MySQL & AlaSQL (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-[var(--status-success)]/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#00758F] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-[var(--status-success)]/10 text-[var(--status-success)] border border-[var(--status-success)]/30 px-1.5 py-0.5 rounded font-bold">MySQL</span>
+                    <span className="bg-[#00758F]/15 text-[#00E5FF] border border-[#00758F]/40 px-2 py-0.5 rounded-full font-bold">DIALETO MYSQL</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo MySQL / Database */}
-                    <div className="w-14 h-14 rounded-2xl bg-[var(--status-success)]/10 border border-[var(--status-success)]/30 flex items-center justify-center text-[var(--status-success)] shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 4.02 2 6.5v11C2 19.98 6.48 22 12 22s10-2.02 10-4.5v-11C22 4.02 17.52 2 12 2zm0 2c4.97 0 8 1.62 8 2.5s-3.03 2.5-8 2.5-8-1.62-8-2.5 3.03-2.5 8-2.5zm0 16c-4.97 0-8-1.62-8-2.5v-2.26c2.09 1.15 5.02 1.76 8 1.76s5.91-.61 8-1.76V17.5c0 .88-3.03 2.5-8 2.5zm0-4.5c-4.97 0-8-1.62-8-2.5v-2.26c2.09 1.15 5.02 1.76 8 1.76s5.91-.61 8-1.76V13c0 .88-3.03 2.5-8 2.5zm0-4.5c-4.97 0-8-1.62-8-2.5V6.74c2.09 1.15 5.02 1.76 8 1.76s5.91-.61 8-1.76V8.5c0 .88-3.03 2.5-8 2.5z"/>
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo Autêntico MySQL Dolphin */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#005E86]/30 to-[#F29111]/30 border-2 border-[#F29111]/70 shadow-[0_0_24px_rgba(242,145,17,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      <svg className="w-12 h-12" viewBox="0 0 128 128" fill="none">
+                        <circle cx="64" cy="64" r="56" fill="#005E86" opacity="0.15"/>
+                        <path d="M72 32C56 32 46 44 46 58C46 72 58 84 76 84C86 84 94 78 98 72L90 66C86 70 82 74 76 74C64 74 56 66 56 58C56 50 64 42 72 42C80 42 86 46 90 50L98 44C92 36 84 32 72 32Z" fill="#F29111"/>
+                        <path d="M40 78C32 72 26 62 26 50C26 38 34 26 48 20L44 12C26 20 16 34 16 50C16 66 24 80 34 88L40 78Z" fill="#00758F"/>
                       </svg>
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#F29111] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
+                        SQL
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">Motor SQL Client-Side</h4>
-                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">AlaSQL • Dialeto MySQL</p>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Motor SQL Client-Side</h4>
+                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">AlaSQL • Dialeto MySQL Nativo</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-[var(--status-success)]/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#F29111] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-[var(--status-success)]/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#00758F] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-[var(--status-success)]">Motor SQL Client-Side</span>
-                      <span className="text-[10px] font-mono bg-[var(--status-success)]/15 text-[var(--status-success)] border border-[var(--status-success)]/30 px-1.5 py-0.5 rounded font-bold">
-                        MySQL
+                      <span className="font-bold text-sm text-[#00E5FF]">AlaSQL &amp; MySQL Engine</span>
+                      <span className="text-[10px] font-mono bg-[#00758F]/20 text-[#00E5FF] border border-[#00758F]/40 px-2 py-0.5 rounded-full font-bold">
+                        Zero Backend
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      Execução 100% no navegador com <strong>AlaSQL</strong> expandido com funções nativas do MySQL como <code>DATE_FORMAT</code>, <code>NOW</code>, <code>DATEDIFF</code>, <code>IFNULL</code>, <code>STRFTIME</code> e esquemas múltiplos.
+                      Execução determinística no navegador. Totalmente expandido com funções de data (<code>DATE_FORMAT</code>, <code>DATEDIFF</code>, <code>NOW</code>), agregações e compatibilidade de esquemas relacionais.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    AlaSQL • MySQL Dialect • Custom Functions
+                    AlaSQL • MySQL Dialect • Local Tables
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 3. Persistência Offline - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+            {/* 3. Persistência Offline - Dexie & IndexedDB (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-[#FF6B00]/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#FF6B00] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-[#FF6B00]/10 text-[#FF6B00] border border-[#FF6B00]/30 px-1.5 py-0.5 rounded font-bold">IndexedDB</span>
+                    <span className="bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/40 px-2 py-0.5 rounded-full font-bold">INDEXEDDB LOCAL</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo IndexedDB / Storage */}
-                    <div className="w-14 h-14 rounded-2xl bg-[#FF6B00]/10 border border-[#FF6B00]/30 flex items-center justify-center text-[#FF6B00] shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm6 12H6v-1.4c0-2 4-3.1 6-3.1s6 1.1 6 3.1V18z"/>
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo IndexedDB / Storage Autêntico */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#FF6B00]/25 to-[#E65100]/30 border-2 border-[#FF6B00]/70 shadow-[0_0_24px_rgba(255,107,0,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none">
+                        <ellipse cx="12" cy="6" rx="9" ry="3" fill="#FF8533"/>
+                        <path d="M3 6V10C3 11.66 7.03 13 12 13C16.97 13 21 11.66 21 10V6" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round"/>
+                        <path d="M3 10V14C3 15.66 7.03 17 12 17C16.97 17 21 15.66 21 14V10" stroke="#FF8533" strokeWidth="2" strokeLinecap="round"/>
+                        <path d="M3 14V18C3 19.66 7.03 21 12 21C16.97 21 21 19.66 21 18V14" stroke="#FFA726" strokeWidth="2" strokeLinecap="round"/>
                       </svg>
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#00E676] border border-white/30 text-black font-mono font-bold text-[9px] shadow-md">
+                        Dexie
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">Persistência Offline</h4>
-                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Dexie.js • IndexedDB Local</p>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Persistência Offline</h4>
+                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Dexie.js • IndexedDB • Super-Backup</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-[#FF6B00]/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#FF8533] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-[#FF6B00]/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#FF6B00] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-[#FF6B00]">Persistência Offline</span>
-                      <span className="text-[10px] font-mono bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/30 px-1.5 py-0.5 rounded font-bold">
-                        IndexedDB
+                      <span className="font-bold text-sm text-[#FF6B00]">Dexie.js Offline</span>
+                      <span className="text-[10px] font-mono bg-[#FF6B00]/20 text-[#FF6B00] border border-[#FF6B00]/40 px-2 py-0.5 rounded-full font-bold">
+                        100% Privado
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      Armazenamento no dispositivo do usuário utilizando <strong>Dexie.js</strong> sobre <strong>IndexedDB</strong>. Os bancos criados, tabelas e histórico de scripts são preservados entre sessões sem envio externo.
+                      Seus bancos, histórico de scripts, preferências de tema e modelos DER permanecem gravados localmente no navegador, sem nenhum envio para servidores externos.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    Dexie.js • IndexedDB • Local Storage
+                    Dexie.js • IndexedDB v3 • JSON Backup
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 4. Editor de Código - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+            {/* 4. Editor Profissional - Monaco & VS Code (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-purple-400/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#007ACC] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">VS Code</span>
+                    <span className="bg-[#007ACC]/15 text-[#29B6F6] border border-[#007ACC]/40 px-2 py-0.5 rounded-full font-bold">VS CODE ENGINE</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo Monaco / VS Code */}
-                    <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17.5 2.5L23 5.5v13l-5.5 3L1 14.5l1.5-2.5L17.5 20V4l-9 5.5L7 8l10.5-5.5z"/>
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo Autêntico VS Code Origami */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#1E1E1E] to-[#252526] border-2 border-[#007ACC]/70 shadow-[0_0_24px_rgba(0,122,204,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      <svg className="w-12 h-12" viewBox="0 0 100 100" fill="none">
+                        <path d="M72.2 97.4L96.8 84.7C98.8 83.7 100 81.7 100 79.5V20.5C100 18.3 98.8 16.3 96.8 15.3L72.2 2.6C70.6 1.8 68.7 2.1 67.4 3.3L31.2 37.8L15.3 25.8C14.1 24.9 12.4 24.9 11.2 25.9L2 33.3C0.8 34.3 0 35.8 0 37.4V62.6C0 64.2 0.8 65.7 2 66.7L11.2 74.1C12.4 75.1 14.1 75.1 15.3 74.2L31.2 62.2L67.4 96.7C68.7 97.9 70.6 98.2 72.2 97.4Z" fill="#007ACC"/>
+                        <path d="M67.4 3.3C68.7 2.1 70.6 1.8 72.2 2.6L96.8 15.3C98.8 16.3 100 18.3 100 20.5V79.5C100 81.7 98.8 83.7 96.8 84.7L72.2 97.4C70.6 98.2 68.7 97.9 67.4 96.7L31.2 62.2L67.4 3.3Z" fill="#1F9CF0"/>
                       </svg>
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#007ACC] border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
+                        Monaco
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">Editor Profissional</h4>
-                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Monaco Editor • VS Code</p>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Editor Profissional</h4>
+                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Monaco Editor • Autocomplete SQL</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-purple-400/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#29B6F6] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-purple-400/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#007ACC] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-purple-400">Editor Profissional</span>
-                      <span className="text-[10px] font-mono bg-purple-500/15 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-bold">
+                      <span className="font-bold text-sm text-[#29B6F6]">Monaco Editor</span>
+                      <span className="text-[10px] font-mono bg-[#007ACC]/20 text-[#29B6F6] border border-[#007ACC]/40 px-2 py-0.5 rounded-full font-bold">
                         VS Code
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      <strong>Monaco Editor</strong> com autocompleter inteligente para palavras-chave SQL, nomes de tabelas do banco ativo, atalhos de seleção (Alt+E, Alt+R) e menu de contexto personalizado.
+                      O mesmo motor que alimenta o VS Code. Autocomplete inteligente sincronizado com as tabelas ativas, realce de sintaxe SQL, atalhos de teclado (Ctrl+Enter, Alt+E) e histórico ilimitado.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    Monaco Editor • Dynamic Autocomplete
+                    Monaco Editor • Multi-Tab • Syntax Highlight
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 5. Design & Prototipagem - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+            {/* 5. Design System - Tailwind CSS & Google Stitch (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-[var(--accent-yellow)]/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#38BDF8] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/30 px-1.5 py-0.5 rounded font-bold">Stitch</span>
+                    <span className="bg-[#38BDF8]/15 text-[#38BDF8] border border-[#38BDF8]/40 px-2 py-0.5 rounded-full font-bold">TAILWIND &amp; STITCH</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo Tailwind CSS */}
-                    <div className="w-14 h-14 rounded-2xl bg-[var(--accent-yellow)]/10 border border-[var(--accent-yellow)]/30 flex items-center justify-center text-[var(--accent-yellow)] shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9 fill-current" viewBox="0 0 24 24">
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo Autêntico Tailwind CSS */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#0F172A] to-[#1E293B] border-2 border-[#38BDF8]/70 shadow-[0_0_24px_rgba(56,189,248,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      <svg className="w-12 h-12 fill-[#38BDF8]" viewBox="0 0 24 24">
                         <path d="M12.001,4.8c-3.2,0-5.2,1.6-6,4.8c1.2-1.6,2.6-2.2,4.2-1.8c0.913,0.228,1.565,0.89,2.288,1.624 C13.666,10.618,15.027,12,18.001,12c3.2,0,5.2-1.6,6-4.8c-1.2,1.6-2.6,2.2-4.2,1.8c-0.913-0.228-1.565-0.89-2.288-1.624 C16.337,6.182,14.976,4.8,12.001,4.8z M6.001,12c-3.2,0-5.2,1.6-6,4.8c1.2-1.6,2.6-2.2,4.2-1.8c0.913,0.228,1.565,0.89,2.288,1.624 c1.177,1.194,2.538,2.576,5.512,2.576c3.2,0,5.2-1.6,6-4.8c-1.2,1.6-2.6,2.2-4.2,1.8c-0.913-0.228-1.565-0.89-2.288-1.624 C10.337,13.382,8.976,12,6.001,12z"/>
                       </svg>
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-[#38BDF8] border border-white/30 text-slate-900 font-mono font-bold text-[9px] shadow-md">
+                        Stitch
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">Design System</h4>
-                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Tailwind CSS • Stitch</p>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">Design System</h4>
+                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Tailwind CSS • Google Stitch UI</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-[var(--accent-yellow)]/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#38BDF8] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-[var(--accent-yellow)]/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#38BDF8] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-[var(--accent-yellow)]">Design System</span>
-                      <span className="text-[10px] font-mono bg-[var(--accent-yellow)]/15 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/30 px-1.5 py-0.5 rounded font-bold">
-                        Stitch
+                      <span className="font-bold text-sm text-[#38BDF8]">Design Tokens &amp; Temas</span>
+                      <span className="text-[10px] font-mono bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40 px-2 py-0.5 rounded-full font-bold">
+                        4 Temas
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      Interface baseada no projeto <strong>Google Stitch</strong> (sqleditor) com <strong>Tailwind CSS</strong>, suportando modo escuro neon e modo claro otimizado com alto contraste.
+                      Arquitetura visual baseada no <strong>Google Stitch</strong> (sqleditor) com <strong>Tailwind CSS</strong>. Suporte dinâmico a 4 paletas completas: Dark Neon, Light Studio, Bege Editorial e Grafite Industrial.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    Tailwind CSS • Google Stitch • Material Icons
+                    Tailwind CSS • Google Stitch • Material Symbols
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 6. IA e Orquestração - Flip Card */}
-            <div className="group [perspective:1000px] h-64 sm:h-60 w-full cursor-pointer">
-              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-xl">
+            {/* 6. IA & Engenharia Multi-Agente - Google Antigravity & DeepMind (Flip Card) */}
+            <div className="group [perspective:1000px] h-72 sm:h-64 w-full cursor-pointer">
+              <div className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] rounded-2xl">
                 {/* FRENTE */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-5 bg-[var(--bg-secondary)] border border-[var(--border-color)] group-hover:border-cyan-400/50 [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-lg transition-colors">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-surface)]/90 backdrop-blur-md border border-[var(--border-color)] group-hover:border-[#4285F4] [backface-visibility:hidden] flex flex-col items-center justify-between text-center shadow-xl transition-all">
                   <div className="w-full flex items-center justify-between text-[10px] font-mono">
-                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold">Antigravity</span>
+                    <span className="bg-[#4285F4]/15 text-[#4285F4] border border-[#4285F4]/40 px-2 py-0.5 rounded-full font-bold">DEEPMIND AGENTS</span>
                     <span className="text-[var(--text-muted)] flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">touch_app</span> Virar
                     </span>
                   </div>
-                  <div className="flex flex-col items-center gap-2.5 my-auto">
-                    {/* Logotipo Google Antigravity / AI */}
-                    <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-9 h-9" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/>
+                  <div className="flex flex-col items-center gap-3 my-auto">
+                    {/* Logotipo Autêntico Google Antigravity 4 Cores */}
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#1E293B] via-[#0F172A] to-[#1E1E38] border-2 border-indigo-400/70 shadow-[0_0_24px_rgba(99,102,241,0.45)] flex items-center justify-center relative group-hover:scale-110 transition-transform">
+                      <svg className="w-12 h-12" viewBox="0 0 48 48" fill="none">
+                        <path d="M24 4L29 17L42 22L29 27L24 40L19 27L6 22L19 17L24 4Z" fill="url(#google-grad)"/>
+                        <circle cx="38" cy="10" r="4" fill="#34A853"/>
+                        <circle cx="10" cy="38" r="3" fill="#FBBC05"/>
+                        <defs>
+                          <linearGradient id="google-grad" x1="6" y1="4" x2="42" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#4285F4"/>
+                            <stop offset="0.33" stopColor="#EA4335"/>
+                            <stop offset="0.66" stopColor="#FBBC05"/>
+                            <stop offset="1" stopColor="#34A853"/>
+                          </linearGradient>
+                        </defs>
                       </svg>
+                      <div className="absolute -bottom-2 -right-2 px-1.5 py-0.5 rounded-md bg-indigo-600 border border-white/30 text-white font-mono font-bold text-[9px] shadow-md">
+                        Antigravity
+                      </div>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">IA &amp; Engenharia</h4>
-                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Google Antigravity • AG Kit</p>
+                      <h4 className="font-extrabold text-sm sm:text-base text-[var(--text-primary)]">IA &amp; Engenharia</h4>
+                      <p className="text-xs text-[var(--text-secondary)] font-mono mt-0.5">Google Antigravity • Multi-Agentes</p>
                     </div>
                   </div>
-                  <div className="text-[11px] font-mono text-cyan-400/80 flex items-center gap-1">
+                  <div className="text-[11px] font-mono text-[#4285F4] flex items-center gap-1">
                     <span>↺ Veja as especificações</span>
                   </div>
                 </div>
 
                 {/* VERSO */}
-                <div className="absolute inset-0 w-full h-full rounded-xl p-4 bg-[var(--bg-surface)] border border-cyan-400/50 [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-xl">
+                <div className="absolute inset-0 w-full h-full rounded-2xl p-5 bg-[var(--bg-secondary)] border border-[#4285F4] [backface-visibility:hidden] [transform:rotateY(180deg)] flex flex-col justify-between shadow-2xl">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-cyan-400">IA &amp; Engenharia</span>
-                      <span className="text-[10px] font-mono bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold">
-                        Antigravity
+                      <span className="font-bold text-sm text-[#4285F4]">Google Antigravity</span>
+                      <span className="text-[10px] font-mono bg-[#4285F4]/20 text-[#4285F4] border border-[#4285F4]/40 px-2 py-0.5 rounded-full font-bold">
+                        AG Kit 2.0
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                      Desenvolvido e orquestrado no <strong>Google Antigravity</strong> com protocolo multi-agente de autorrecuperação determinística e conformidade pedagógica SENAI.
+                      Orquestrado através de agentes especializados (Orquestrador, Frontend Specialist, Database Architect) operando com ciclo rigoroso de autorrecuperação e conformidade SENAI Ourinhos.
                     </p>
                   </div>
                   <div className="pt-2 border-t border-[var(--border-color)] text-[11px] font-mono text-[var(--text-muted)]">
-                    Google Antigravity • AG Kit • DeepMind
+                    Google Antigravity • DeepMind • Pair Programming
                   </div>
                 </div>
               </div>

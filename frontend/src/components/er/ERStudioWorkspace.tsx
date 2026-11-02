@@ -757,12 +757,14 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
       {!isPresentationMode && (
         <div
           data-print-hide
-          className={`shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex flex-wrap items-center justify-between gap-2 ${
-            isSplitPreview ? 'px-3 py-1.5' : 'px-4 py-2.5'
+          className={`shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-between ${
+            isSplitPreview
+              ? 'flex-nowrap overflow-x-auto no-scrollbar px-2 py-1 gap-1.5'
+              : 'flex-wrap px-4 py-2.5 gap-2'
           }`}
         >
           {/* Esquerda: Seletor de Fonte (Banco Ativo vs Script Ao Vivo) + Seletor de Banco */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={`flex items-center ${isSplitPreview ? 'flex-nowrap gap-1 shrink-0' : 'flex-wrap gap-2'}`}>
             {!isSplitPreview && (
               <div className="flex items-center gap-2 mr-1">
                 <span className="material-symbols-outlined text-[#FF6B00] text-[20px]">
@@ -781,26 +783,26 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                   type="button"
                   onClick={() => setSourceMode('active-db')}
                   title="Renderiza o esquema real instanciado no motor AlaSQL (dados reais, contagens e Live Data Peek)"
-                  className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                  className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
                     sourceMode === 'active-db'
                       ? 'bg-[#FF6B00] text-white shadow-sm'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[13px]">database</span>
+                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[11px]' : 'text-[13px]'}`}>database</span>
                   <span>Banco Ativo</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSourceMode('live-script')}
                   title="Renderiza em tempo real enquanto você digita no editor (estilo LiveSchema, sem precisar executar)"
-                  className={`px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
+                  className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-md flex items-center gap-1 cursor-pointer transition-colors ${
                     sourceMode === 'live-script'
                       ? 'bg-[#FF6B00] text-white shadow-sm'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[13px]">bolt</span>
+                  <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[11px]' : 'text-[13px]'}`}>bolt</span>
                   <span>Script Ao Vivo</span>
                 </button>
               </div>
@@ -810,7 +812,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 type="button"
                 onClick={() => setModesHelpOpen(true)}
                 title="Entenda a diferença didática entre Banco Ativo e Script Ao Vivo"
-                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[#FF6B00] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+                className={`${isSplitPreview ? 'p-0.5' : 'p-1'} rounded-md text-[var(--text-muted)] hover:text-[#FF6B00] hover:bg-[var(--bg-surface)] transition-colors cursor-pointer`}
               >
                 <span className="material-symbols-outlined text-[15px]">help</span>
               </button>
@@ -824,7 +826,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                     setSelectedDb(e.target.value);
                     onSelectDatabase?.(e.target.value);
                   }}
-                  className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg px-2.5 py-1 text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                  className={`bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg ${isSplitPreview ? 'px-1.5 py-0.5 text-[11px] max-w-[110px]' : 'px-2.5 py-1 text-xs'} font-mono text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]`}
                 >
                   {schemas.length === 0 ? (
                     <option value="">Nenhum banco ativo</option>
@@ -863,13 +865,15 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
               </div>
             )}
 
-            <span className="text-[11px] font-mono text-[var(--text-muted)] hidden md:inline">
-              {tables.length} ent • {relationships.length} rel
-            </span>
+            {!isSplitPreview && (
+              <span className="text-[11px] font-mono text-[var(--text-muted)] hidden md:inline">
+                {tables.length} ent • {relationships.length} rel
+              </span>
+            )}
           </div>
 
           {/* Direita: Saúde/Linter, Compartilhar #z., Salvar Modelo e 5 Exportadores */}
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center ${isSplitPreview ? 'flex-nowrap gap-1 shrink-0' : 'gap-1.5'}`}>
             {/* Badge de Saúde do Esquema */}
             <button
               type="button"
@@ -882,7 +886,7 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 setInspectorTab('linter');
               }}
               title="Ver auditoria completa do Linter Pedagógico (PK/FK e 1FN–3FN)"
-              className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
+              className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} rounded-lg border font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
                 lintIssues.length === 0
                   ? 'bg-[var(--status-success)]/10 border-[var(--status-success)]/40 text-[var(--status-success)]'
                   : errorCount > 0
@@ -890,10 +894,10 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                   : 'bg-[#FF6B00]/10 border-[#FF6B00]/40 text-[#FF6B00]'
               }`}
             >
-              <span className="material-symbols-outlined text-[14px]">
+              <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[12px]' : 'text-[14px]'}`}>
                 {lintIssues.length === 0 ? 'verified' : 'warning'}
               </span>
-              <span className="hidden sm:inline">
+              <span className={isSplitPreview ? 'hidden xl:inline' : 'hidden sm:inline'}>
                 {lintIssues.length === 0 ? 'Íntegro' : `${lintIssues.length} alerta(s)`}
               </span>
             </button>
@@ -904,9 +908,9 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
               onClick={handleShareSchemaUrl}
               disabled={tables.length === 0}
               title="Gerar link comprimido #z. para compartilhar este modelo sem servidor"
-              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] disabled:opacity-40 border border-[var(--border-color)] text-xs font-medium text-[var(--text-primary)] flex items-center gap-1 cursor-pointer"
+              className={`${isSplitPreview ? 'p-1 text-[11px]' : 'px-2.5 py-1 text-xs'} rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] disabled:opacity-40 border border-[var(--border-color)] font-medium text-[var(--text-primary)] flex items-center gap-1 cursor-pointer`}
             >
-              <span className="material-symbols-outlined text-[14px] text-[#29B6F6]">
+              <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[13px]' : 'text-[14px]'} text-[#29B6F6]`}>
                 share
               </span>
               {!isSplitPreview && <span className="hidden lg:inline">Link #z.</span>}
@@ -937,11 +941,12 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 type="button"
                 onClick={() => setExportMenuOpen((v) => !v)}
                 disabled={tables.length === 0}
-                className="px-2.5 py-1 rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                className={`${isSplitPreview ? 'px-1.5 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'} rounded-lg bg-[#FF6B00] hover:bg-[#FF8533] disabled:opacity-40 text-white font-bold flex items-center gap-1 cursor-pointer shadow-sm`}
+                title="Exportar diagrama (PNG, SVG, Mermaid, JSON, DDL)"
               >
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                {!isSplitPreview && <span>Exportar</span>}
-                <span className="material-symbols-outlined text-[13px]">expand_more</span>
+                <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[12px]' : 'text-[14px]'}`}>download</span>
+                <span className={isSplitPreview ? 'text-[10px]' : ''}>Exportar</span>
+                <span className={`material-symbols-outlined ${isSplitPreview ? 'text-[11px]' : 'text-[13px]'}`}>expand_more</span>
               </button>
 
               {exportMenuOpen && (
@@ -1066,9 +1071,9 @@ export const ERStudioWorkspace: React.FC<ERStudioWorkspaceProps> = ({
                 type="button"
                 onClick={onExpandToFullStudio}
                 title="Abrir no Estúdio DER Completo com Inspetor Visual, Áreas e Notas"
-                className="p-1.5 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] cursor-pointer"
+                className="p-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] cursor-pointer flex items-center justify-center"
               >
-                <span className="material-symbols-outlined text-[15px]">open_in_full</span>
+                <span className="material-symbols-outlined text-[14px]">open_in_full</span>
               </button>
             )}
           </div>

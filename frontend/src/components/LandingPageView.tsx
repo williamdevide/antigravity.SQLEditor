@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { APP_VERSION } from '../config/version';
 import { ER_TEMPLATES_CATALOG } from '../data/erTemplatesCatalog';
 import { parseLiveSqlSchema } from '../services/liveSqlSchemaParser';
@@ -250,9 +250,20 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
 
-  const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({
-    'v3.2.4': true,
-  });
+  const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({});
+
+  // Suporte a fechar modal do logo com ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsLogoModalOpen(false);
+      }
+    };
+    if (isLogoModalOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isLogoModalOpen]);
 
   // Miniaturas vetoriais vivas dos 3 primeiros templates curados para vitrine da Home
   const featuredTemplates = useMemo(() => {
@@ -421,11 +432,19 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => onOpenView('guide-feedback')}
-              className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-[var(--text-secondary)] hover:text-[#FF6B00] hover:bg-[var(--bg-hover)] border border-transparent hover:border-[var(--border-color)] transition-colors cursor-pointer"
-              title="Guia Rápido, Atalhos & Feedback"
+              onClick={() => onOpenView('guide')}
+              className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-[var(--text-secondary)] hover:text-[#29B6F6] hover:bg-[var(--bg-hover)] border border-transparent hover:border-[var(--border-color)] transition-colors cursor-pointer"
+              title="Guia Rápido & Treinamentos em Vídeo"
             >
-              <span className="material-symbols-outlined text-[18px]">help_center</span>
+              <span className="material-symbols-outlined text-[18px]">menu_book</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenView('feedback')}
+              className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-[var(--text-secondary)] hover:text-[#00E676] hover:bg-[var(--bg-hover)] border border-transparent hover:border-[var(--border-color)] transition-colors cursor-pointer"
+              title="Feedback & Suporte ao Desenvolvedor"
+            >
+              <span className="material-symbols-outlined text-[18px]">chat</span>
             </button>
 
             <button
@@ -529,13 +548,37 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         )}
       </header>
 
-      {/* 2. Hero Section */}
-      <section className="pt-16 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm text-xs font-mono font-medium text-[var(--text-secondary)] mb-6">
-          <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse shadow-[0_0_8px_#00E676]" />
-          <span>
-            v{APP_VERSION} · Central da Disciplina de Banco de Dados · 100% Offline-First
-          </span>
+      {/* 2. Hero Section com Background Futurista de Malha Vetorial */}
+      <section
+        style={{ backgroundImage: "url('/backgrounds/bg-database-mesh.svg')" }}
+        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative bg-contain bg-center bg-no-repeat"
+      >
+        {/* Barra superior de status e Logo Milkfed com fundo semi-transparente */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--bg-surface)]/80 backdrop-blur-md border border-[var(--border-color)] shadow-sm text-xs font-mono font-medium text-[var(--text-secondary)]">
+            <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse shadow-[0_0_8px_#00E676]" />
+            <span>v{APP_VERSION} · Central da Disciplina de Banco de Dados · 100% Offline-First</span>
+          </div>
+
+          {/* Logo Milkfed com Fundo Semi-Transparente na Seção Hero */}
+          <button
+            type="button"
+            onClick={() => setIsLogoModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 hover:bg-black/60 dark:bg-zinc-900/40 dark:hover:bg-zinc-900/70 backdrop-blur-md border border-white/10 hover:border-[#FF6B00]/70 text-xs font-mono text-[var(--text-primary)] shadow-md hover:shadow-[0_0_15px_rgba(255,107,0,0.35)] transition-all cursor-zoom-in group"
+            title="Desenvolvido por Milkfed Devs && Reqs Lords • Clique para ver detalhes institucionais"
+          >
+            <div className="w-5 h-5 rounded-full bg-white/10 p-0.5 flex items-center justify-center overflow-hidden">
+              <img
+                src="/logo-milkfed.png"
+                alt="Milkfed Devs && Reqs Lords"
+                className="w-full h-full object-contain drop-shadow-[0_2px_4px_rgba(255,107,0,0.5)] group-hover:scale-110 transition-transform"
+              />
+            </div>
+            <span className="text-[11px] font-semibold text-zinc-300 group-hover:text-white transition-colors">
+              Milkfed <span className="text-[#FF6B00]">&amp;&amp;</span> Reqs Lords
+            </span>
+            <span className="material-symbols-outlined text-[13px] text-[#FF6B00]">zoom_in</span>
+          </button>
         </div>
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-[var(--text-primary)] leading-[1.08] mb-6">
@@ -551,7 +594,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <strong className="text-[var(--text-primary)]">1FN–3FN</strong> e desafios práticos autocorrigíveis.
         </p>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 mb-12">
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
           <button
             onClick={onOpenEditor}
             className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#FF6B00] hover:bg-[#FF8533] text-white text-sm font-bold shadow-[0_0_24px_rgba(255,107,0,0.45)] hover:shadow-[0_0_32px_rgba(255,107,0,0.7)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
@@ -563,7 +606,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 
           <button
             onClick={() => onOpenView('er-diagram')}
-            className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-sm font-semibold transition-all hover:border-[#FF6B00]/60 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-sm font-semibold transition-all hover:border-[#29B6F6]/60 cursor-pointer shadow-sm"
             type="button"
           >
             <span className="material-symbols-outlined text-[18px] text-[#29B6F6]">
@@ -574,13 +617,36 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 
           <button
             onClick={() => onOpenView('gallery')}
-            className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-sm font-semibold transition-all hover:border-[var(--status-success)]/60 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border-color)] text-sm font-semibold transition-all hover:border-[var(--status-success)]/60 cursor-pointer shadow-sm"
             type="button"
           >
             <span className="material-symbols-outlined text-[18px] text-[var(--status-success)]">
               school
             </span>
             <span>Galeria &amp; Desafios</span>
+          </button>
+        </div>
+
+        {/* Links Rápidos para Guia Rápido e Feedback */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-10 text-xs">
+          <button
+            type="button"
+            onClick={() => onOpenView('guide')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-surface)]/80 hover:bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#29B6F6] text-[var(--text-secondary)] hover:text-[#29B6F6] transition-all shadow-sm cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px] text-[#29B6F6]">menu_book</span>
+            <span className="font-semibold">Guia Rápido &amp; Vídeos de Treinamento</span>
+            <span className="text-[10px] font-mono text-[var(--text-muted)]">#guia</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenView('feedback')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-surface)]/80 hover:bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#00E676] text-[var(--text-secondary)] hover:text-[#00E676] transition-all shadow-sm cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px] text-[#00E676]">send</span>
+            <span className="font-semibold">Feedback &amp; Canal Direto</span>
+            <span className="text-[10px] font-mono text-[var(--text-muted)]">#feedback</span>
           </button>
         </div>
 
