@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-[46px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-2.5 sm:px-3 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] z-30 select-none transition-colors">
+    <header className="h-[46px] bg-[var(--bg-surface)] text-[var(--text-primary)] px-2.5 sm:px-3 flex items-center justify-between border-b border-[var(--border-color)] shadow-[0_1px_8px_rgba(0,0,0,0.25)] relative z-50 select-none transition-colors">
       {/* Brand & Main Hamburger Menu */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Menu Hambúrguer ao lado esquerdo do logo */}
@@ -202,7 +202,8 @@ export const Header: React.FC<HeaderProps> = ({
         {activeView === 'workspace' && (
           <>
             {/* Executar Split Button com Setinha Dropdown */}
-            <div className="relative inline-flex items-stretch rounded shadow-[0_0_14px_rgba(255,107,0,0.4)]">
+            <div className={`relative inline-flex items-stretch rounded shadow-[0_0_14px_rgba(255,107,0,0.4)] ${runDropdownOpen ? "z-[60]" : ""}`}>
+
               {/* Botão Principal: Executar Tudo (Ctrl+Enter) */}
               <button
                 onClick={onRunQuery}

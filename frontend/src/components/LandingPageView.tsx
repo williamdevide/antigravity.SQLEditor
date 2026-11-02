@@ -567,11 +567,19 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         )}
       </header>
 
-      {/* 2. Hero Section com Background Futurista de Malha Vetorial */}
+      {/* 2. Hero Section com Background do Logo Milkfed Semitransparente */}
       <section
-        style={{ backgroundImage: "url('/backgrounds/bg-database-mesh.svg')" }}
-        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative bg-cover bg-center rounded-3xl my-6 border border-[var(--border-color)]/60 shadow-xl"
+        className="pt-14 pb-12 px-4 sm:px-6 max-w-5xl mx-auto text-center relative rounded-3xl my-6 border border-[var(--border-color)]/60 shadow-xl overflow-hidden bg-[var(--bg-surface)]/75 backdrop-blur-md"
       >
+        {/* Marca d'água / Background Logo Milkfed Semitransparente */}
+        <div
+          className="absolute inset-0 bg-center bg-no-repeat bg-contain pointer-events-none opacity-20 dark:opacity-25 scale-90 sm:scale-75 transition-opacity"
+          style={{ backgroundImage: "url('/logo-milkfed.png')" }}
+        />
+        {/* Glow Radial para contraste e leitura nítida */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_15%,_var(--bg-surface)_90%)] pointer-events-none" />
+
+        <div className="relative z-10">
         {/* Barra superior de status e Logo Milkfed com fundo semi-transparente */}
         <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--bg-surface)]/80 backdrop-blur-md border border-[var(--border-color)] shadow-sm text-xs font-mono font-medium text-[var(--text-secondary)]">
@@ -695,6 +703,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               7 Camadas Interativas
             </div>
           </div>
+        </div>
         </div>
       </section>
 

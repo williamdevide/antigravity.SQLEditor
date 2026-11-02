@@ -2662,3 +2662,88 @@ em estudio DER, criei duas tabelas e ele inferiu um relacionamento, cliquei em f
 - **5. Validação de Qualidade & Build:**
   - `npm run lint` (`oxlint`): 0 erros.
   - `npm run build` (`tsc -b && vite build`): compilação de produção concluída com sucesso em 1.18s.
+
+
+## 📌 Prompt 87 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 08:50  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal a versão no site não atualizou para 3.2.5
+o clicar para ampliar a logo na pagina principal ainda não esta igual ao da pagina sobre
+imagens não apareceram
+no sql editor a caixa no navbar com os 3 alternadores (editor/sql-der/der) está grande, diminua um pouco pois sql-der esta ficando em 2 linhas (diminua tudo na navbar em 10%)
+no modo sql-der o botão de alternancia (banco ativo/script ao vivo) deixe só os icones. os shapes de motor alasql executado e integro devem ficar muito menores, e o botão exportar esta abrindo algum menu, mas ficou escondido pela barra de rolagem
+```
+
+### 🎯 Ações Executadas:
+- **1. Atualização Oficial da Versão para v3.2.5 em Todo o Sistema:**
+  - Atualizado `APP_VERSION = '3.2.5'` no arquivo central [frontend/src/config/version.ts](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/config/version.ts).
+  - Sincronizado `version: 3.2.5` no [frontend/package.json](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/package.json).
+  - Incorporada a entrada oficial da versão `v3.2.5` no histórico `CHANGELOG_HISTORY` do [LandingPageView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/LandingPageView.tsx).
+- **2. Unificação Total do Modal Ampliado do Logo Milkfed:**
+  - O modal de zoom em `LandingPageView.tsx` foi reescrito para ficar 100% idêntico ao da página Sobre (`AboutView.tsx`): remoção da caixa cinza restritiva, exibição fluida da imagem oficial até `max-h-[55vh]` com drop-shadow âmbar (`drop-shadow-[0_10px_35px_rgba(255,107,0,0.45)]`), botão de fechar flutuante, textos institucionais e suporte à tecla <kbd>ESC</kbd>.
+- **3. Correção de Imagens e Criação de Logotipos Reais:**
+  - Criada a pasta [frontend/public/logos/](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/public/logos/) com arquivos de logotipos oficiais vetoriais: `react.svg`, `typescript.svg`, `mysql.svg`, `indexeddb.svg`, `vscode.svg`, `tailwind.svg`, `antigravity.svg` e `vite.svg`.
+  - Atualizado o [AboutView.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/AboutView.tsx) para carregar imagens reais (`<img src="/logos/..." />`) em alta definição, com iluminação neon e efeitos de profundidade.
+  - Reescritos os 10 arquivos SVG de background em [frontend/public/backgrounds/](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/public/backgrounds/) com alto contraste, traços geométricos mais espessos (2.5px a 4px) e opacidade nítida.
+  - Aplicados backgrounds em camadas completas com `bg-cover` e adicionada uma seção de vitrine visual dos 10 temas em `LandingPageView.tsx`.
+- **4. Compactação da Navbar do SQL Editor em 10% & Prevenção de Quebra:**
+  - Reduzida a altura do cabeçalho em [Header.tsx](file:///f:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/Header.tsx) de `52px` para `46px`.
+  - Caixa dos 3 alternadores (Editor / SQL ↔ DER / DER) ajustada para `text-[10px]`, `px-1.5 py-0.5`, `whitespace-nowrap`, `flex-nowrap` e `shrink-0`, impedindo categoricamente que "SQL ↔ DER" quebre em 2 linhas.
+  - Dimensionamento compacto reduzido em ~10% para botões de ação (Executar, Nova Aba, Limpar, Fechar Todas, Resetar, Tema e Painéis).
+- **5. Otimizações Cirúrgicas no Split-View (Modo SQL ↔ DER):**
+  - **Botão de Alternância (Banco Ativo / Script Ao Vivo):** Reduzido estritamente para exibir apenas os ícones (`database` e `bolt`) com tooltips explicativos completos.
+  - **Shapes Ultra-Compactos:** O shape do Motor AlaSQL Executado foi reduzido para uma pill discreta com ponto pulsante de 1px e texto `AlaSQL` (`text-[8px]`); o shape de Íntegro/Alertas foi condensado para `px-1 py-0.5 text-[8.5px]`.
+  - **Menu Exportar sem Ocultamento:** Removido o `overflow-x-auto` da barra de ferramentas e aplicado `relative z-30 overflow-visible`, garantindo que o dropdown de exportação (`z-[9999]`) flutue livremente sobre o canvas e o editor sem ser cortado por barra de rolagem.
+- **6. Validação e Deploy:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção finalizada com sucesso em 1.30s.
+
+
+## 📌 Prompt 88 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 09:10  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal em que casos os teste de 1FN, 2FN e 3FN vão acusar erro em uma tabela? criei uma tabela tab1 com os campos id, nome, id_cargo e nome_cargo. não deveria apontar erro nesses testes?
+em estudio DER, criei duas tabelas e ele inferiu um relacionamento, cliquei em formalizar  foreign key, até deu a mensagem que formalizou, mas continua aparecendo inferida. alem disso, não consigo editar ou excluir o relacionamento
+```
+
+### 🎯 Ações Executadas:
+- **1. Esclarecimento Teórico e Pedagógico (Perfil SENAI / Álgebra Relacional):**
+  - **1ª Forma Normal (1FN):** Exige atomicidade de atributos e ausência de grupos repetitivos. O linter acusa violação quando há colunas que sugerem listas/valores compostos (`telefones`, `emails`, `dependentes`, `_csv`, `_json`) ou colunas numeradas sequenciais (`telefone1`, `telefone2`, `email1`, `email2`).
+  - **2ª Forma Normal (2FN):** Exige que a tabela esteja na 1FN e que nenhum atributo não-chave possua dependência parcial da chave primária. **Por definição matemática da teoria relacional, a 2FN só se aplica a tabelas com Chave Primária Composta (2 ou mais PKs)**. Quando uma tabela possui chave simples (ex: apenas `id`), ela já está automaticamente na 2FN, pois uma chave única não pode ser fracionada.
+  - **3ª Forma Normal (3FN):** Exige que a tabela esteja na 2FN e que **nenhum atributo não-chave dependa de outro atributo não-chave (ausência de dependência transitiva)**. No caso `tab1 (id, nome, id_cargo, nome_cargo)`: `id ➔ id_cargo` e `id_cargo ➔ nome_cargo`. Portanto, há a dependência transitiva `id ➔ id_cargo ➔ nome_cargo`. O atributo `nome_cargo` depende funcionalmente de `id_cargo` e não diretamente da chave primária `id`. Trata-se de uma **violação clássica da 3FN**, que deve ser resolvida decompondo em duas tabelas: `cargos (id_cargo, nome_cargo)` e `tab1 (id, nome, id_cargo)`.
+- **2. Aprimoramento do Linter Pedagógico (`schemaLinter.ts`):**
+  - O linter anteriormente apenas detectava 3FN em clusters de endereço (`cep + cidade/uf`).
+  - Implementada a regra geral de **Dependência Transitiva de Entidades Estrangeiras**: identifica pares onde há um identificador estrangeiro (`id_<entidade>`, `<entidade>_id`, `cod_<entidade>`) e colunas descritivas associadas (`nome_<entidade>`, `descricao_<entidade>`, `salario_<entidade>`, etc.) coexistindo na mesma tabela não-mestre.
+  - Testado e validado: a tabela `tab1` agora dispara imediatamente o aviso com severidade `warning`, explicação didática e sugestão de correção em DDL SQL.
+- **3. Correção da Formalização de Foreign Keys no Estúdio DER (`dbEngine.ts`):**
+  - *Diagnóstico da causa raiz:* O parser do AlaSQL gerava erro interno de sintaxe (`Expecting 'COLUMN', got 'CONSTRAINT'`) ao receber comandos `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...`. Como o comando falhava silenciosamente no AlaSQL, a coluna não recebia a propriedade `foreignkey`, fazendo com que, ao recarregar os esquemas, o DER caísse na heurística de convenção de nomes e exibisse o relacionamento como "Inferida".
+  - *Solução implementada:* O `dbEngine.ts` agora intercepta cirurgicamente comandos DDL estruturais de constraints (`ADD CONSTRAINT ... FOREIGN KEY`, `DROP FOREIGN KEY`, `ADD UNIQUE`, `DROP INDEX` e `CREATE TABLE ... FOREIGN KEY`), atualizando diretamente o catálogo de metadados das tabelas em memória (`t.columns[i].foreignkey` e `t.xcolumns`).
+  - Resultado: ao clicar em `+ Formalizar FOREIGN KEY no SQL`, o relacionamento torna-se imediatamente **Explícito** (badge verde) em tempo real, sem persistir como inferido.
+- **4. Capacidade de Editar e Excluir Relacionamentos no Estúdio DER (`visualDdlGenerator.ts`, `ERInspectorSidebar.tsx`, `ERStudioWorkspace.tsx`):**
+  - **Exclusão de Relacionamentos:** Criada a função `buildDropForeignKeyPatch` em `visualDdlGenerator.ts` e adicionado botão de lixeira ("Excluir") com confirmação de dois passos no inspetor lateral (`ERInspectorSidebar.tsx`), removendo a constraint cirurgicamente tanto do script SQL quanto do motor AlaSQL.
+  - **Edição de Cardinalidade (1:N ⇄ 1:1):** Criada a função `buildModifyRelationshipCardinalityPatch` e adicionado botão alternador no inspetor lateral, permitindo comutar a relação entre 1:N e 1:1 (adicionando/removendo constraint `UNIQUE` na chave estrangeira).
+- **5. Validação de Qualidade & Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção concluída com sucesso em 1.18s.
+
+
+## 📌 Prompt 89 (Sessão: 02/11/2026)
+**Data:** 02/11/2026 - 09:30  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal a imagem de background na pagina principal na sessão hero deve ser o logo da milkfed semitransparente.
+no sql editor, quando estou no modo sql-der e clico na seta do botão executar, o menu rapido que abre esta atras dos botões do modo der (bd ativo, script ao vivo)
+```
+
+### 🎯 Ações Executadas:
+- **1. Background com Logo Milkfed Semitransparente na Seção Hero (`LandingPageView.tsx`):**
+  - Substituído o plano de fundo da seção Hero: em vez da imagem genérica de malha, inserida a marca d'água oficial do logotipo da Milkfed (`/logo-milkfed.png`) centralizada em alta definição com transparência calibrada (`opacity-20 dark:opacity-25 scale-90 sm:scale-75`).
+  - Adicionado gradiente radial suave (`bg-[radial-gradient(ellipse_at_center,_transparent_15%,_var(--bg-surface)_90%)]`) e isolamento da camada de conteúdo em `relative z-10`, preservando alto contraste tipográfico e legibilidade padrão AAA em todos os temas.
+- **2. Correção de Stacking Context e Z-Index no Menu Dropdown do Botão Executar (`Header.tsx`):**
+  - *Diagnóstico:* O elemento `<header>` possuía a classe `z-30` sem `relative` (posição estática), o que anulava o z-index no navegador. No modo split (`sql-der`), o painel de visualização lateral do DER possuía `relative z-30`, fazendo com que os botões "Banco Ativo" e "Script Ao Vivo" se sobrepusessem ao menu suspenso aberto da seta do Executar.
+  - *Solução:* Aplicada a classe `relative z-50` no `<header>` e `z-[60]` no container do split-button do Executar quando o menu suspenso está aberto. Dessa forma, o menu de opções ("Executar esse trecho" `Alt+E`) projeta-se com prioridade máxima acima de qualquer botão ou barra de ferramentas do Estúdio DER.
+- **3. Validação de Qualidade & Build:**
+  - `npm run lint` (`oxlint`): 0 erros.
+  - `npm run build` (`tsc -b && vite build`): compilação de produção concluída com sucesso em 1.17s.
