@@ -1,5 +1,12 @@
 import alasql from 'alasql';
-import { KNOWN_SQL_FUNCTIONS, registerMySQLFunctions, preprocessSqlQuery } from './mysqlFunctions';
+import {
+  KNOWN_SQL_FUNCTIONS,
+  ALASQL_RESERVED_ALIAS_KEYWORDS,
+  registerMySQLFunctions,
+  preprocessSqlQuery,
+  protectReservedAliases,
+  transformSqlCodeSegments
+} from './mysqlFunctions';
 import { parseSqlStatementsWithRanges, extractStatementAtCursor } from './sqlStatementParser';
 import type { DatabaseSchema, SqlReview, ReviewTargetRange } from '../types';
 
@@ -132,24 +139,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 // Aplica transformações apenas em trechos de código SQL real, preservando literais de string, crases e comentários
-function transformCodeSegments(sql: string, transformFn: (codeSegment: string) => string): string {
-  const tokenPattern = /('(?:''|\\'|[^'])*'|"(?:""|\\"|[^"])*"|`[^`]*`|--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)/g;
-  let result = '';
-  let lastIdx = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = tokenPattern.exec(sql)) !== null) {
-    if (match.index > lastIdx) {
-      result += transformFn(sql.slice(lastIdx, match.index));
-    }
-    result += match[0];
-    lastIdx = match.index + match[0].length;
-  }
-  if (lastIdx < sql.length) {
-    result += transformFn(sql.slice(lastIdx));
-  }
-  return result;
-}
+const transformCodeSegments = transformSqlCodeSegments;
 
 export function reviewSqlQuery(
   query: string,
@@ -161,10 +151,6 @@ export function reviewSqlQuery(
   const errorsDetected: string[] = [];
   const recommendations: string[] = [];
 
-  if (runtimeError) {
-    errorsDetected.push(`Erro de Execução (Runtime): ${runtimeError}`);
-  }
-
   if (!trimmed) {
     return {
       originalQuery: query,
@@ -173,6 +159,49 @@ export function reviewSqlQuery(
       recommendations: ['Selecione um trecho de código SQL no editor para revisar.'],
       timestamp: new Date().toLocaleTimeString('pt-BR'),
     };
+  }
+
+  // 0. Diagnóstico de Palavras Reservadas usadas como Aliases de Coluna ou Tabela
+  const unquotedReservedAliases: string[] = [];
+  transformCodeSegments(trimmed, (segment) => {
+    // Cláusula explícita: AS <alias>
+    const asMatches = [...segment.matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b/gi)];
+    for (const m of asMatches) {
+      const w = m[1];
+      if (ALASQL_RESERVED_ALIAS_KEYWORDS.has(w.toLowerCase())) {
+        if (!unquotedReservedAliases.includes(w)) unquotedReservedAliases.push(w);
+      }
+    }
+    // Alias implícito após fechamento de expressão com parênteses: ) <alias>
+    const implicitMatches = [...segment.matchAll(/(\))\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?=,|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|LIMIT\b|;|$)/gi)];
+    for (const m of implicitMatches) {
+      const w = m[2];
+      if (ALASQL_RESERVED_ALIAS_KEYWORDS.has(w.toLowerCase())) {
+        if (!unquotedReservedAliases.includes(w)) unquotedReservedAliases.push(w);
+      }
+    }
+    return segment;
+  });
+
+  if (runtimeError) {
+    if (unquotedReservedAliases.length > 0 && (runtimeError.includes("got 'TOTAL'") || runtimeError.includes('Expecting') || runtimeError.toLowerCase().includes('parse error'))) {
+      errorsDetected.push(
+        `Erro de Execução (Runtime): Conflito sintático com o alias '${unquotedReservedAliases.join(', ')}'. O analisador SQL interpretou o termo como comando interno em vez de identificador de coluna.`
+      );
+    } else {
+      errorsDetected.push(`Erro de Execução (Runtime): ${runtimeError}`);
+    }
+  }
+
+  if (unquotedReservedAliases.length > 0) {
+    for (const alias of unquotedReservedAliases) {
+      errorsDetected.push(
+        `Palavra Reservada em Alias: O identificador '${alias}' é uma palavra-chave reservada pelo analisador SQL. Para utilizá-lo como alias de coluna ou tabela, ele deve ser delimitado com crases (\`${alias}\`).`
+      );
+      recommendations.push(
+        `Envolva o alias '${alias}' com crases (\`${alias}\`), convenção padrão do MySQL/MariaDB para identificadores e aliases que coincidem com palavras reservadas.`
+      );
+    }
   }
 
   // Coleta tabelas e colunas conhecidas para evitar corrigir nomes de tabelas legítimos
@@ -272,7 +301,11 @@ export function reviewSqlQuery(
     }
   } catch (err: any) {
     const msg = err?.message || String(err);
-    if (!errorsDetected.some(e => e.includes(msg)) && fixedTypos.length === 0) {
+    const tblNotExistMatch = msg.match(/Table does not exist:\s*([`'"\w-]+)/i);
+    const tblName = tblNotExistMatch ? tblNotExistMatch[1].replace(/[`'"]/g, '').toLowerCase() : null;
+    const isKnownTable = tblName ? knownTables.has(tblName) : false;
+
+    if (!isKnownTable && !errorsDetected.some(e => e.includes(msg)) && fixedTypos.length === 0) {
       errorsDetected.push(`Erro de Compilação SQL: ${msg}`);
     }
   }
@@ -398,11 +431,20 @@ export function reviewSqlQuery(
     suggested = `${suggested.trimEnd()};`;
   }
 
+  // Protege aliases reservados na sugestão com crases (ex: AS total -> AS `total`)
+  suggested = protectReservedAliases(suggested);
+
   // 9. Validação Final da Sugestão Gerada
   try {
     alasql.parse(preprocessSqlQuery(suggested));
     if (errorsDetected.length > 0) {
-      recommendations.unshift('✓ A consulta sugerida corrigiu os erros detectados e agora compila com sucesso no motor SQL!');
+      if (unquotedReservedAliases.length > 0) {
+        recommendations.unshift(
+          `✓ A consulta sugerida protegeu o(s) alias(es) '${unquotedReservedAliases.map(a => `\`${a}\``).join(', ')}' com crases e compila com 100% de sucesso no motor SQL!`
+        );
+      } else {
+        recommendations.unshift('✓ A consulta sugerida corrigiu os erros detectados e agora compila com sucesso no motor SQL!');
+      }
     }
   } catch {
     // Se ainda não parseou, mantém como está

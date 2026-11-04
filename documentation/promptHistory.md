@@ -2809,3 +2809,52 @@ os videos na sessão de treinamento não correspondem ao layout real da nossa pa
 - **4. Versionamento e Publicação:**
   - `git add` e `git commit` com mensagem padronizada no Conventional Commits.
   - `git push origin main` para sincronizar o repositório remoto.
+
+
+## 📌 Prompt 92 (Sessão: 03/11/2026)
+**Data:** 03/11/2026 - 22:31  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal executei o comando SELECT forma_pagamento, SUM(valor_total) AS total FROM tb_pedidos GROUP BY forma_pagamento; no banco de aula db_ecommerce e apareceu o erro: 
+Parse error on line 1:
+...SUM(valor_total) AS total FROM tb_pedido
+-----------------------^
+Expecting 'LITERAL', 'BRALITERAL', 'KEY', 'OPEN', 'CLOSE', 'SEPARATOR', 'NUMBER', 'STRING', 'NSTRING', got 'TOTAL'
+dai na sugestao de revisao ele me deu o mesmo comando e continua dando erro.
+```
+
+### 🎯 Diagnóstico da Causa Raiz e Soluções Implementadas:
+- **1. Diagnóstico do Conflito de Palavra Reservada (`TOTAL` no AlaSQL):**
+  - O analisador sintático léxico do AlaSQL possui uma série de palavras reservadas internas (`TOTAL`, `COUNT`, `SUM`, `AVG`, `VALUE`, `MATRIX`, `PLAN`, etc.).
+  - Ao declarar um alias de coluna não delimitado por crases (ex: `AS total` ou `) total`), o parser tenta interpretá-lo como token/comando de matriz ou palavra reservada em vez de identificador literal de coluna, gerando o erro de sintaxe:
+    `Expecting 'LITERAL', 'BRALITERAL', 'KEY', 'OPEN', 'CLOSE', 'SEPARATOR', 'NUMBER', 'STRING', 'NSTRING', got 'TOTAL'`.
+- **2. Proteção Automática de Aliases Reservados no Pré-Processador (`mysqlFunctions.ts`):**
+  - Mapeado conjunto `ALASQL_RESERVED_ALIAS_KEYWORDS` com todas as palavras-chave reservadas do motor.
+  - Implementada a função `protectReservedAliases(sql)`:
+    - Envolve automaticamente aliases explícitos (`AS total` ➔ ``AS `total` ``) e implícitos (após parênteses) com crases.
+    - Protege referências subsequentes a esses aliases em cláusulas `ORDER BY`, `GROUP BY` e `HAVING`.
+    - Preserva intactos comentários, strings com aspas simples/duplas e crases já existentes via `transformSqlCodeSegments`.
+  - Integrada a proteção diretamente em `preprocessSqlQuery`, garantindo que queries do usuário executem com sucesso no motor AlaSQL mesmo quando utilizam palavras reservadas do AlaSQL que são válidas no dialeto MySQL.
+- **3. Enriquecimento da Revisão Inteligente de SQL (`sqlReviewer.ts`):**
+  - Detecta se há palavras reservadas sendo utilizadas como alias sem crases.
+  - Se houver erro de runtime associado, contextualiza e explica didaticamente:
+    `Conflito sintático com o alias 'total'. O analisador SQL interpretou o termo como comando interno em vez de identificador de coluna.`
+  - Aponta aviso e recomendação pedagógica clara: envolver com crases (`` `total` ``), convenção padrão do MySQL/MariaDB.
+  - A query sugerida pela Revisão agora aplica automaticamente as crases nos aliases (``AS `total` ``), garantindo que ao clicar em aplicar ou copiar a sugestão, a consulta execute com 100% de sucesso.
+- **4. Testes e Validação:**
+  - Validada a execução da query original `SELECT forma_pagamento, SUM(valor_total) AS total FROM tb_pedidos GROUP BY forma_pagamento;` e da sugestão com crases sobre a base `db_ecommerce`, retornando os 4 agrupamentos de pagamentos com sucesso e 0 erros.
+  - `oxlint`: 0 erros.
+  - `tsc -b && vite build`: compilação de produção concluída com êxito.
+
+## 📌 Prompt 93 (Sessão: 03/11/2026)
+**Data:** 03/11/2026 - 22:49  
+**Usuário:**
+```text
+retome o ultimo comando, cancelei por engano
+```
+
+### 🎯 Ações Executadas:
+- Retomado o fluxo da tarefa anterior imediatamente a partir do ponto exato de interrupção.
+- Corrigida declaração `_` em `mysqlFunctions.ts` para conformidade estrita com o `tsc`.
+- Executadas e aprovadas as baterias de verificação de qualidade (`oxlint` com 0 erros e compilação de produção `tsc -b && vite build` em 1.71s).
+- Atualizado o histórico oficial de prompts em `documentation/promptHistory.md`.

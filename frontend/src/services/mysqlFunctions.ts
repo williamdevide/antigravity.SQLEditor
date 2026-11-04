@@ -170,10 +170,113 @@ export function calculateTimestampDiff(unit: any, d1Val: any, d2Val: any): numbe
 }
 
 /**
+ * Aplica transformações apenas em trechos de código SQL real,
+ * preservando literais de string (aspas simples/duplas), crases existentes e comentários.
+ */
+export function transformSqlCodeSegments(sql: string, transformFn: (codeSegment: string) => string): string {
+  const tokenPattern = /('(?:''|\\'|[^'])*'|"(?:""|\\"|[^"])*"|`[^`]*`|--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)/g;
+  let result = '';
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(sql)) !== null) {
+    if (match.index > lastIdx) {
+      result += transformFn(sql.slice(lastIdx, match.index));
+    }
+    result += match[0];
+    lastIdx = match.index + match[0].length;
+  }
+  if (lastIdx < sql.length) {
+    result += transformFn(sql.slice(lastIdx));
+  }
+  return result;
+}
+
+/**
+ * Conjunto de palavras-chave reservadas do AlaSQL que geram 'Parse error'
+ * quando utilizadas como apelidos (aliases) não delimitados por crases.
+ */
+export const ALASQL_RESERVED_ALIAS_KEYWORDS = new Set<string>([
+  'total', 'count', 'sum', 'avg', 'aggr', 'array',
+  'value', 'values', 'row', 'rows', 'column', 'columns', 'matrix',
+  'plan', 'query', 'explain', 'search', 'pivot', 'unpivot',
+  'dateadd', 'datediff', 'timestampdiff', 'interval',
+  'table', 'database', 'schema', 'schema_name', 'index', 'constraint',
+  'check', 'default', 'null', 'not', 'and', 'or',
+  'case', 'when', 'then', 'else', 'end',
+  'like', 'in', 'between', 'is', 'all', 'any', 'some',
+  'true', 'false', 'regexp', 'glob', 'escape',
+  'order', 'group', 'by', 'where', 'from', 'having',
+  'join', 'inner', 'left', 'right', 'outer', 'cross', 'natural', 'on', 'using',
+  'offset', 'fetch', 'top', 'limit', 'distinct', 'unique',
+  'union', 'intersect', 'except', 'minus',
+  'set', 'to', 'into', 'primary', 'foreign', 'references',
+  'asc', 'desc', 'temporary', 'percent'
+]);
+
+/**
+ * Envolve automaticamente com crases (`...`) apelidos de colunas e tabelas que coincidem
+ * com palavras-chave reservadas do AlaSQL (como `total`, `sum`, `count`, etc.),
+ * garantindo compatibilidade total com o dialeto MySQL e prevenindo erros de parsing.
+ */
+export function protectReservedAliases(sql: string): string {
+  if (!sql) return sql;
+  const definedAliases = new Set<string>();
+
+  // 1. Protege cláusulas explícitas: AS <alias_reservado>
+  let protectedSql = transformSqlCodeSegments(sql, (segment) => {
+    return segment.replace(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b/gi, (match, word, offset, fullStr) => {
+      const lower = word.toLowerCase();
+      // Não protege se for CREATE TABLE/VIEW ... AS SELECT
+      if (lower === 'select') {
+        const prefix = fullStr.slice(0, offset);
+        if (/\bCREATE\s+(?:TABLE|VIEW)\b/i.test(prefix)) return match;
+      }
+      if (ALASQL_RESERVED_ALIAS_KEYWORDS.has(lower)) {
+        definedAliases.add(word);
+        return `AS \`${word}\``;
+      }
+      return match;
+    });
+  });
+
+  // 2. Protege aliases implícitos após fechamento de expressão com parênteses: ) total FROM ou ) total,
+  protectedSql = transformSqlCodeSegments(protectedSql, (segment) => {
+    return segment.replace(/(\))\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?=,|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|LIMIT\b|;|$)/gi, (match, closeParen, word) => {
+      const lower = word.toLowerCase();
+      if (ALASQL_RESERVED_ALIAS_KEYWORDS.has(lower)) {
+        definedAliases.add(word);
+        return `${closeParen} \`${word}\` `;
+      }
+      return match;
+    });
+  });
+
+  // 3. Protege referências subsequentes aos aliases definidos dentro de cláusulas ORDER BY, HAVING e GROUP BY
+  if (definedAliases.size > 0) {
+    protectedSql = transformSqlCodeSegments(protectedSql, (segment) => {
+      let out = segment;
+      for (const alias of definedAliases) {
+        const clauseRegex = /\b(ORDER\s+BY|HAVING|GROUP\s+BY)\b([\s\S]*?)(?=;|--|\/\*|$)/gi;
+        out = out.replace(clauseRegex, (_, clauseName, clauseBody) => {
+          const wordRegex = new RegExp(`(?<!\`)\\b(${alias})\\b(?!\`)`, 'gi');
+          const replacedBody = clauseBody.replace(wordRegex, '`$1`');
+          return `${clauseName}${replacedBody}`;
+        });
+      }
+      return out;
+    });
+  }
+
+  return protectedSql;
+}
+
+/**
  * Pré-processa uma instrução SQL para traduzir funções MySQL incompatíveis com o parser rígido do AlaSQL
  * Ex: DATEDIFF(d1, d2) -> MYSQL_DATEDIFF(d1, d2)
  *     LEFT(col, n) -> MYSQL_LEFT(col, n)
  *     RIGHT(col, n) -> MYSQL_RIGHT(col, n)
+ *     AS total -> AS `total`
  */
 export function preprocessSqlQuery(sql: string): string {
   if (!sql) return sql;
@@ -196,6 +299,9 @@ export function preprocessSqlQuery(sql: string): string {
   // Somente quando seguidas por parênteses (chamada de função, e não cláusulas JOIN)
   res = res.replace(/\bLEFT\s*\(/gi, 'MYSQL_LEFT(');
   res = res.replace(/\bRIGHT\s*\(/gi, 'MYSQL_RIGHT(');
+
+  // 3. Protege palavras reservadas do AlaSQL usadas como apelidos (aliases) de colunas ou tabelas
+  res = protectReservedAliases(res);
 
   return res;
 }
