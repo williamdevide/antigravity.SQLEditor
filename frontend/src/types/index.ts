@@ -158,14 +158,16 @@ export type ActiveView =
   | 'profile'
   | 'admin-panel';
 
-export type UserRole = 'admin' | 'aluno';
+export type UserRole = 'admin' | 'professor' | 'aluno';
 
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
   role: UserRole;
-  courseOrClass?: string;
+  course?: string;
+  turma?: string;
+  courseOrClass?: string; // Mantido para compatibilidade retroativa
   registrationNumber?: string;
   phone?: string;
   photoURL?: string;

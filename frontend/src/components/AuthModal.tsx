@@ -32,7 +32,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Campos adicionais de Cadastro
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [courseOrClass, setCourseOrClass] = useState('Técnico em Desenvolvimento de Sistemas');
+  const [course, setCourse] = useState('Técnico em Desenvolvimento de Sistemas');
+  const [turma, setTurma] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [phone, setPhone] = useState('');
 
@@ -114,6 +115,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage('Informe um e-mail válido.');
       return;
     }
+    if (!course.trim()) {
+      setErrorMessage('Informe o curso.');
+      return;
+    }
+    if (!turma.trim()) {
+      setErrorMessage('Informe sua turma (ex: TDS-01, 1º Módulo, etc.).');
+      return;
+    }
     if (password.length < 6) {
       setErrorMessage('A senha deve conter no mínimo 6 caracteres.');
       return;
@@ -127,7 +136,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setIsLoading(true);
       await registerWithEmail(email, password, {
         fullName,
-        courseOrClass,
+        course,
+        turma,
+        courseOrClass: `${course} - ${turma}`,
         registrationNumber,
         phone,
       });
@@ -150,9 +161,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSuccessMessage(null);
     try {
       setIsLoading(true);
-      await loginWithGoogle();
+      const profile = await loginWithGoogle();
       onClose();
       if (onAuthSuccess) onAuthSuccess();
+      // Se for aluno autenticado pelo Google e ainda não preencheu turma, redireciona para #perfil
+      if (!profile.turma && profile.role !== 'admin') {
+        window.location.hash = '#perfil';
+      }
     } catch (err: any) {
       console.error('[SQL Editor Firebase Google Auth Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
@@ -482,30 +497,62 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
+              {/* Curso SENAI - Linha Inteira */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Curso SENAI *
+                </label>
+                <div className="relative flex items-center">
+                  <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                    school
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={course}
+                    onChange={(e) => setCourse(e.target.value)}
+                    placeholder="Ex: Técnico em Desenvolvimento de Sistemas"
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs font-medium focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Turma e Matrícula em Grid de 2 Colunas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Turma / Curso SENAI
+                    Turma *
                   </label>
-                  <input
-                    type="text"
-                    value={courseOrClass}
-                    onChange={(e) => setCourseOrClass(e.target.value)}
-                    placeholder="Ex: 2º Módulo TDS"
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
-                  />
+                  <div className="relative flex items-center">
+                    <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
+                      groups
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={turma}
+                      onChange={(e) => setTurma(e.target.value)}
+                      placeholder="Ex: TDS-01 / 2º Módulo"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                     Matrícula (Opcional)
                   </label>
-                  <input
-                    type="text"
-                    value={registrationNumber}
-                    onChange={(e) => setRegistrationNumber(e.target.value)}
-                    placeholder="Ex: 2026-9843"
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
-                  />
+                  <div className="relative flex items-center">
+                    <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
+                      pin
+                    </span>
+                    <input
+                      type="text"
+                      value={registrationNumber}
+                      onChange={(e) => setRegistrationNumber(e.target.value)}
+                      placeholder="Ex: 2026-9843"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -16,7 +16,9 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   isAdmin: boolean;
+  isProfessor: boolean;
   isEmailVerified: boolean;
+  isProfileIncomplete: boolean;
   loading: boolean;
   authModalOpen: boolean;
   authModalInitialTab: AuthModalTab;
@@ -118,6 +120,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return isEmailAdmin || userProfile?.role === 'admin';
   }, [user, userProfile]);
 
+  const isProfessor = useMemo(() => {
+    return userProfile?.role === 'professor';
+  }, [userProfile]);
+
+  const isProfileIncomplete = useMemo(() => {
+    if (!user) return false;
+    // Administrador não exige preenchimento obrigatório de turma de aluno
+    if (isAdmin) return false;
+    // Considera incompleto se não tiver turma informada
+    return !userProfile?.turma || userProfile.turma.trim() === '';
+  }, [user, userProfile, isAdmin]);
+
   const isEmailVerified = useMemo(() => {
     if (!user) return false;
     // Usuários do Google já possuem e-mail verificado
@@ -131,7 +145,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         userProfile,
         isAdmin,
+        isProfessor,
         isEmailVerified,
+        isProfileIncomplete,
         loading,
         authModalOpen,
         authModalInitialTab,

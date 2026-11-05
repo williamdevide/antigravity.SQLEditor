@@ -8,11 +8,12 @@ interface UserProfileViewProps {
 }
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorkspace }) => {
-  const { user, userProfile, isAdmin, isEmailVerified, refreshUserProfile, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, isEmailVerified, refreshUserProfile, logout } = useAuth();
 
   // Campos Editáveis
   const [displayName, setDisplayName] = useState('');
-  const [courseOrClass, setCourseOrClass] = useState('');
+  const [course, setCourse] = useState('Técnico em Desenvolvimento de Sistemas');
+  const [turma, setTurma] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [phone, setPhone] = useState('');
 
@@ -29,7 +30,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
   useEffect(() => {
     if (userProfile) {
       setDisplayName(userProfile.displayName || user?.displayName || '');
-      setCourseOrClass(userProfile.courseOrClass || '');
+      setCourse(userProfile.course || userProfile.courseOrClass || 'Técnico em Desenvolvimento de Sistemas');
+      setTurma(userProfile.turma || '');
       setRegistrationNumber(userProfile.registrationNumber || '');
       setPhone(userProfile.phone || '');
     }
@@ -47,12 +49,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
       setProfileMessage({ type: 'error', text: 'O nome completo não pode ficar em branco.' });
       return;
     }
+    if (!course.trim()) {
+      setProfileMessage({ type: 'error', text: 'O curso deve ser informado.' });
+      return;
+    }
+    if (!turma.trim() && !isAdmin) {
+      setProfileMessage({ type: 'error', text: 'Por favor, informe a sua turma.' });
+      return;
+    }
 
     try {
       setIsSavingProfile(true);
       await updateUserProfileData(user.uid, {
         displayName: displayName.trim(),
-        courseOrClass: courseOrClass.trim(),
+        course: course.trim(),
+        turma: turma.trim(),
+        courseOrClass: turma.trim() ? `${course.trim()} - ${turma.trim()}` : course.trim(),
         registrationNumber: registrationNumber.trim(),
         phone: phone.trim(),
       });
@@ -60,6 +72,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
       setProfileMessage({ type: 'success', text: 'Dados atualizados com sucesso!' });
       setTimeout(() => setProfileMessage(null), 4000);
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Profile Save Error]', err);
       setProfileMessage({
         type: 'error',
         text: 'Erro ao salvar alterações: ' + (err?.message || 'Tente novamente.'),
@@ -119,10 +132,16 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
               className={`px-3 py-1 rounded-full text-xs font-bold border ${
                 isAdmin
                   ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                  : isProfessor || userProfile?.role === 'professor'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                   : 'bg-[#FF6B00]/15 text-[#FF6B00] border-[#FF6B00]/30'
               }`}
             >
-              {isAdmin ? '🛡️ Administrador' : '🎓 Aluno(a) SENAI'}
+              {isAdmin
+                ? '🛡️ Administrador'
+                : isProfessor || userProfile?.role === 'professor'
+                ? '👨‍🏫 Professor'
+                : '🎓 Aluno(a) SENAI'}
             </span>
           </div>
         </div>
@@ -232,6 +251,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
               </div>
             </div>
 
+            {(!userProfile?.turma || userProfile.turma.trim() === '') && !isAdmin && (
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-start gap-3 animate-fadeIn">
+                <span className="material-symbols-outlined text-amber-400 text-[24px] shrink-0 mt-0.5">
+                  info
+                </span>
+                <div className="space-y-1">
+                  <h3 className="font-bold text-sm text-amber-200">
+                    Complete seu cadastro acadêmico SENAI
+                  </h3>
+                  <p className="text-xs text-amber-300/90 leading-relaxed">
+                    Você se autenticou via Google! Para que seus professores possam acompanhar seus desafios práticos e vinculá-lo à sua turma, por favor preencha os campos <strong>Curso</strong>, <strong>Turma</strong> e <strong>Matrícula</strong> abaixo e clique em <em>Salvar Alterações</em>.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {profileMessage && (
               <div
                 className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
@@ -250,7 +285,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Nome Completo
+                  Nome Completo *
                 </label>
                 <input
                   type="text"
@@ -276,30 +311,62 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
                 </span>
               </div>
 
+              {/* Curso SENAI - Linha Inteira */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Curso SENAI *
+                </label>
+                <div className="relative flex items-center">
+                  <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                    school
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={course}
+                    onChange={(e) => setCourse(e.target.value)}
+                    placeholder="Ex: Técnico em Desenvolvimento de Sistemas"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Turma e Matrícula - Grid de 2 Colunas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Turma / Curso SENAI
+                    Turma *
                   </label>
-                  <input
-                    type="text"
-                    value={courseOrClass}
-                    onChange={(e) => setCourseOrClass(e.target.value)}
-                    placeholder="Ex: TDS - Turma A"
-                    className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
-                  />
+                  <div className="relative flex items-center">
+                    <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                      groups
+                    </span>
+                    <input
+                      type="text"
+                      required={!isAdmin}
+                      value={turma}
+                      onChange={(e) => setTurma(e.target.value)}
+                      placeholder="Ex: TDS-01 / 2º Módulo"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                     Matrícula SENAI (Opcional)
                   </label>
-                  <input
-                    type="text"
-                    value={registrationNumber}
-                    onChange={(e) => setRegistrationNumber(e.target.value)}
-                    placeholder="Ex: 2026-9041"
-                    className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
-                  />
+                  <div className="relative flex items-center">
+                    <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                      pin
+                    </span>
+                    <input
+                      type="text"
+                      value={registrationNumber}
+                      onChange={(e) => setRegistrationNumber(e.target.value)}
+                      placeholder="Ex: 2026-9041"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -307,13 +374,18 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                   Telefone / WhatsApp
                 </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(14) 99876-5432"
-                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
-                />
+                <div className="relative flex items-center">
+                  <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                    call
+                  </span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(14) 99876-5432"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  />
+                </div>
               </div>
 
               <div className="pt-2">

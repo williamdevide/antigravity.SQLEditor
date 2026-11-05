@@ -23,6 +23,7 @@ import type { UserProfile, UserRole } from '../types';
 
 // E-mail oficial do Administrador / Professor com privilégios automáticos
 export const ADMIN_EMAIL = 'williamdevide@gmail.com';
+export const DEFAULT_COURSE = 'Técnico em Desenvolvimento de Sistemas';
 
 /**
  * Cria um objeto de perfil padrão seguro caso o Firestore esteja em inicialização ou com regras pendentes
@@ -31,18 +32,25 @@ function createFallbackProfile(
   user: FirebaseUser,
   extraData?: {
     fullName?: string;
+    course?: string;
+    turma?: string;
     courseOrClass?: string;
     registrationNumber?: string;
     phone?: string;
   }
 ): UserProfile {
   const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const course = extraData?.course || extraData?.courseOrClass || DEFAULT_COURSE;
+  const turma = extraData?.turma || '';
+
   return {
     uid: user.uid,
     email: user.email || '',
     displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
     role: isProfessorAdmin ? 'admin' : 'aluno',
-    courseOrClass: extraData?.courseOrClass || '',
+    course,
+    turma,
+    courseOrClass: turma ? `${course} - ${turma}` : course,
     registrationNumber: extraData?.registrationNumber || '',
     phone: extraData?.phone || '',
     photoURL: user.photoURL || '',
@@ -59,6 +67,8 @@ export async function syncUserProfile(
   user: FirebaseUser,
   extraData?: {
     fullName?: string;
+    course?: string;
+    turma?: string;
     courseOrClass?: string;
     registrationNumber?: string;
     phone?: string;
@@ -81,13 +91,18 @@ export async function syncUserProfile(
       return data;
     }
 
+    const course = extraData?.course || extraData?.courseOrClass || DEFAULT_COURSE;
+    const turma = extraData?.turma || '';
+
     // Novo perfil a ser gravado no Firestore
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
       displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
       role: isProfessorAdmin ? 'admin' : 'aluno',
-      courseOrClass: extraData?.courseOrClass || '',
+      course,
+      turma,
+      courseOrClass: turma ? `${course} - ${turma}` : course,
       registrationNumber: extraData?.registrationNumber || '',
       phone: extraData?.phone || '',
       photoURL: user.photoURL || '',
@@ -121,6 +136,8 @@ export async function registerWithEmail(
   pass: string,
   extraData: {
     fullName: string;
+    course?: string;
+    turma?: string;
     courseOrClass?: string;
     registrationNumber?: string;
     phone?: string;

@@ -3006,3 +3006,48 @@ ocorreu um erro no serviço de autenticação. será que falta o firebase.rules 
    - Os erros agora são exibidos com o código específico entre parênteses para diagnóstico imediato e logados com `console.error` detalhado no DevTools (F12).
 4. **Disponibilização do `firestore.rules`:** Regras completas prontas para publicação no Console do Firebase (aba Firestore Database > Regras).
 5. **Compilação e Validação:** `npm run build` validado com 0 erros.
+
+
+## 📌 Prompt 98 (Sessão: 05/11/2026)
+**Data:** 05/11/2026 - 11:00  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal no criar conta deixe nome completo, email, curso (já preenchido por padrão "Técnico em Desenvolvimento de Sistemas" em uma linha inteira), turma, matricula, whatsapp/telefone, senha e confirmar senha. quem cadastrar diretamente pelo google terá de preencher esses dados em Meu Perfil.
+no modo administrador eu quero poder ver todos os usuários cadastrados, filtrando e ordenando por curso, turma, matricula. inclusive no painel administrativo eu posso elevar um usuário ao nivel Professor (que depois terá funções importantes)
+```
+
+### 🎯 Ações Executadas e Resultados (/grill-me & /goal):
+1. **Refinamento e Alinhamento Técnico (/grill-me):**
+   - Definido o fluxo de boas-vindas com direcionamento automático para a tela 'Meu Perfil' para alunos que autenticarem via Google sem turma/matrícula cadastrados.
+   - Definida a interface de gestão de níveis no Painel do Administrador através de menu suspenso (Select com opções Aluno, Professor e Administrador) com feedback visual imediato e proteção para a conta principal do Administrador.
+   - Definida a barra de filtros compostos (busca por texto, filtro por Curso dinâmico, filtro por Turma dinâmico e filtro por Nível) com ordenação interativa de colunas clicáveis (▲/▼).
+2. **Formulário de Cadastro ("Criar Conta"):**
+   - Atualizado o layout em `AuthModal.tsx`:
+     - Nome Completo (linha inteira).
+     - E-mail (linha inteira).
+     - Curso SENAI em largura total pré-preenchido por padrão com `"Técnico em Desenvolvimento de Sistemas"`.
+     - Turma (obrigatória) e Matrícula (opcional) dispostas em grid de duas colunas.
+     - WhatsApp / Telefone (linha inteira).
+     - Senha (mínimo 6 caracteres) e Confirmação de Senha em duas colunas.
+3. **Novo Nível de Acesso: Professor (`role: 'professor'`):**
+   - Atualizados os tipos em `types/index.ts`: `UserRole = 'admin' | 'professor' | 'aluno'`.
+   - Adicionado helper `isProfessor` em `AuthContext.tsx`.
+   - Criados badges visuais dedicados no Cabeçalho (`Header.tsx`), Perfil do Usuário (`UserProfileView.tsx`) e Painel do Administrador (`AdminPanelView.tsx`):
+     - `🛡️ Administrador` (violeta/roxo)
+     - `👨‍🏫 Professor` (esmeralda/verde)
+     - `🎓 Aluno` (laranja/âmbar)
+4. **Painel do Administrador & Gestão Escolar (`AdminPanelView.tsx`):**
+   - Adicionada barra com filtros compostos:
+     - Busca textual em tempo real por nome, e-mail, curso, turma e matrícula.
+     - Dropdown de filtro por Curso populado dinamicamente com os cursos existentes na base.
+     - Dropdown de filtro por Turma populado dinamicamente com as turmas existentes na base.
+     - Dropdown de filtro por Nível (Todos, Alunos, Professores, Administradores).
+   - Implementada ordenação dinâmica por cabeçalhos de coluna clicáveis (com setas ▲ e ▼ para ordenar por Nome, Curso, Turma, Matrícula, Nível e Data de Cadastro).
+   - Implementado seletor interativo em cada linha para o Administrador alterar o papel entre Aluno, Professor e Administrador (com confirmação segura e salvamento direto no Firestore).
+   - Adicionado novo card de métricas para contagem de Professores cadastrados.
+5. **Atualização de Segurança do Firestore (`firestore.rules`):**
+   - Delegado ao subagente especializado `firestore-rules-author` a atualização das regras de segurança.
+   - Validada a permissão de criação e atualização para o papel `'professor'` e campos `'course'` e `'turma'`, mantendo compatibilidade retroativa e bloqueio contra auto-escalada de privilégios.
+6. **Validação de Qualidade e Compilação:**
+   - `oxlint`: 0 erros.
+   - `npm run build`: compilado com 0 erros em 2.25s.

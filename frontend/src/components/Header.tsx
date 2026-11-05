@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
 }) => {
-  const { user, userProfile, isAdmin, openAuthModal, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, openAuthModal, logout } = useAuth();
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -423,7 +423,13 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => onViewChange('profile')}
                 className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] transition-colors cursor-pointer group"
-                title={`Perfil: ${userProfile?.displayName || user.displayName || user.email} (${isAdmin ? 'Administrador' : 'Aluno'})`}
+                title={`Perfil: ${userProfile?.displayName || user.displayName || user.email} (${
+                  isAdmin
+                    ? 'Administrador'
+                    : isProfessor || userProfile?.role === 'professor'
+                    ? 'Professor'
+                    : 'Aluno'
+                })`}
               >
                 <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center text-black font-bold text-[10px] shrink-0">
                   {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
@@ -433,10 +439,18 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
                 <span
                   className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase ${
-                    isAdmin ? 'bg-purple-500/20 text-purple-400' : 'bg-[#FF6B00]/20 text-[#FF6B00]'
+                    isAdmin
+                      ? 'bg-purple-500/20 text-purple-400'
+                      : isProfessor || userProfile?.role === 'professor'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-[#FF6B00]/20 text-[#FF6B00]'
                   }`}
                 >
-                  {isAdmin ? 'Admin' : 'Aluno'}
+                  {isAdmin
+                    ? 'Admin'
+                    : isProfessor || userProfile?.role === 'professor'
+                    ? 'Prof'
+                    : 'Aluno'}
                 </span>
               </button>
 
