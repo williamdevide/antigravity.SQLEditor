@@ -433,3 +433,4 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBackToWorkspac
     </div>
   );
 };
+

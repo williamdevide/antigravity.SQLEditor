@@ -79,3 +79,4 @@ export function getFirebaseErrorMessage(errorCode: string): string {
       return 'Ocorreu um erro no serviço de autenticação. Tente novamente.';
   }
 }
+

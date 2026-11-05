@@ -53,3 +53,4 @@
   - `oxlint`: 0 erros.
   - `tsc -b && vite build`: compilação de produção com 0 erros.
   - Atualização do histórico em `promptHistory.md`.
+

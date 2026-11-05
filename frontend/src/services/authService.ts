@@ -219,3 +219,4 @@ export async function getAllUsers(): Promise<UserProfile[]> {
 export async function updateUserRole(uid: string, newRole: UserRole): Promise<void> {
   await setDoc(doc(db, 'users', uid), { role: newRole, updatedAt: new Date().toISOString() }, { merge: true });
 }
+

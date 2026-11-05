@@ -2939,3 +2939,16 @@ Bloqueio estrito até confirmação: O aluno não acessa a área logada enquanto
 7. **Validação de Qualidade & Compilação:**
    - `oxlint`: 0 erros.
    - `tsc -b && vite build`: bundle de produção compilado com 0 erros em 2.50s.
+
+
+## 📌 Prompt 95 (Sessão: 05/11/2026)
+**Data:** 05/11/2026 - 10:34  
+**Usuário:**
+```text
+a conta do administrador já esta criada?
+```
+
+### 🎯 Esclarecimento Técnico e Instruções de Ativação:
+- Explicado ao usuário o funcionamento do Firebase Authentication: as credenciais de um usuário são criadas no momento em que ele realiza a primeira autenticação ou cadastro.
+- A regra de negócio e os privilégios de Administrador estão 100% configurados no código para o e-mail oficial `williamdevide@gmail.com`.
+- Instruído o método recomendado de ativação em 1 clique: clicar no botão "Logar" / "Entrar" e escolher **"Entrar com a Conta Google"** utilizando `williamdevide@gmail.com`. O Firebase criará a conta instantaneamente com e-mail já validado, concederá `role: 'admin'` e registrará o perfil no Firestore.

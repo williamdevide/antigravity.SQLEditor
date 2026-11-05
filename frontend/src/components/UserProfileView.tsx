@@ -446,3 +446,4 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
     </div>
   );
 };
+
