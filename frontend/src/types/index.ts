@@ -154,7 +154,26 @@ export type ActiveView =
   | 'guide'
   | 'feedback'
   | 'guide-feedback'
-  | 'about';
+  | 'about'
+  | 'profile'
+  | 'admin-panel';
+
+export type UserRole = 'admin' | 'aluno';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  courseOrClass?: string;
+  registrationNumber?: string;
+  phone?: string;
+  photoURL?: string;
+  createdAt: string;
+  updatedAt?: string;
+  emailVerified: boolean;
+  providerId: 'password' | 'google.com' | string;
+}
 
 export type DatabasePreset = 'empty' | 'samples' | 'class';
 

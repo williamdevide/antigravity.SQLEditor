@@ -13,6 +13,10 @@ import { GuideView } from './components/GuideView';
 import { FeedbackView } from './components/FeedbackView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
+import { UserProfileView } from './components/UserProfileView';
+import { AdminPanelView } from './components/AdminPanelView';
+import { AuthModal } from './components/AuthModal';
+import { useAuth } from './context/AuthContext';
 import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
 import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
@@ -82,11 +86,14 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
   if (raw === 'feedback' || raw === 'suporte') return 'feedback';
   if (raw === 'guide-feedback') return 'guide';
   if (raw === 'sobre' || raw === 'about') return 'about';
+  if (raw === 'perfil' || raw === 'profile') return 'profile';
+  if (raw === 'admin' || raw === 'admin-panel' || raw === 'administrador') return 'admin-panel';
   if (raw === 'landing' || raw === 'home') return 'landing';
   return null;
 }
 
 export const App: React.FC = () => {
+  const { authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
@@ -126,6 +133,10 @@ export const App: React.FC = () => {
         window.location.hash = '#guia';
       } else if (view === 'about') {
         window.location.hash = '#sobre';
+      } else if (view === 'profile') {
+        window.location.hash = '#perfil';
+      } else if (view === 'admin-panel') {
+        window.location.hash = '#admin';
       } else if (view === 'landing') {
         history.replaceState(null, '', window.location.pathname + window.location.search);
       }
@@ -1426,6 +1437,10 @@ export const App: React.FC = () => {
             />
           ) : activeView === 'about' ? (
             <AboutView onBackToWorkspace={() => setActiveView('workspace')} />
+          ) : activeView === 'profile' ? (
+            <UserProfileView onBackToWorkspace={() => setActiveView('workspace')} />
+          ) : activeView === 'admin-panel' ? (
+            <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : (
             /* Workspace Principal (Laboratório SQL) */
             <main className="flex-1 flex flex-row overflow-hidden relative">
@@ -1924,6 +1939,13 @@ export const App: React.FC = () => {
         onAction={(sql) => handleNewTab(sql, 'script_contexto.sql')}
         onSelectPreset={handleLoadPreset}
         currentPreset={currentPreset}
+      />
+
+      {/* Modal de Autenticação (Firebase Auth & Cadastro SENAI) */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={closeAuthModal}
+        initialTab={authModalInitialTab}
       />
     </div>
   );

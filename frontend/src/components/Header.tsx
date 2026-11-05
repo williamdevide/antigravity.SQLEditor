@@ -9,6 +9,7 @@ import { NewTabDropdown } from './NewTabDropdown';
 import { MainMenuDropdown, type VisiblePanels } from './MainMenuDropdown';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { APP_VERSION } from '../config/version';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
   activeView: ActiveView;
@@ -59,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
 }) => {
+  const { user, userProfile, isAdmin, openAuthModal, logout } = useAuth();
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -412,6 +414,64 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         )}
+
+        {/* 4. Acesso / Perfil do Aluno e Administrador */}
+        <div className="flex items-center gap-1.5 pl-1.5 border-l border-[var(--border-color)]">
+          {user ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onViewChange('profile')}
+                className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] transition-colors cursor-pointer group"
+                title={`Perfil: ${userProfile?.displayName || user.displayName || user.email} (${isAdmin ? 'Administrador' : 'Aluno'})`}
+              >
+                <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center text-black font-bold text-[10px] shrink-0">
+                  {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
+                </div>
+                <span className="hidden xl:inline font-semibold text-[11px] max-w-[85px] truncate">
+                  {userProfile?.displayName?.split(' ')[0] || 'Perfil'}
+                </span>
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase ${
+                    isAdmin ? 'bg-purple-500/20 text-purple-400' : 'bg-[#FF6B00]/20 text-[#FF6B00]'
+                  }`}
+                >
+                  {isAdmin ? 'Admin' : 'Aluno'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm('Deseja realmente sair da conta?')) {
+                    await logout();
+                  }
+                }}
+                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                title="Sair da Conta"
+              >
+                <span className="material-symbols-outlined text-[16px]">logout</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => openAuthModal('login')}
+                className="px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] font-semibold text-[var(--text-primary)] transition-colors cursor-pointer"
+              >
+                Entrar
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuthModal('register')}
+                className="px-2 py-1 rounded bg-gradient-to-r from-[#FF6B00] to-[#FF8533] hover:brightness-110 text-white text-[11px] font-bold shadow-[0_0_8px_rgba(255,107,0,0.3)] transition-colors cursor-pointer"
+              >
+                Criar Conta
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -5,6 +5,7 @@ import { parseLiveSqlSchema } from '../services/liveSqlSchemaParser';
 import type { ActiveView, ThemeMode } from '../types';
 import { ERThumbnailSvg } from './er/ERThumbnailSvg';
 import { HeroInteractiveERCanvas } from './er/HeroInteractiveERCanvas';
+import { useAuth } from '../context/AuthContext';
 
 interface LandingPageViewProps {
   onOpenEditor: () => void;
@@ -255,6 +256,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onToggleTheme,
   onInstantiateTemplate,
 }) => {
+  const { user, userProfile, openAuthModal, logout } = useAuth();
   const [activeShowcaseTab, setActiveShowcaseTab] = useState<
     'diagram' | 'split' | 'data' | 'model'
   >('diagram');
@@ -393,7 +395,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div
             onClick={onOpenEditor}
             className="flex items-center gap-2 cursor-pointer group"
-            title="Abrir Laboratório SQL"
+            title="Testar Laboratório SQL"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center shadow-[0_0_12px_rgba(255,107,0,0.4)] group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-black font-bold text-[19px]">
@@ -484,14 +486,50 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               </span>
             </button>
 
-            <button
-              onClick={onOpenEditor}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#FF6B00] hover:from-[#FF8533] to-[#FFA726] text-white text-xs font-bold shadow-[0_0_18px_rgba(255,107,0,0.4)] hover:shadow-[0_0_24px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
-              type="button"
-            >
-              <span>Abrir Central</span>
-              <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
-            </button>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenView('profile')}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] transition-all cursor-pointer"
+                  title="Acessar Meu Perfil"
+                >
+                  <span className="w-5 h-5 rounded-full bg-[#FF6B00] text-white text-[10px] font-bold flex items-center justify-center">
+                    {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
+                  </span>
+                  <span className="max-w-[100px] truncate hidden sm:inline">
+                    {userProfile?.displayName || user.displayName || 'Aluno'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={onOpenEditor}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#FF6B00] hover:from-[#FF8533] to-[#FFA726] text-white text-xs font-bold shadow-[0_0_18px_rgba(255,107,0,0.4)] hover:shadow-[0_0_24px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  type="button"
+                >
+                  <span>Laboratório</span>
+                  <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('login')}
+                  className="px-3.5 py-1.5 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] transition-all cursor-pointer"
+                >
+                  Logar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('register')}
+                  className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#FF6B00] hover:from-[#FF8533] to-[#FFA726] text-white text-xs font-bold shadow-[0_0_18px_rgba(255,107,0,0.4)] hover:shadow-[0_0_24px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                >
+                  <span>Criar Conta</span>
+                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                </button>
+              </div>
+            )}
 
             <button
               type="button"
@@ -509,6 +547,54 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         {/* Menu Mobile */}
         {isMobileMenuOpen && (
           <div className="lg:hidden mt-2 p-4 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-xl flex flex-col gap-2.5 text-sm">
+            {user ? (
+              <div className="flex items-center justify-between pb-2 mb-1 border-b border-[var(--border-color)]">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[#FF6B00] text-white text-xs font-bold flex items-center justify-center">
+                    {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[var(--text-primary)]">
+                      {userProfile?.displayName || user.displayName || 'Aluno(a)'}
+                    </p>
+                    <p className="text-[10px] text-[var(--text-muted)] font-mono">{user.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setIsMobileMenuOpen(false);
+                    await logout();
+                  }}
+                  type="button"
+                  className="text-xs text-red-500 font-bold"
+                >
+                  Sair
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 pb-2 mb-1 border-b border-[var(--border-color)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    openAuthModal('login');
+                  }}
+                  className="py-2 text-center rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-bold text-xs"
+                >
+                  Logar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    openAuthModal('register');
+                  }}
+                  className="py-2 text-center rounded-xl bg-[#FF6B00] text-white font-bold text-xs shadow"
+                >
+                  Criar Conta
+                </button>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -627,7 +713,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
             className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#FF6B00] hover:bg-[#FF8533] text-white text-sm font-bold shadow-[0_0_24px_rgba(255,107,0,0.45)] hover:shadow-[0_0_32px_rgba(255,107,0,0.7)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
             type="button"
           >
-            <span>Abrir Laboratório SQL</span>
+            <span>Testar Laboratório SQL</span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </button>
 
@@ -1626,7 +1712,7 @@ CREATE TABLE itens_pedido (
               className="px-8 py-4 rounded-full bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FFA726] text-white text-base font-extrabold shadow-[0_0_30px_rgba(255,107,0,0.5)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
               type="button"
             >
-              Abrir Laboratório SQL →
+              Testar Laboratório SQL →
             </button>
             <button
               onClick={() => onOpenView('gallery')}

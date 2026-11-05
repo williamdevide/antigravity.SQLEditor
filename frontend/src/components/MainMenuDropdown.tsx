@@ -6,6 +6,7 @@ import {
   THEME_OPTIONS,
   FONT_THEME_OPTIONS,
 } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 export interface VisiblePanels {
   sidebar: boolean;
@@ -34,6 +35,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
   fontTheme,
   onFontThemeChange,
 }) => {
+  const { user, userProfile, isAdmin, openAuthModal, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isViewSubmenuOpen, setIsViewSubmenuOpen] = useState(false);
   const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
@@ -672,6 +674,120 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
             )}
           </button>
+
+          {/* ========================================================== */}
+          {/* CATEGORIA 4: 👤 CONTA, PERFIL & ACESSO                      */}
+          {/* ========================================================== */}
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider border-t border-[var(--border-color)]/60 flex items-center justify-between mt-1">
+            <span>👤 Conta &amp; Acesso</span>
+            {user && (
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${isAdmin ? 'bg-purple-500/20 text-purple-400' : 'bg-[#FF6B00]/20 text-[#FF6B00]'}`}>
+                {isAdmin ? 'Admin' : 'Aluno'}
+              </span>
+            )}
+          </div>
+
+          {user ? (
+            <>
+              {/* Meu Perfil */}
+              <button
+                onClick={() => handleNavClick('profile')}
+                className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+                  activeView === 'profile' ? 'bg-[var(--bg-hover)]/70 text-[var(--accent-yellow)] font-semibold' : ''
+                }`}
+                type="button"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-[17px] text-[#FF6B00]">
+                    account_circle
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="leading-tight font-medium">Meu Perfil</span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-normal truncate max-w-[170px]">
+                      {userProfile?.displayName || user.email}
+                    </span>
+                  </div>
+                </div>
+                {activeView === 'profile' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
+                )}
+              </button>
+
+              {/* Painel do Administrador (exclusivo para Admin) */}
+              {isAdmin && (
+                <button
+                  onClick={() => handleNavClick('admin-panel')}
+                  className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+                    activeView === 'admin-panel' ? 'bg-[var(--bg-hover)]/70 text-purple-400 font-semibold' : ''
+                  }`}
+                  type="button"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[17px] text-purple-400">
+                      admin_panel_settings
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="leading-tight font-bold text-purple-400">Painel do Administrador</span>
+                      <span className="text-[10px] text-[var(--text-muted)] font-normal">Permissões &amp; Alunos</span>
+                    </div>
+                  </div>
+                  {activeView === 'admin-panel' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.5)]" />
+                  )}
+                </button>
+              )}
+
+              {/* Desconectar */}
+              <button
+                onClick={async () => {
+                  setIsOpen(false);
+                  closeAllSubmenus();
+                  if (window.confirm('Deseja realmente sair da sua conta no SQLEditor?')) {
+                    await logout();
+                  }
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-red-500/10 text-red-500 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-semibold"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px]">
+                  logout
+                </span>
+                <span>Sair da Conta</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  closeAllSubmenus();
+                  openAuthModal('login');
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px] text-[#FF6B00]">
+                  login
+                </span>
+                <span className="font-medium">Entrar / Logar</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  closeAllSubmenus();
+                  openAuthModal('register');
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-[#FF6B00]/10 text-[#FF6B00] flex items-center gap-2.5 transition-colors cursor-pointer font-bold"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px]">
+                  person_add
+                </span>
+                <span>Criar Conta de Aluno</span>
+              </button>
+            </>
+          )}
 
         </div>
       )}

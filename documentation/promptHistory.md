@@ -2858,3 +2858,84 @@ retome o ultimo comando, cancelei por engano
 - Corrigida declaração `_` em `mysqlFunctions.ts` para conformidade estrita com o `tsc`.
 - Executadas e aprovadas as baterias de verificação de qualidade (`oxlint` com 0 erros e compilação de produção `tsc -b && vite build` em 1.71s).
 - Atualizado o histórico oficial de prompts em `documentation/promptHistory.md`.
+
+
+## 📌 Prompt 94 (Sessão: 05/11/2026)
+**Data:** 05/11/2026 - 09:38  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal iremos implementar uma grande mudança, provavelmente levaremos alguns dias, mas ela não deve impedir o funcionamento atual do sqleditor.
+criei um banco no firebase e já disponibilizei os dados no arquivo .env
+esse banco servirá para os alunos se cadastrarem (esta habilitado o cadastro por email ou usando a conta google).
+quero que o nosso botão atual  "Abrir Laboratorio SQL" já existentes no começo e no final da pagina principal sejá alterados para "Testar Laboratório SQL" e mantem o acesso sem usuário logado.
+O botão Abrir Central no header será substituido por Logar e Criar Conta. crie todas as interfaces para criar conta, logar, recuperar senha (inclusive enviando email de confirmação para o email cadastrado).
+Também deve existir um usuário administrador que terá permissões diferentes dos alunos.
+O laboratorio quando acessado sem usuário continua igual.
+quando acessado pelo administrador terá uma tela de configurações extras e permissões (depois estruturaremos ela)
+quando logado como aluno, deve por enquanto exibir a mesma tela existente, mas no menu hamburguer haverá um item Meu Perfil onde o aluno acessa seu dados pessoais, podendo inclusive alterá-los e inclusive alterar senha se for conta por email normal.
+vamos começar criando essas funções e depois prepararemos as mudanças especificas.
+```
+
+### Resposta do Usuário (Grill-me - Pergunta 1)
+```text
+(Recommended) Por e-mail do Professor e perfil no Firestore: O seu e-mail (williamdevide@gmail.com) assume automaticamente a função de Administrador ao logar/cadastrar, e o papel é persistido no Firestore (coleção 'users', campo role: 'admin' | 'aluno'), permitindo no futuro promover outros professores/monitores.
+```
+
+### Resposta do Usuário (Grill-me - Pergunta 2)
+```text
+Bloqueio estrito até confirmação: O aluno não acessa a área logada enquanto não clicar no link recebido por e-mail, sendo redirecionado para uma tela 'Aguardando Verificação de E-mail'.
+```
+
+### Resposta do Usuário (Grill-me - Pergunta 3)
+```text
+(Recommended) Perfil Educacional SENAI: Nome Completo, E-mail, Turma/Curso (ex: 'Técnico em Desenvolvimento de Sistemas'), Matrícula/Código do Aluno (opcional) e Telefone/WhatsApp (opcional). Permite ao aluno editar tudo (exceto e-mail diretamente e papel de acesso).
+```
+
+### Resposta do Usuário (Grill-me - Pergunta 4)
+```text
+(Recommended) Dois botões no Header ('Entrar' e 'Criar Conta') com Modal Moderno: Botão secundário 'Entrar' e botão em gradiente 'Criar Conta'. Ao clicar, abre modal com abas alternáveis (Login, Cadastro e Recuperação de Senha) com suporte a e-mail/senha e Google. Quando logado, exibe o nome/avatar com badge de perfil e botão 'Sair'.
+```
+
+### Resposta do Usuário (Grill-me - Pergunta 5)
+```text
+(Recommended) Item dedicado 'Painel do Administrador' no Menu Hambúrguer: Exibido exclusivamente para contas com role 'admin', abrindo uma visão completa com estatísticas básicas de usuários, permissões e estrutura modular para as configurações futuras.
+```
+
+### 🎯 Ações Executadas:
+1. **Configuração e Integração do Firebase:**
+   - Instalado o pacote `firebase` no frontend (`npm install firebase`).
+   - Configurado `frontend/vite.config.ts` com `envDir: '../'` e `envPrefix: ['VITE_', 'FIREBASE_']` para carregamento dinâmico das variáveis do `.env`.
+   - Criado serviço `frontend/src/services/firebase.ts` com inicialização Singleton (`auth`, `db` Firestore e `googleProvider`) e tradutor de mensagens de erro em Português do Brasil (`getFirebaseErrorMessage`).
+2. **Serviços de Autenticação e Perfil de Usuário (`authService.ts` & `AuthContext.tsx`):**
+   - Implementadas operações de autenticação: login com e-mail/senha, cadastro com disparo de e-mail de confirmação (`sendEmailVerification`), login com Google (`GoogleAuthProvider`), redefinição de senha (`sendPasswordResetEmail`), alteração de senha e atualização de perfil.
+   - Concedida a permissão de Administrador (`role: 'admin'`) automaticamente para o e-mail do Professor (`williamdevide@gmail.com`) com persistência no Firestore (`users/{uid}`).
+   - Criado `AuthContext.tsx` fornecendo dados do usuário, perfil, flags (`isAdmin`, `isEmailVerified`) e controles do modal de autenticação.
+3. **Modal Moderno Multi-Abas de Autenticação (`AuthModal.tsx`):**
+   - Abas alternáveis:
+     - `Entrar`: login rápido com e-mail/senha ou botão "Entrar com a Conta Google", link para recuperação de senha.
+     - `Criar Conta`: formulário com Nome Completo, E-mail, Turma/Curso SENAI, Matrícula opcional, WhatsApp opcional, Senha e Confirmação, além de botão Google.
+     - `Recuperar Senha`: envio de e-mail de redefinição com instruções claras.
+     - `Confirmação de E-mail`: tela com status e checagem de verificação com botão de reenvio com cooldown de 60s.
+4. **Tela "Meu Perfil" do Aluno (`UserProfileView.tsx`):**
+   - Exibição de avatar com anel gradiente, nome, e-mail, badge de perfil (`Aluno` ou `Admin`) e status de e-mail verificado.
+   - Formulário para atualização de dados pessoais e acadêmicos SENAI (Nome Completo, Turma/Curso, Matrícula, WhatsApp).
+   - Área de segurança com formulário de alteração de senha (para contas com e-mail/senha) e notas de segurança.
+   - Botão para encerramento de sessão (Logout).
+5. **Tela "Painel do Administrador" (`AdminPanelView.tsx`):**
+   - Exclusiva para usuários com papel `admin`.
+   - Métricas: Total de Usuários, Alunos Ativos, Administradores e Status de Conexão com Firestore.
+   - Tabela de gestão de usuários com busca em tempo real (nome, e-mail, turma, matrícula), filtro por papel e botão para alternar permissão entre Aluno e Admin.
+   - Seção de módulos futuros preparada para avaliações e envio de desafios.
+6. **Atualizações na Interface e Preservação do Acesso Aberto:**
+   - **Landing Page (`LandingPageView.tsx`):**
+     - Botões no início (Hero) e no final (CTA) renomeados para **"Testar Laboratório SQL"**, mantendo 100% o funcionamento público sem exigir login.
+     - Botão "Abrir Central" no cabeçalho substituído por **"Logar"** e **"Criar Conta"** (ou pill de perfil do usuário se já estiver autenticado).
+   - **Cabeçalho do Workspace (`Header.tsx`):**
+     - Adicionados botões "Entrar" e "Criar Conta" (quando deslogado) e badge interativo com avatar, nome e papel do usuário (quando logado).
+   - **Menu Hambúrguer (`MainMenuDropdown.tsx`):**
+     - Adicionada seção de Conta com itens **"Meu Perfil"** e **"Painel do Administrador"** (para admins).
+   - **Roteamento (`App.tsx` & `main.tsx`):**
+     - Suporte a rotas `#perfil` e `#admin`, renderização condicional das novas telas e injeção do `<AuthProvider>`.
+7. **Validação de Qualidade & Compilação:**
+   - `oxlint`: 0 erros.
+   - `tsc -b && vite build`: bundle de produção compilado com 0 erros em 2.50s.
