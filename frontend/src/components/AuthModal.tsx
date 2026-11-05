@@ -93,6 +93,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (onAuthSuccess) onAuthSuccess();
       }
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Login Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
     } finally {
       setIsLoading(false);
@@ -136,6 +137,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         'Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.'
       );
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Register Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
     } finally {
       setIsLoading(false);
@@ -152,6 +154,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
       if (onAuthSuccess) onAuthSuccess();
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Google Auth Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
     } finally {
       setIsLoading(false);
@@ -176,6 +179,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         'E-mail de recuperação enviado! Verifique sua caixa de entrada e a pasta de spam.'
       );
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Password Reset Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
     } finally {
       setIsLoading(false);
@@ -191,6 +195,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMessage('Novo e-mail de confirmação enviado com sucesso!');
       setResendCooldown(60);
     } catch (err: any) {
+      console.error('[SQL Editor Firebase Resend Verification Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
     } finally {
       setIsLoading(false);

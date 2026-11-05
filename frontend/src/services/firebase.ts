@@ -49,7 +49,7 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Tradução amigável de erros do Firebase Auth para o Português do Brasil
+// Tradução amigável de erros do Firebase Auth e Firestore para o Português do Brasil
 export function getFirebaseErrorMessage(errorCode: string): string {
   switch (errorCode) {
     case 'auth/user-not-found':
@@ -75,8 +75,23 @@ export function getFirebaseErrorMessage(errorCode: string): string {
       return 'Para realizar esta ação de segurança, faça login novamente no portal.';
     case 'auth/network-request-failed':
       return 'Falha na conexão de rede. Verifique o acesso à internet.';
+    case 'auth/operation-not-allowed':
+      return 'Provedor desativado: ative o método de login (E-mail/Senha ou Google) no Console do Firebase (Authentication > Sign-in method).';
+    case 'auth/unauthorized-domain':
+      return 'Domínio não autorizado: adicione este domínio no Console do Firebase (Authentication > Settings > Authorized domains).';
+    case 'auth/invalid-api-key':
+      return 'Chave de API do Firebase inválida no arquivo .env.';
+    case 'auth/cancelled-popup-request':
+      return 'Abertura de pop-up cancelada devido a outra tentativa simultânea.';
+    case 'permission-denied':
+      return 'Permissão negada no Firestore: configure as Regras de Segurança (Firestore Rules) no console para permitir acesso à coleção users.';
+    case 'unavailable':
+      return 'Serviço do Firebase temporariamente indisponível. Verifique sua conexão.';
     default:
-      return 'Ocorreu um erro no serviço de autenticação. Tente novamente.';
+      if (errorCode) {
+        return `Erro no serviço (${errorCode}). Pressione F12 para inspecionar os detalhes no console.`;
+      }
+      return 'Ocorreu um erro no serviço de autenticação. Verifique as configurações no Console do Firebase.';
   }
 }
 

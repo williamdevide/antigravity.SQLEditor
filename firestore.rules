@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model - SQL Editor Educacional (SENAI)
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (igual ao UID do Firebase Authentication)
+// Fields:
+//   - uid: string (obrigatório, tamanho 1 a 128) - UID do usuário autenticado (imutável)
+//   - email: string (obrigatório, tamanho até 150) - E-mail do usuário (formato de e-mail válido ou vazio)
+//   - displayName: string (obrigatório, tamanho 1 a 100) - Nome completo ou de exibição do usuário
+//   - role: string (obrigatório, valores permitidos: 'admin' | 'aluno') - Papel de acesso do usuário
+//   - courseOrClass: string (opcional, tamanho até 100) - Curso ou turma SENAI do aluno
+//   - registrationNumber: string (opcional, tamanho até 50) - Matrícula acadêmica do aluno
+//   - phone: string (opcional, tamanho até 30) - Telefone ou WhatsApp de contato
+//   - photoURL: string (opcional, tamanho até 1000) - URL do avatar de perfil
+//   - createdAt: string (obrigatório, tamanho até 50) - Data ISO de criação (imutável)
+//   - updatedAt: string (opcional, tamanho até 50) - Data ISO da última atualização
+//   - emailVerified: bool (obrigatório) - Status de confirmação do e-mail
+//   - providerId: string (obrigatório, tamanho até 50) - Identificador do provedor de login (ex: 'password', 'google.com')
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Verifica se a requisição é de um usuário autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Verifica se o usuário autenticado é o dono do documento (pelo userId da rota)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verifica se o usuário autenticado é o Administrador Bootstrap (Professor)
+    function isBootstrapAdmin() {
+      return isAuthenticated() &&
+        'email' in request.auth.token &&
+        request.auth.token.email == 'williamdevide@gmail.com';
+    }
+
+    // Verifica se o usuário autenticado possui role 'admin' gravada no Firestore
+    function isDocAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
+    }
+
+    // Verifica privilégios de administrador (Bootstrap ou Role de Documento)
+    function isAdmin() {
+      return isBootstrapAdmin() || isDocAdmin();
+    }
+
+    // Valida formato de e-mail básico
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    // Validação estrita de tipo e limites do perfil de usuário
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'emailVerified', 'providerId']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'courseOrClass', 'registrationNumber', 'phone', 'photoURL', 'createdAt', 'updatedAt', 'emailVerified', 'providerId']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() <= 150 && (data.email.size() == 0 || isValidEmail(data.email)) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.role is string && (data.role == 'admin' || data.role == 'aluno') &&
+        (!('courseOrClass' in data) || (data.courseOrClass is string && data.courseOrClass.size() <= 100)) &&
+        (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.size() <= 50)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+        data.createdAt is string && data.createdAt.size() <= 50 &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+        data.emailVerified is bool &&
+        data.providerId is string && data.providerId.size() <= 50;
+    }
+
+    // ===============================================================
+    // Coleção: users/{userId}
+    // ===============================================================
+    match /users/{userId} {
+      // Leitura individual: o próprio usuário ou o administrador
+      allow get: if isOwner(userId) || isAdmin();
+
+      // Listagem da coleção: exclusivo para o Administrador (Painel do Administrador)
+      // Evita enumeração e vazamento de dados de contato (PII) dos alunos
+      allow list: if isAdmin();
+
+      // Criação de perfil no cadastro / login
+      // - O usuário só pode criar o documento com o seu próprio UID (userId == request.auth.uid)
+      // - Usuários comuns só podem ser cadastrados com o papel 'aluno'
+      // - Apenas administradores bootstrap/existentes podem criar documento com papel 'admin'
+      allow create: if isAuthenticated() &&
+                       isOwner(userId) &&
+                       request.resource.data.uid == userId &&
+                       isValidUser(request.resource.data) &&
+                       (
+                         request.resource.data.role == 'aluno' ||
+                         (request.resource.data.role == 'admin' && isAdmin())
+                       );
+
+      // Atualização de perfil
+      // - Administrador pode atualizar qualquer perfil (inclusive alterar o papel 'role')
+      // - Usuário comum só pode atualizar seu próprio perfil e NÃO pode alterar seu papel ('role')
+      // - Campos imutáveis para integridade: uid e createdAt nunca podem ser alterados
+      // - Usuário comum também não pode adulterar email ou providerId do perfil
+      allow update: if isAuthenticated() &&
+                       isValidUser(request.resource.data) &&
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           isOwner(userId) &&
+                           request.resource.data.role == resource.data.role &&
+                           request.resource.data.email == resource.data.email &&
+                           request.resource.data.providerId == resource.data.providerId
+                         )
+                       );
+
+      // Exclusão de perfil: apenas Administradores (evita auto-exclusão acidental ou perda de rastreabilidade)
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Bloqueio Padrão (Default Deny)
+    // ===============================================================
+    // Bloqueia leitura e escrita em qualquer outra coleção não autorizada
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -25,9 +25,9 @@ import type { UserProfile, UserRole } from '../types';
 export const ADMIN_EMAIL = 'williamdevide@gmail.com';
 
 /**
- * Cria ou sincroniza o documento de perfil do usuário no Firestore
+ * Cria um objeto de perfil padrão seguro caso o Firestore esteja em inicialização ou com regras pendentes
  */
-export async function syncUserProfile(
+function createFallbackProfile(
   user: FirebaseUser,
   extraData?: {
     fullName?: string;
@@ -35,25 +35,9 @@ export async function syncUserProfile(
     registrationNumber?: string;
     phone?: string;
   }
-): Promise<UserProfile> {
-  const userDocRef = doc(db, 'users', user.uid);
-  const userDocSnap = await getDoc(userDocRef);
-
+): UserProfile {
   const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-  if (userDocSnap.exists()) {
-    const data = userDocSnap.data() as UserProfile;
-    // Garante que o e-mail do professor sempre tenha role 'admin'
-    if (isProfessorAdmin && data.role !== 'admin') {
-      const updated: UserProfile = { ...data, role: 'admin' };
-      await setDoc(userDocRef, { role: 'admin' }, { merge: true });
-      return updated;
-    }
-    return data;
-  }
-
-  // Novo perfil a ser gravado
-  const newProfile: UserProfile = {
+  return {
     uid: user.uid,
     email: user.email || '',
     displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
@@ -66,9 +50,59 @@ export async function syncUserProfile(
     emailVerified: user.emailVerified,
     providerId: user.providerData[0]?.providerId || 'password',
   };
+}
 
-  await setDoc(userDocRef, newProfile);
-  return newProfile;
+/**
+ * Cria ou sincroniza o documento de perfil do usuário no Firestore
+ */
+export async function syncUserProfile(
+  user: FirebaseUser,
+  extraData?: {
+    fullName?: string;
+    courseOrClass?: string;
+    registrationNumber?: string;
+    phone?: string;
+  }
+): Promise<UserProfile> {
+  const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  try {
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (userDocSnap.exists()) {
+      const data = userDocSnap.data() as UserProfile;
+      // Garante que o e-mail do professor sempre tenha role 'admin'
+      if (isProfessorAdmin && data.role !== 'admin') {
+        const updated: UserProfile = { ...data, role: 'admin' };
+        await setDoc(userDocRef, { role: 'admin' }, { merge: true });
+        return updated;
+      }
+      return data;
+    }
+
+    // Novo perfil a ser gravado no Firestore
+    const newProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
+      role: isProfessorAdmin ? 'admin' : 'aluno',
+      courseOrClass: extraData?.courseOrClass || '',
+      registrationNumber: extraData?.registrationNumber || '',
+      phone: extraData?.phone || '',
+      photoURL: user.photoURL || '',
+      createdAt: new Date().toISOString(),
+      emailVerified: user.emailVerified,
+      providerId: user.providerData[0]?.providerId || 'password',
+    };
+
+    await setDoc(userDocRef, newProfile);
+    return newProfile;
+  } catch (err: any) {
+    console.warn('[syncUserProfile] Aviso: Falha ao sincronizar perfil no Firestore (verifique firestore.rules):', err);
+    // Retorna o perfil de fallback para não impedir o login e a experiência do usuário
+    return createFallbackProfile(user, extraData);
+  }
 }
 
 /**

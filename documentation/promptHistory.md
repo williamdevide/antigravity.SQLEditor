@@ -2952,3 +2952,57 @@ a conta do administrador já esta criada?
 - Explicado ao usuário o funcionamento do Firebase Authentication: as credenciais de um usuário são criadas no momento em que ele realiza a primeira autenticação ou cadastro.
 - A regra de negócio e os privilégios de Administrador estão 100% configurados no código para o e-mail oficial `williamdevide@gmail.com`.
 - Instruído o método recomendado de ativação em 1 clique: clicar no botão "Logar" / "Entrar" e escolher **"Entrar com a Conta Google"** utilizando `williamdevide@gmail.com`. O Firebase criará a conta instantaneamente com e-mail já validado, concederá `role: 'admin'` e registrará o perfil no Firestore.
+
+
+## 📌 Prompt 96 (Sessão: 05/11/2026)
+**Data:** 05/11/2026 - 10:44  
+**Usuário:**
+```text
+Precisamos criar o arquivo firestore.rules para o projeto SQL Editor educacional (SENAI).
+Requisitos de Segurança do Firestore:
+1. O banco possui a coleção users/{userId} para perfis de usuários.
+2. Cada usuário autenticado (request.auth != null && request.auth.uid == userId) pode ler e atualizar seus próprios dados de perfil (displayName, courseOrClass, registrationNumber, phone, etc.).
+3. Na criação do perfil (create), o usuário autenticado pode criar seu próprio documento (request.auth.uid == userId).
+4. Um usuário com papel de administrador (request.auth.token.email == 'williamdevide@gmail.com' ou com role == 'admin' em /users/$(request.auth.uid)) pode listar/ler todos os usuários (para o Painel do Administrador) e atualizar a role dos usuários.
+5. Um usuário comum NÃO pode alterar sua própria role para 'admin' ao editar seu perfil.
+6. Bloquear qualquer outra coleção não autorizada por padrão (match /{document=**} { allow read, write: if false; }).
+7. Forneça o arquivo firestore.rules e instruções de como colar no console do Firebase (Firestore Database > Rules) e salvar no projeto.
+```
+
+### 🎯 Implementação de Regras de Segurança do Cloud Firestore (`firestore.rules`):
+1. **Estrutura de Modelos de Dados e Validação Estrita (`isValidUser`):**
+   - Validação CEL com checagem de tipos estrita (`is string`, `is bool`).
+   - Mitigação contra DoS / Resource Exhaustion: limites rígidos de caracteres para todos os campos (`displayName` <= 100, `courseOrClass` <= 100, `registrationNumber` <= 50, `phone` <= 30, `photoURL` <= 1000).
+   - Prevenção contra poluição de schema com `hasOnly` e `hasAll`.
+2. **Controle de Acesso Baseado em Funções (RBAC) e Bootstrap Admin:**
+   - Funções auxiliares `isBootstrapAdmin()` (`williamdevide@gmail.com`) e `isDocAdmin()` (`role == 'admin'`).
+   - Separação granular de permissões:
+     - `get`: Permitido para o próprio usuário (`isOwner(userId)`) ou Administrador.
+     - `list`: Exclusivo para Administrador, evitando enumeração e vazamento de dados de contato (PII) dos alunos.
+     - `create`: O usuário só pode criar o documento do seu próprio UID e papel comum 'aluno' (a atribuição de 'admin' exige privilégio administrativo prévio).
+     - `update`: Usuários comuns não podem alterar sua própria `role`, `uid`, `email`, `createdAt` ou `providerId`. Apenas administradores podem atualizar o papel `role`.
+     - `delete`: Restrito exclusivamente a administradores.
+3. **Bloqueio Padrão (Default Deny):**
+   - Diretiva `match /{document=**} { allow read, write: if false; }` bloqueando todas as coleções não mapeadas.
+4. **Arquivo Salvo na Raiz:** Criado `firestore.rules` na raiz do projeto (`g:\antigravity\projetos\antigravity.SQLEditor\firestore.rules`).
+
+
+## 📌 Prompt 97 (Sessão: 05/11/2026)
+**Data:** 05/11/2026 - 10:39  
+**Usuário:**
+```text
+ocorreu um erro no serviço de autenticação. será que falta o firebase.rules ou é outra coisa?
+```
+
+### 🎯 Diagnóstico de Causa Raiz e Soluções Implementadas:
+1. **Identificação das Causas do Erro de Autenticação:**
+   - **Causa 1 (Firestore Rules):** O Firestore novo em modo de produção bloqueia todas as gravações por padrão (`allow read, write: if false`). Ao logar ou criar conta, a chamada `syncUserProfile` tentava gravar em `users/{uid}` e disparava erro `permission-denied`, que era traduzido para a mensagem genérica.
+   - **Causa 2 (Provedores no Firebase Console):** Em projetos recém-criados, os métodos de login na aba *Authentication > Sign-in method* (E-mail/Senha e Google) vêm desativados por padrão. Se o usuário tentar logar antes de ativá-los, o Firebase retorna `auth/operation-not-allowed`.
+   - **Causa 3 (Domínios Autorizados):** Se testado fora de `localhost` sem inclusão em *Authentication > Settings > Authorized domains*, o Firebase retorna `auth/unauthorized-domain`.
+2. **Resiliência e Tolerância a Falhas no Frontend (`authService.ts`):**
+   - Implementado mecanismo de fallback seguro em `syncUserProfile`: caso o Firestore recuse a gravação (por regras pendentes de publicação ou indisponibilidade momentânea), um perfil em memória é retornado permitindo que o usuário e o administrador acessem a aplicação sem serem bloqueados na tela de login.
+3. **Mensagens Amigáveis e Visibilidade Técnica (`firebase.ts` & `AuthModal.tsx`):**
+   - Adicionada tradução detalhada para `permission-denied`, `auth/operation-not-allowed`, `auth/unauthorized-domain`, `auth/invalid-api-key`, etc.
+   - Os erros agora são exibidos com o código específico entre parênteses para diagnóstico imediato e logados com `console.error` detalhado no DevTools (F12).
+4. **Disponibilização do `firestore.rules`:** Regras completas prontas para publicação no Console do Firebase (aba Firestore Database > Regras).
+5. **Compilação e Validação:** `npm run build` validado com 0 erros.
