@@ -30,10 +30,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
 
   // Campos adicionais de Cadastro
+  const [selectedRole, setSelectedRole] = useState<'aluno' | 'professor'>('aluno');
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [course, setCourse] = useState('Técnico em Desenvolvimento de Sistemas');
   const [turma, setTurma] = useState('');
+  const [classCode, setClassCode] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [phone, setPhone] = useState('');
 
@@ -119,10 +121,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage('Informe o curso.');
       return;
     }
-    if (!turma.trim()) {
-      setErrorMessage('Informe sua turma (ex: TDS-01, 1º Módulo, etc.).');
-      return;
-    }
     if (password.length < 6) {
       setErrorMessage('A senha deve conter no mínimo 6 caracteres.');
       return;
@@ -137,16 +135,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       await registerWithEmail(email, password, {
         fullName,
         course,
-        turma,
-        courseOrClass: `${course} - ${turma}`,
+        turma: selectedRole === 'professor' ? 'Docentes' : turma,
+        courseOrClass: selectedRole === 'professor' ? 'Corpo Docente' : (turma ? `${course} - ${turma}` : course),
         registrationNumber,
         phone,
+        requestedRole: selectedRole,
+        classCode: selectedRole === 'aluno' && classCode.trim() ? classCode.trim().toUpperCase() : undefined,
       });
 
       setTab('verify');
-      setSuccessMessage(
-        'Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.'
-      );
+      if (selectedRole === 'professor') {
+        setSuccessMessage(
+          'Conta de Professor criada! Enviamos um link de confirmação para seu e-mail. Após a confirmação, o Administrador autorizará seu acesso ao Painel de Turmas.'
+        );
+      } else {
+        setSuccessMessage(
+          'Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.'
+        );
+      }
     } catch (err: any) {
       console.error('[SQL Editor Firebase Register Error]', err);
       setErrorMessage(getFirebaseErrorMessage(err?.code || ''));
@@ -459,6 +465,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* 2. ABA DE CADASTRO */}
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-3.5">
+              {/* Seletor Visual de Papel: Aluno vs Professor */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
+                  Tipo de Conta no SQLEditor *
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('aluno')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      selectedRole === 'aluno'
+                        ? 'bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white shadow-[0_2px_8px_rgba(255,107,0,0.35)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[17px]">school</span>
+                    <span>Aluno(a)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('professor')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      selectedRole === 'professor'
+                        ? 'bg-gradient-to-r from-[#29B6F6] to-[#0288D1] text-white shadow-[0_2px_8px_rgba(2,136,209,0.35)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[17px]">co_present</span>
+                    <span>Professor(a)</span>
+                  </button>
+                </div>
+              </div>
+
+              {selectedRole === 'professor' && (
+                <div className="p-3 rounded-xl bg-[#0288D1]/10 border border-[#0288D1]/30 text-xs text-[var(--text-primary)] flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-[#29B6F6] text-[20px] shrink-0 mt-0.5">
+                    verified_user
+                  </span>
+                  <div className="leading-relaxed">
+                    <p className="font-semibold text-[#29B6F6]">Cadastro Docente Pendente de Aprovação</p>
+                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                      Para garantir a segurança acadêmica, novas contas de Professor precisam de autorização de um Administrador. Após a validação, você poderá criar turmas, emitir códigos de acesso e admitir alunos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                   Nome Completo *
@@ -480,7 +533,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  E-mail *
+                  E-mail Institucional ou Pessoal *
                 </label>
                 <div className="relative flex items-center">
                   <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
@@ -491,7 +544,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="aluno@escola.senai.br"
+                    placeholder={selectedRole === 'professor' ? 'professor@escola.senai.br' : 'aluno@escola.senai.br'}
                     className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
                   />
                 </div>
@@ -500,7 +553,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {/* Curso SENAI - Linha Inteira */}
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Curso SENAI *
+                  Curso / Disciplina SENAI *
                 </label>
                 <div className="relative flex items-center">
                   <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
@@ -517,29 +570,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Turma e Matrícula em Grid de 2 Colunas */}
+              {/* Se for Aluno: Turma e Código de Acesso Opcional */}
+              {selectedRole === 'aluno' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                        Turma (Opcional)
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
+                          groups
+                        </span>
+                        <input
+                          type="text"
+                          value={turma}
+                          onChange={(e) => setTurma(e.target.value)}
+                          placeholder="Ex: TDS-01 / 2º Módulo"
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                        Código da Turma (6 dígitos)
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
+                          vpn_key
+                        </span>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={classCode}
+                          onChange={(e) => setClassCode(e.target.value.toUpperCase())}
+                          placeholder="Ex: A8F2K9"
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] font-mono uppercase text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {classCode.trim().length > 0 && (
+                    <p className="text-[11px] text-[var(--text-secondary)] bg-[var(--bg-primary)] p-2 rounded-lg border border-[var(--border-color)]">
+                      💡 Com o código <strong className="text-[#FF6B00] font-mono">{classCode.toUpperCase()}</strong>, sua solicitação de matrícula será enviada diretamente para a aprovação do seu Professor.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Matrícula e Telefone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Turma *
-                  </label>
-                  <div className="relative flex items-center">
-                    <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
-                      groups
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={turma}
-                      onChange={(e) => setTurma(e.target.value)}
-                      placeholder="Ex: TDS-01 / 2º Módulo"
-                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Matrícula (Opcional)
+                    Matrícula {selectedRole === 'professor' ? 'Docente' : 'Escolar'} (Opcional)
                   </label>
                   <div className="relative flex items-center">
                     <span className="material-symbols-outlined absolute left-3 text-[17px] text-[var(--text-muted)]">
@@ -554,23 +638,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     />
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  WhatsApp / Telefone (Opcional)
-                </label>
-                <div className="relative flex items-center">
-                  <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
-                    call
-                  </span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(14) 99876-5432"
-                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
-                  />
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    WhatsApp / Telefone (Opcional)
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                      call
+                    </span>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="(14) 99876-5432"
+                      className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 

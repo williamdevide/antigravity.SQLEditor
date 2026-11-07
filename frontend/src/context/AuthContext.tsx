@@ -17,6 +17,8 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   isAdmin: boolean;
   isProfessor: boolean;
+  isTeacherApproved: boolean;
+  isPendingTeacher: boolean;
   isEmailVerified: boolean;
   isProfileIncomplete: boolean;
   loading: boolean;
@@ -124,13 +126,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return userProfile?.role === 'professor';
   }, [userProfile]);
 
+  const isTeacherApproved = useMemo(() => {
+    if (!user) return false;
+    if (isAdmin) return true;
+    return userProfile?.role === 'professor' && userProfile?.status !== 'pending_approval' && userProfile?.status !== 'rejected';
+  }, [user, isAdmin, userProfile]);
+
+  const isPendingTeacher = useMemo(() => {
+    return userProfile?.role === 'professor' && userProfile?.status === 'pending_approval';
+  }, [userProfile]);
+
   const isProfileIncomplete = useMemo(() => {
     if (!user) return false;
-    // Administrador não exige preenchimento obrigatório de turma de aluno
-    if (isAdmin) return false;
-    // Considera incompleto se não tiver turma informada
-    return !userProfile?.turma || userProfile.turma.trim() === '';
-  }, [user, userProfile, isAdmin]);
+    // Administrador e Professores não exigem preenchimento de turma de aluno
+    if (isAdmin || isProfessor) return false;
+    // O aluno pode ou não pertencer a uma turma (opcional)
+    return false;
+  }, [user, isAdmin, isProfessor]);
 
   const isEmailVerified = useMemo(() => {
     if (!user) return false;
@@ -146,6 +158,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userProfile,
         isAdmin,
         isProfessor,
+        isTeacherApproved,
+        isPendingTeacher,
         isEmailVerified,
         isProfileIncomplete,
         loading,

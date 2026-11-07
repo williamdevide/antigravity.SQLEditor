@@ -3051,3 +3051,135 @@ no modo administrador eu quero poder ver todos os usuários cadastrados, filtran
 6. **Validação de Qualidade e Compilação:**
    - `oxlint`: 0 erros.
    - `npm run build`: compilado com 0 erros em 2.25s.
+
+
+## 📌 Prompt 99 (Sessão: 07/11/2026)
+**Data:** 07/11/2026 - 20:16  
+**Usuário:**
+```text
+/agente-orquestrador /grill-me /goal agora que temos o admin, o professor e o aluno, precisamos começar a elaborar o processo de cadastro.
+o aluno quando se cadastra tem acesso ao sqleditor, mas somente as tarefas que não sejam exclusivas de uma classe (por enquanto tudo que já existe não é exclusivo de uma classe, depois indicaremos quais serão esses casos). o aluno quando se cadastra pode informar o código de uma turma, se não informar ele não faz parte de nehuma turma, se informar um código de turma valido ele fica com o status de aluno pendente de aprovação na turma.
+turma e classe são a mesma coisa.
+no caso de cadastro como professor, o cadastro fica pendente de autorização de um administrador. depois que for autorizado o professor poderá criar turmas (gerando um código de acesso) e terá uma tela para admitir alunos, colocando o email do aluno ou autorizando um que tiver entrado pelo codigo da turma.
+ninguem pode se cadastrar como administrador, mas o administrador pode elevar um professor a administrador se quiser.
+o unico que pode excluir um usuario é o administrador. o professor só pode excluir o aluno de uma turma, mas não da plataforma.
+todos esses eventos de cadastros, autorizações, permissões e afins deverão ter uma tela de histórico de eventos para o administrador verificar, validar e exportar.
+```
+
+### 🎯 Processamento e Ações Executadas (/grill-me & /goal):
+1. **Refinamento e Alinhamento Técnico (/grill-me):**
+   - **Q1 (Seleção de Perfil no Cadastro):** Seletor visual no topo do formulário "Criar Conta" (`AuthModal.tsx`) alternando entre `Aluno(a)` e `Professor(a)`. Para Aluno, exibe campo opcional para código de turma (6 caracteres). Para Professor, alerta informativo sobre análise e autorização obrigatória pelo Administrador.
+   - **Q2 (Código de Acesso da Turma):** Gerador determinístico de 6 caracteres alfanuméricos seguros (`generateClassCode`) sem caracteres ambíguos. O aluno vê em seu perfil o status da matrícula (`✅ Aprovado` ou `⏳ Aguardando aprovação do Professor`).
+   - **Q3 (Painel do Professor - `#turmas`):** Componente dedicado `TeacherPanelView.tsx` para docentes autorizados criarem turmas, copiarem o código de acesso, gerenciarem alunos matriculados, aprovarem/recusarem solicitações pendentes e admitirem alunos diretamente pelo e-mail.
+   - **Q4 (Trilha de Auditoria & Exportação):** Nova aba integrada no Painel do Administrador (`AdminPanelView.tsx`) com filtros por tipo de evento e busca em tempo real, além de botões de exportação imediata em **CSV (Excel com UTF-8 BOM)** e **JSON estruturado**.
+   - **Q5 (Regra de Exclusão):** O professor possui permissão exclusiva para remover o aluno da sua **turma**, mas nunca da plataforma. Somente o **Administrador** possui privilégios para excluir permanentemente um usuário da plataforma.
+
+2. **Novos Tipos e Interfaces (`types/index.ts`):**
+   - Criados tipos `UserStatus = 'active' | 'pending_approval' | 'rejected'`.
+   - Adicionada rota `'teacher-panel'` em `ActiveView`.
+   - Criadas interfaces `ClassItem`, `ClassMemberItem`, `SystemEventType`, `SystemEventItem`.
+   - Expandido `UserProfile` com campos `status`, `classId`, `className`, `classCode` e `classStatus`.
+
+3. **Serviços Criados e Expandidos:**
+   - `services/auditService.ts`: Funções `logSystemEvent`, `getAllSystemEvents`, `getEventTypeLabel`, `exportEventsToCSV` e `exportEventsToJSON`.
+   - `services/classService.ts`: Funções `generateClassCode`, `createClass`, `getClassesByTeacher`, `getAllClasses`, `getClassByCode`, `requestJoinClass`, `admitStudentByEmail`, `approveStudentRequest`, `removeStudentFromClass` e `getClassMembers`.
+   - `services/authService.ts`: Suporte a cadastro de professor com `status: 'pending_approval'`, funções `approveTeacher`, `rejectTeacher`, `deleteUserPermanently` e auditoria universal em todas as ações.
+   - `context/AuthContext.tsx`: Exposição das flags `isTeacherApproved` e `isPendingTeacher`.
+
+4. **Componentes e Interfaces Atualizados:**
+   - `AuthModal.tsx`: Seletor de perfil Aluno/Professor, validação de código de 6 caracteres e fluxo de aprovação pendente.
+   - `TeacherPanelView.tsx`: Criação de turmas com código, lista de matriculados com remoção segura, aprovação de pendentes e admissão por e-mail.
+   - `AdminPanelView.tsx`: Aba de Professores Pendentes com botões Aprovar/Recusar, botão de Excluir Usuário e aba de Histórico de Auditoria com exportação CSV e JSON.
+   - `UserProfileView.tsx`: Exibição do card de turma do aluno, alerta para professor pendente e formulário para entrar em turma por código.
+   - `Header.tsx` & `MainMenuDropdown.tsx`: Atalho "Minhas Turmas" para professores autorizados e rota `#turmas`.
+   - `App.tsx`: Rota `#turmas` mapeada para o `TeacherPanelView`.
+
+5. **Regras de Segurança (`firestore.rules`):**
+   - Delegado ao subagente especializado `firestore-rules-author` a cobertura rigorosa das coleções `users`, `classes`, `class_members` e `system_events`.
+
+6. **Compilação e Validação de Qualidade:**
+   - `tsc -b && vite build`: Sucesso absoluto (**0 erros** de TypeScript e Vite).
+
+
+## 📌 Prompt 100 (Sessão: 07/11/2026 - Subagente firestore-rules-author)
+**Data:** 07/11/2026 - 20:34  
+**Agente Especialista:** `firestore-rules-author` (Firestore Security Rules & Security Architect)  
+**Solicitação:**
+```text
+Atualize o arquivo firestore.rules do projeto SQLEditor para suportar o novo ecossistema acadêmico de Turmas, Professores e Trilha de Auditoria com segurança estrita, sem afetar o acesso existente.
+
+Contexto e Requisitos Específicos:
+1. Coleção `users/{userId}`:
+   - Adicionar os novos campos opcionais ao schema válido (`status`, `classId`, `className`, `classCode`, `classStatus`).
+   - Permitir que no auto-cadastro (`create`), o usuário possa se cadastrar:
+     a) Como aluno: `role == 'aluno'` e `status == 'active'` (ou status não definido/ativo);
+     b) Como professor: `role == 'professor'` e `status == 'pending_approval'`.
+   - Permitir que o Administrador (`isAdmin()`) aprove o professor (atualizando `status` para `'active'`) ou rejeite (`status == 'rejected'`).
+   - Manter a regra onde somente o Administrador pode excluir um documento de usuário (`allow delete: if isAdmin()`).
+   - Permitir que o aluno atualize seus dados de perfil e seus campos de solicitação de turma (`classId`, `className`, `classCode`, `classStatus`).
+   - Permitir que o professor da turma atualize os campos de turma do perfil do aluno ao admitir ou remover da turma.
+
+2. Coleção `classes/{classId}`:
+   - Leitura (`get`, `list`): Qualquer usuário autenticado pode ler classes ativas (para poder buscar por código de acesso de 6 caracteres ou listar turmas do docente).
+   - Criação (`create`): Apenas professores aprovados (`isTeacherApproved`) ou administradores (`isAdmin()`). O campo `teacherId` deve corresponder ao `request.auth.uid`.
+   - Atualização (`update`): O professor dono da turma (`teacherId == request.auth.uid`) ou Administrador.
+   - Exclusão (`delete`): O professor dono da turma ou Administrador.
+
+3. Coleção `class_members/{memberId}`:
+   - Leitura (`get`, `list`): O próprio aluno (`studentUid == request.auth.uid`), o professor da turma ou Administrador.
+   - Criação (`create`): O aluno solicitando entrada com `status == 'pending'` e `studentUid == request.auth.uid`, ou o professor da turma admitindo com `status == 'approved'`, ou Administrador.
+   - Atualização (`update`): O professor da turma aprovando solicitação (`status` alterado para `'approved'`) ou Administrador.
+   - Exclusão (`delete`): O professor da turma removendo o aluno da turma, ou Administrador.
+
+4. Coleção `system_events/{eventId}`:
+   - Leitura (`get`, `list`): Exclusivo para Administrador (`isAdmin()`).
+   - Criação (`create`): Usuário autenticado que está registrando o evento (`authorUid == request.auth.uid`).
+   - Atualização e Exclusão (`update`, `delete`): `false` (imutabilidade estrita do log de auditoria).
+
+5. Mantenha o bootstrap admin para `williamdevide@gmail.com` e a regra de default deny no final.
+6. Atualize o arquivo `firestore.rules` com a documentação do modelo no topo e implemente as regras com a mais alta qualidade.
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Modelagem de Dados e Documentação Formal no Topo:**
+   - Documentado o esquema completo de atributos, tipos, obrigatoriedades e limites de caracteres para todas as 4 coleções: `users/{userId}`, `classes/{classId}`, `class_members/{memberId}` e `system_events/{eventId}`.
+2. **Implementação de Funções Utilitárias e RBAC:**
+   - `isAuthenticated()`: Valida presença de token de autenticação.
+   - `isOwner(userId)`: Valida se o usuário autenticado corresponde ao dono da rota.
+   - `isBootstrapAdmin()`: Valida e-mail de superusuário `williamdevide@gmail.com`.
+   - `isDocAdmin()`: Valida papel `admin` persistido em documento do Firestore.
+   - `isAdmin()`: Unifica bootstrap e papel administrativo.
+   - `isTeacherApproved()`: Verifica se o usuário autenticado possui `role == 'professor'` e `status == 'active'`.
+   - `isClassTeacher(classId)`: Verifica se o usuário autenticado é o docente proprietário da turma informada (`teacherId == request.auth.uid`).
+   - `isTeacherOfUserClass(userDoc)`: Permite que o professor autenticado gerencie os campos de turma no perfil do aluno em fluxos de admissão direta, aprovação ou remoção da turma.
+   - `isValidEmail(email)`: Expressão regular rigorosa para formatos de e-mail.
+3. **Padrão de Funções Validadoras de Domínio (Validator Function Pattern):**
+   - `isValidUser(data)`: Valida todos os campos obrigatórios e novos campos opcionais (`status`, `classId`, `className`, `classCode`, `classStatus`), com controle estrito de chaves (`hasOnly`), tipos primitivos e limites de tamanho contra DoS.
+   - `isValidClass(data)`: Valida campos obrigatórios (`name`, `course`, `code`, `teacherId`, `teacherName`, `teacherEmail`, `createdAt`, `active`), campos opcionais e código de acesso.
+   - `isValidClassMember(data)`: Valida campos do documento de vínculo (`classId`, `classCode`, `className`, `studentUid`, `studentName`, `studentEmail`, `status`, `requestedAt`, `approvedAt`).
+   - `isValidSystemEvent(data)`: Valida eventos do sistema com enumeração estrita de `SystemEventType` e limites de detalhes.
+4. **Regras da Coleção `users/{userId}`:**
+   - `get`: Permitido para o próprio usuário (`isOwner`), professor aprovado (`isTeacherApproved`) ou Administrador (`isAdmin`).
+   - `list`: Restrito a Professores aprovados e Administradores (evita vazamento de PII e raspagem de dados por alunos).
+   - `create`: Suporte a auto-cadastro com `role == 'aluno'` (`status == 'active'`) ou `role == 'professor'` (`status == 'pending_approval'`), e controle pleno para Administradores.
+   - `update`: Imutabilidade estrita de `uid` e `createdAt`. Bloqueio de auto-escalada de privilégios (`role` e `status` inalteráveis pelo usuário). Bloqueio contra auto-aprovação do aluno em turma (`classStatus: 'approved'`). Permissão cirúrgica para o professor responsável atualizar apenas campos de turma (`classId`, `className`, `classCode`, `classStatus`, `turma`, `updatedAt`) via `affectedKeys().hasOnly(...)`.
+   - `delete`: Exclusivo para Administrador (`allow delete: if isAdmin()`).
+5. **Regras da Coleção `classes/{classId}`:**
+   - `get`, `list`: Usuários autenticados (busca de código de acesso de 6 caracteres e consulta pedagógica).
+   - `create`: Apenas professores aprovados ou Administradores, com `teacherId == request.auth.uid`.
+   - `update`: Professor dono da turma ou Administrador, com campos `teacherId`, `code` e `createdAt` imutáveis.
+   - `delete`: Professor dono da turma ou Administrador.
+6. **Regras da Coleção `class_members/{memberId}`:**
+   - `get`: O próprio aluno, o professor da turma ou Administrador.
+   - `list`: Professores aprovados e Administradores para gestão de turmas, além de consultas do próprio aluno.
+   - `create`: O aluno solicitando entrada com `status == 'pending'`, o professor dono admitindo com `status == 'approved'` ou Administrador.
+   - `update`: O professor dono aprovando a solicitação (`status` alterado para `'approved'`) ou Administrador.
+   - `delete`: O professor dono removendo aluno da turma ou Administrador.
+7. **Regras da Coleção `system_events/{eventId}`:**
+   - `get`, `list`: Exclusivo para Administradores (`isAdmin()`).
+   - `create`: Usuário autenticado registrando sua própria ação (`authorUid == request.auth.uid`).
+   - `update`, `delete`: `false` incondicional (imutabilidade estrita e não-repúdio do log de auditoria).
+8. **Bloqueio Padrão (Default Deny):**
+   - Cláusula `match /{document=**} { allow read, write: if false; }` mantida na raiz.
+9. **Compilação e Verificação:**
+   - `tsc -b && vite build` verificado com sucesso (**0 erros** de TypeScript e Vite).

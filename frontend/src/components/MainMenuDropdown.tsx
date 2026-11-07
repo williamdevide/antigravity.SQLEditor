@@ -35,7 +35,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
   fontTheme,
   onFontThemeChange,
 }) => {
-  const { user, userProfile, isAdmin, openAuthModal, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, isTeacherApproved, openAuthModal, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isViewSubmenuOpen, setIsViewSubmenuOpen] = useState(false);
   const [isSettingsSubmenuOpen, setIsSettingsSubmenuOpen] = useState(false);
@@ -681,8 +681,16 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
           <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider border-t border-[var(--border-color)]/60 flex items-center justify-between mt-1">
             <span>👤 Conta &amp; Acesso</span>
             {user && (
-              <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${isAdmin ? 'bg-purple-500/20 text-purple-400' : 'bg-[#FF6B00]/20 text-[#FF6B00]'}`}>
-                {isAdmin ? 'Admin' : 'Aluno'}
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                  isAdmin
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : isProfessor || userProfile?.role === 'professor'
+                    ? 'bg-[#0288D1]/20 text-[#29B6F6]'
+                    : 'bg-[#FF6B00]/20 text-[#FF6B00]'
+                }`}
+              >
+                {isAdmin ? 'Admin' : isProfessor || userProfile?.role === 'professor' ? 'Docente' : 'Aluno'}
               </span>
             )}
           </div>
@@ -712,6 +720,30 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)] shadow-[0_0_6px_var(--glow-yellow)]" />
                 )}
               </button>
+
+              {/* Painel do Professor (exclusivo para Docentes Autorizados) */}
+              {isTeacherApproved && (
+                <button
+                  onClick={() => handleNavClick('teacher-panel')}
+                  className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer ${
+                    activeView === 'teacher-panel' ? 'bg-[var(--bg-hover)]/70 text-[#29B6F6] font-semibold' : ''
+                  }`}
+                  type="button"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[17px] text-[#29B6F6]">
+                      co_present
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="leading-tight font-bold text-[#29B6F6]">Minhas Turmas</span>
+                      <span className="text-[10px] text-[var(--text-muted)] font-normal">Painel do Professor</span>
+                    </div>
+                  </div>
+                  {activeView === 'teacher-panel' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#29B6F6] shadow-[0_0_6px_rgba(41,182,246,0.5)]" />
+                  )}
+                </button>
+              )}
 
               {/* Painel do Administrador (exclusivo para Admin) */}
               {isAdmin && (

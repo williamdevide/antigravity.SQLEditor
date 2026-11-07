@@ -15,6 +15,7 @@ import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
 import { UserProfileView } from './components/UserProfileView';
 import { AdminPanelView } from './components/AdminPanelView';
+import { TeacherPanelView } from './components/TeacherPanelView';
 import { AuthModal } from './components/AuthModal';
 import { useAuth } from './context/AuthContext';
 import { LandingPageView } from './components/LandingPageView';
@@ -88,6 +89,7 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
   if (raw === 'sobre' || raw === 'about') return 'about';
   if (raw === 'perfil' || raw === 'profile') return 'profile';
   if (raw === 'admin' || raw === 'admin-panel' || raw === 'administrador') return 'admin-panel';
+  if (raw === 'turmas' || raw === 'teacher-panel' || raw === 'professor') return 'teacher-panel';
   if (raw === 'landing' || raw === 'home') return 'landing';
   return null;
 }
@@ -137,6 +139,8 @@ export const App: React.FC = () => {
         window.location.hash = '#perfil';
       } else if (view === 'admin-panel') {
         window.location.hash = '#admin';
+      } else if (view === 'teacher-panel') {
+        window.location.hash = '#turmas';
       } else if (view === 'landing') {
         history.replaceState(null, '', window.location.pathname + window.location.search);
       }
@@ -1441,6 +1445,8 @@ export const App: React.FC = () => {
             <UserProfileView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'admin-panel' ? (
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
+          ) : activeView === 'teacher-panel' ? (
+            <TeacherPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : (
             /* Workspace Principal (Laboratório SQL) */
             <main className="flex-1 flex flex-row overflow-hidden relative">

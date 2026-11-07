@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { updateUserProfileData, updateCurrentUserPassword } from '../services/authService';
+import { getClassByCode, requestJoinClass } from '../services/classService';
 import { getFirebaseErrorMessage } from '../services/firebase';
 
 interface UserProfileViewProps {
@@ -8,7 +9,7 @@ interface UserProfileViewProps {
 }
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorkspace }) => {
-  const { user, userProfile, isAdmin, isProfessor, isEmailVerified, refreshUserProfile, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, isPendingTeacher, isEmailVerified, refreshUserProfile, logout } = useAuth();
 
   // Campos Editáveis
   const [displayName, setDisplayName] = useState('');
@@ -16,6 +17,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
   const [turma, setTurma] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [phone, setPhone] = useState('');
+
+  // Código de Turma para Alunos
+  const [joinClassCode, setJoinClassCode] = useState('');
+  const [isJoiningClass, setIsJoiningClass] = useState(false);
+  const [joinClassMessage, setJoinClassMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Campos de Senha
   const [newPassword, setNewPassword] = useState('');
@@ -79,6 +85,50 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
       });
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  // Solicitar entrada na turma via código
+  const handleJoinClassWithCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !userProfile) return;
+    setJoinClassMessage(null);
+
+    const cleanCode = joinClassCode.trim().toUpperCase();
+    if (cleanCode.length < 6) {
+      setJoinClassMessage({
+        type: 'error',
+        text: 'Informe um código de turma válido com 6 caracteres (ex: A8F2K9).',
+      });
+      return;
+    }
+
+    try {
+      setIsJoiningClass(true);
+      const targetClass = await getClassByCode(cleanCode);
+      if (!targetClass) {
+        setJoinClassMessage({
+          type: 'error',
+          text: `Nenhuma turma ativa encontrada com o código [${cleanCode}]. Verifique o código com o seu professor.`,
+        });
+        return;
+      }
+
+      await requestJoinClass({ classItem: targetClass, student: userProfile });
+      await refreshUserProfile();
+      setJoinClassCode('');
+      setJoinClassMessage({
+        type: 'success',
+        text: `Solicitação enviada com sucesso para a turma "${targetClass.name}"! Aguarde a aprovação do(a) professor(a) ${targetClass.teacherName}.`,
+      });
+    } catch (err: any) {
+      console.error('[handleJoinClassWithCode Error]', err);
+      setJoinClassMessage({
+        type: 'error',
+        text: err?.message || 'Falha ao solicitar entrada na turma. Tente novamente.',
+      });
+    } finally {
+      setIsJoiningClass(false);
     }
   };
 
@@ -174,8 +224,39 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
           <div className="flex-1 text-center sm:text-left space-y-2">
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
               <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)]">
-                {userProfile?.displayName || user?.displayName || 'Aluno(a) Sem Nome'}
+                {userProfile?.displayName || user?.displayName || 'Usuário Sem Nome'}
               </h1>
+
+              {/* Badges de Função e Status */}
+              {isAdmin && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 text-[11px] font-bold">
+                  <span className="material-symbols-outlined text-[14px]">shield_person</span>
+                  <span>Administrador</span>
+                </span>
+              )}
+
+              {isProfessor && !isAdmin && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                    isPendingTeacher
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-[#0288D1]/15 border-[#0288D1]/30 text-[#29B6F6]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {isPendingTeacher ? 'hourglass_top' : 'co_present'}
+                  </span>
+                  <span>{isPendingTeacher ? 'Professor (Pendente de Aprovação)' : 'Professor Docente'}</span>
+                </span>
+              )}
+
+              {!isAdmin && !isProfessor && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+                  <span className="material-symbols-outlined text-[14px]">school</span>
+                  <span>Aluno(a)</span>
+                </span>
+              )}
+
               {isEmailVerified && (
                 <span
                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--status-success)]/15 border border-[var(--status-success)]/30 text-[var(--status-success)] text-[11px] font-bold"
@@ -232,6 +313,23 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
             </button>
           </div>
         </div>
+
+        {/* Alerta de Professor Pendente */}
+        {isPendingTeacher && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-200 flex items-start gap-3.5 shadow-lg animate-fadeIn">
+            <span className="material-symbols-outlined text-amber-400 text-[28px] shrink-0 mt-0.5">
+              hourglass_top
+            </span>
+            <div className="space-y-1">
+              <h3 className="font-bold text-sm text-amber-300">
+                Cadastro de Professor(a) em Análise pelo Administrador
+              </h3>
+              <p className="text-xs text-amber-200/90 leading-relaxed">
+                Seu cadastro docente foi registrado com sucesso e está aguardando liberação de um administrador do SENAI. Enquanto isso, seu acesso ao laboratório SQL e às ferramentas de consulta está totalmente liberado. Assim que autorizado, o acesso ao <strong>Painel do Professor</strong> será liberado.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Grade de Configurações do Perfil */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -408,6 +506,111 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
                 </button>
               </div>
             </form>
+
+            {/* Vínculo com Turma / Classe do Aluno */}
+            {userProfile?.role === 'aluno' && (
+              <div className="mt-6 pt-5 border-t border-[var(--border-color)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[#29B6F6] text-[20px]">
+                      groups
+                    </span>
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                      Minha Turma &amp; Matrícula
+                    </h3>
+                  </div>
+                  {userProfile.classStatus === 'approved' && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success)]/15 border border-[var(--status-success)]/30 text-[var(--status-success)] text-[11px] font-bold flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                      <span>Matrícula Aprovada</span>
+                    </span>
+                  )}
+                  {userProfile.classStatus === 'pending' && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px]">schedule</span>
+                      <span>Aguardando Aprovação do Docente</span>
+                    </span>
+                  )}
+                </div>
+
+                {userProfile.classStatus === 'approved' ? (
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-bold text-[var(--text-primary)] text-sm">
+                        {userProfile.className || userProfile.turma}
+                      </p>
+                      <p className="text-[var(--text-secondary)] text-[11px] mt-0.5">
+                        Código de acesso da classe:{' '}
+                        <span className="font-mono font-bold text-[#FF6B00]">
+                          {userProfile.classCode || '---'}
+                        </span>
+                      </p>
+                    </div>
+                    <span className="material-symbols-outlined text-[var(--status-success)] text-[24px]">
+                      school
+                    </span>
+                  </div>
+                ) : userProfile.classStatus === 'pending' ? (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs space-y-1">
+                    <p className="font-bold text-amber-300">
+                      Solicitação enviada para a turma {userProfile.className ? `"${userProfile.className}"` : ''} [{userProfile.classCode}]
+                    </p>
+                    <p className="text-[11px] text-amber-200/80">
+                      Seu pedido de entrada está aguardando aprovação do professor responsável pela turma. O laboratório SQL continua 100% liberado para seus estudos.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Você ainda não está matriculado em nenhuma turma. Se o seu professor compartilhou um código de 6 dígitos (ex: <code className="text-[#FF6B00]">A8F2K9</code>), informe-o abaixo:
+                    </p>
+
+                    {joinClassMessage && (
+                      <div
+                        className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                          joinClassMessage.type === 'success'
+                            ? 'bg-[var(--status-success)]/15 border border-[var(--status-success)]/30 text-[var(--status-success)]'
+                            : 'bg-red-500/15 border border-red-500/30 text-red-500'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[16px] shrink-0">
+                          {joinClassMessage.type === 'success' ? 'check_circle' : 'error'}
+                        </span>
+                        <span>{joinClassMessage.text}</span>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleJoinClassWithCode} className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-[17px] text-[var(--text-muted)]">
+                          vpn_key
+                        </span>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={joinClassCode}
+                          onChange={(e) => setJoinClassCode(e.target.value.toUpperCase())}
+                          placeholder="Código de 6 caracteres (ex: A8F2K9)"
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-primary)] font-mono uppercase text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isJoiningClass || joinClassCode.trim().length < 6}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white font-bold text-xs shadow hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        {isJoiningClass ? (
+                          <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <span className="material-symbols-outlined text-[15px]">send</span>
+                        )}
+                        <span>Entrar na Turma</span>
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Card 2: Segurança & Senha (1 Coluna) */}

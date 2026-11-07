@@ -156,25 +156,84 @@ export type ActiveView =
   | 'guide-feedback'
   | 'about'
   | 'profile'
-  | 'admin-panel';
+  | 'admin-panel'
+  | 'teacher-panel';
 
 export type UserRole = 'admin' | 'professor' | 'aluno';
+export type UserStatus = 'active' | 'pending_approval' | 'rejected';
 
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
   role: UserRole;
+  status?: UserStatus; // 'active' ou 'pending_approval' (para professores aguardando autorização)
   course?: string;
   turma?: string;
   courseOrClass?: string; // Mantido para compatibilidade retroativa
   registrationNumber?: string;
   phone?: string;
   photoURL?: string;
+  classId?: string; // ID da turma vinculada
+  className?: string; // Nome da turma vinculada
+  classCode?: string; // Código de 6 dígitos da turma
+  classStatus?: 'none' | 'pending' | 'approved'; // Status da inscrição na turma
   createdAt: string;
   updatedAt?: string;
   emailVerified: boolean;
   providerId: 'password' | 'google.com' | string;
+}
+
+export interface ClassItem {
+  id: string;
+  name: string;
+  course: string;
+  code: string; // Código de 6 caracteres alfanuméricos (ex: A8F2K9)
+  teacherId: string;
+  teacherName: string;
+  teacherEmail: string;
+  createdAt: string;
+  active: boolean;
+  studentCount?: number;
+  description?: string;
+}
+
+export interface ClassMemberItem {
+  id: string;
+  classId: string;
+  classCode: string;
+  className: string;
+  studentUid: string;
+  studentName: string;
+  studentEmail: string;
+  studentRegistration?: string;
+  status: 'pending' | 'approved';
+  requestedAt: string;
+  approvedAt?: string;
+}
+
+export type SystemEventType =
+  | 'USER_REGISTERED'
+  | 'PROFESSOR_APPROVED'
+  | 'PROFESSOR_REJECTED'
+  | 'CLASS_CREATED'
+  | 'CLASS_STUDENT_REQUESTED'
+  | 'CLASS_STUDENT_APPROVED'
+  | 'CLASS_STUDENT_REMOVED'
+  | 'ROLE_CHANGED'
+  | 'USER_DELETED';
+
+export interface SystemEventItem {
+  id: string;
+  type: SystemEventType;
+  authorUid: string;
+  authorName: string;
+  authorEmail: string;
+  targetUid?: string;
+  targetName?: string;
+  targetEmail?: string;
+  details: string;
+  timestamp: string;
 }
 
 export type DatabasePreset = 'empty' | 'samples' | 'class';

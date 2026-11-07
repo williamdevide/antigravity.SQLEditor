@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
 }) => {
-  const { user, userProfile, isAdmin, isProfessor, openAuthModal, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, isTeacherApproved, openAuthModal, logout } = useAuth();
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -419,6 +419,23 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-1.5 pl-1.5 border-l border-[var(--border-color)]">
           {user ? (
             <div className="flex items-center gap-1">
+              {/* Botão Atalho Painel de Turmas para Professores Autorizados */}
+              {isTeacherApproved && (
+                <button
+                  type="button"
+                  onClick={() => onViewChange('teacher-panel')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    activeView === 'teacher-panel'
+                      ? 'bg-[#0288D1] text-white shadow-[0_0_10px_rgba(2,136,209,0.4)]'
+                      : 'bg-[#0288D1]/15 hover:bg-[#0288D1]/25 text-[#29B6F6] border border-[#0288D1]/30'
+                  }`}
+                  title="Painel do Professor: Criar turmas, emitir códigos e admitir alunos"
+                >
+                  <span className="material-symbols-outlined text-[15px]">co_present</span>
+                  <span className="hidden lg:inline text-[11px]">Minhas Turmas</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => onViewChange('profile')}
@@ -442,14 +459,14 @@ export const Header: React.FC<HeaderProps> = ({
                     isAdmin
                       ? 'bg-purple-500/20 text-purple-400'
                       : isProfessor || userProfile?.role === 'professor'
-                      ? 'bg-emerald-500/20 text-emerald-400'
+                      ? 'bg-[#0288D1]/20 text-[#29B6F6]'
                       : 'bg-[#FF6B00]/20 text-[#FF6B00]'
                   }`}
                 >
                   {isAdmin
                     ? 'Admin'
                     : isProfessor || userProfile?.role === 'professor'
-                    ? 'Prof'
+                    ? 'Docente'
                     : 'Aluno'}
                 </span>
               </button>

@@ -13,41 +13,60 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
   orderBy,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
-import type { UserProfile, UserRole } from '../types';
+import type { UserProfile, UserRole, UserStatus } from '../types';
+import { logSystemEvent } from './auditService';
+import { getClassByCode, requestJoinClass } from './classService';
 
 // E-mail oficial do Administrador / Professor com privilégios automáticos
 export const ADMIN_EMAIL = 'williamdevide@gmail.com';
 export const DEFAULT_COURSE = 'Técnico em Desenvolvimento de Sistemas';
+
+export interface ExtraRegistrationData {
+  fullName?: string;
+  course?: string;
+  turma?: string;
+  courseOrClass?: string;
+  registrationNumber?: string;
+  phone?: string;
+  requestedRole?: 'aluno' | 'professor';
+  classCode?: string;
+}
 
 /**
  * Cria um objeto de perfil padrão seguro caso o Firestore esteja em inicialização ou com regras pendentes
  */
 function createFallbackProfile(
   user: FirebaseUser,
-  extraData?: {
-    fullName?: string;
-    course?: string;
-    turma?: string;
-    courseOrClass?: string;
-    registrationNumber?: string;
-    phone?: string;
-  }
+  extraData?: ExtraRegistrationData
 ): UserProfile {
   const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const course = extraData?.course || extraData?.courseOrClass || DEFAULT_COURSE;
   const turma = extraData?.turma || '';
 
+  let role: UserRole = 'aluno';
+  let status: UserStatus = 'active';
+
+  if (isProfessorAdmin) {
+    role = 'admin';
+    status = 'active';
+  } else if (extraData?.requestedRole === 'professor') {
+    role = 'professor';
+    status = 'pending_approval';
+  }
+
   return {
     uid: user.uid,
     email: user.email || '',
-    displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
-    role: isProfessorAdmin ? 'admin' : 'aluno',
+    displayName: extraData?.fullName || user.displayName || (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor'),
+    role,
+    status,
     course,
     turma,
     courseOrClass: turma ? `${course} - ${turma}` : course,
@@ -65,14 +84,7 @@ function createFallbackProfile(
  */
 export async function syncUserProfile(
   user: FirebaseUser,
-  extraData?: {
-    fullName?: string;
-    course?: string;
-    turma?: string;
-    courseOrClass?: string;
-    registrationNumber?: string;
-    phone?: string;
-  }
+  extraData?: ExtraRegistrationData
 ): Promise<UserProfile> {
   const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
@@ -82,10 +94,10 @@ export async function syncUserProfile(
 
     if (userDocSnap.exists()) {
       const data = userDocSnap.data() as UserProfile;
-      // Garante que o e-mail do professor sempre tenha role 'admin'
-      if (isProfessorAdmin && data.role !== 'admin') {
-        const updated: UserProfile = { ...data, role: 'admin' };
-        await setDoc(userDocRef, { role: 'admin' }, { merge: true });
+      // Garante que o e-mail do superusuário sempre tenha role 'admin' e status 'active'
+      if (isProfessorAdmin && (data.role !== 'admin' || data.status !== 'active')) {
+        const updated: UserProfile = { ...data, role: 'admin', status: 'active' };
+        await setDoc(userDocRef, { role: 'admin', status: 'active' }, { merge: true });
         return updated;
       }
       return data;
@@ -94,18 +106,32 @@ export async function syncUserProfile(
     const course = extraData?.course || extraData?.courseOrClass || DEFAULT_COURSE;
     const turma = extraData?.turma || '';
 
+    let role: UserRole = 'aluno';
+    let status: UserStatus = 'active';
+
+    if (isProfessorAdmin) {
+      role = 'admin';
+      status = 'active';
+    } else if (extraData?.requestedRole === 'professor') {
+      role = 'professor';
+      status = 'pending_approval';
+    }
+
     // Novo perfil a ser gravado no Firestore
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
-      displayName: extraData?.fullName || user.displayName || 'Aluno(a) SQLEditor',
-      role: isProfessorAdmin ? 'admin' : 'aluno',
+      displayName: extraData?.fullName || user.displayName || (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor'),
+      role,
+      status,
       course,
       turma,
       courseOrClass: turma ? `${course} - ${turma}` : course,
       registrationNumber: extraData?.registrationNumber || '',
       phone: extraData?.phone || '',
       photoURL: user.photoURL || '',
+      classCode: extraData?.classCode?.trim().toUpperCase() || '',
+      classStatus: extraData?.classCode ? 'pending' : 'none',
       createdAt: new Date().toISOString(),
       emailVerified: user.emailVerified,
       providerId: user.providerData[0]?.providerId || 'password',
@@ -129,19 +155,12 @@ export async function loginWithEmail(email: string, pass: string): Promise<UserP
 }
 
 /**
- * Realiza o cadastro de um novo aluno com envio imediato de e-mail de verificação
+ * Realiza o cadastro de um novo usuário (Aluno ou Professor) com envio imediato de e-mail de verificação
  */
 export async function registerWithEmail(
   email: string,
   pass: string,
-  extraData: {
-    fullName: string;
-    course?: string;
-    turma?: string;
-    courseOrClass?: string;
-    registrationNumber?: string;
-    phone?: string;
-  }
+  extraData: ExtraRegistrationData
 ): Promise<UserProfile> {
   const cleanEmail = email.trim();
   const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
@@ -162,7 +181,37 @@ export async function registerWithEmail(
     console.warn('Erro ao disparar e-mail de confirmação:', err);
   }
 
-  return syncUserProfile(cred.user, extraData);
+  const profile = await syncUserProfile(cred.user, extraData);
+
+  // Se o aluno forneceu um código de turma válido, tenta vincular a solicitação
+  if (profile.role === 'aluno' && extraData.classCode && extraData.classCode.trim()) {
+    try {
+      const targetClass = await getClassByCode(extraData.classCode.trim());
+      if (targetClass) {
+        await requestJoinClass({ classItem: targetClass, student: profile });
+      }
+    } catch (err) {
+      console.warn('Erro ao associar código de turma no registro:', err);
+    }
+  }
+
+  // Registra no histórico de auditoria
+  try {
+    const isTeacher = profile.role === 'professor';
+    await logSystemEvent({
+      type: 'USER_REGISTERED',
+      authorUid: cred.user.uid,
+      authorName: profile.displayName,
+      authorEmail: cleanEmail,
+      details: isTeacher
+        ? `Cadastro de novo Professor(a) realizado com sucesso (Aguardando autorização de um Administrador).`
+        : `Cadastro de novo Aluno(a) realizado com sucesso${extraData.classCode ? ` com solicitação para turma código [${extraData.classCode.toUpperCase()}].` : '.'}`,
+    });
+  } catch (err) {
+    console.warn('Erro ao auditar cadastro:', err);
+  }
+
+  return profile;
 }
 
 /**
@@ -200,7 +249,7 @@ export async function reloadCurrentUser(): Promise<boolean> {
 }
 
 /**
- * Atualiza os dados do perfil do aluno no Firestore
+ * Atualiza os dados do perfil do usuário no Firestore
  */
 export async function updateUserProfileData(
   uid: string,
@@ -267,7 +316,117 @@ export async function getAllUsers(): Promise<UserProfile[]> {
 /**
  * Altera a permissão / papel de um usuário (Exclusivo para Administrador)
  */
-export async function updateUserRole(uid: string, newRole: UserRole): Promise<void> {
-  await setDoc(doc(db, 'users', uid), { role: newRole, updatedAt: new Date().toISOString() }, { merge: true });
+export async function updateUserRole(
+  uid: string,
+  newRole: UserRole,
+  adminUser?: UserProfile,
+  targetUser?: UserProfile
+): Promise<void> {
+  const updates: Partial<UserProfile> = {
+    role: newRole,
+    status: 'active', // Ao ser promovido ou alterado pelo admin, fica ativo
+    updatedAt: new Date().toISOString(),
+  };
+  await setDoc(doc(db, 'users', uid), updates, { merge: true });
+
+  if (adminUser) {
+    await logSystemEvent({
+      type: 'ROLE_CHANGED',
+      authorUid: adminUser.uid,
+      authorName: adminUser.displayName,
+      authorEmail: adminUser.email,
+      targetUid: uid,
+      targetName: targetUser?.displayName,
+      targetEmail: targetUser?.email,
+      details: `Administrador ${adminUser.displayName} alterou a permissão de ${targetUser?.displayName || uid} para [${newRole.toUpperCase()}].`,
+    });
+  }
+}
+
+/**
+ * Autoriza um professor que estava com cadastro pendente (Exclusivo para Administrador)
+ */
+export async function approveTeacher(
+  teacher: UserProfile,
+  adminUser: UserProfile
+): Promise<void> {
+  const now = new Date().toISOString();
+  await setDoc(
+    doc(db, 'users', teacher.uid),
+    {
+      status: 'active',
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await logSystemEvent({
+    type: 'PROFESSOR_APPROVED',
+    authorUid: adminUser.uid,
+    authorName: adminUser.displayName,
+    authorEmail: adminUser.email,
+    targetUid: teacher.uid,
+    targetName: teacher.displayName,
+    targetEmail: teacher.email,
+    details: `Administrador ${adminUser.displayName} autorizou o cadastro do Professor(a) ${teacher.displayName} (${teacher.email}).`,
+  });
+}
+
+/**
+ * Recusa o cadastro de um professor pendente (Exclusivo para Administrador)
+ */
+export async function rejectTeacher(
+  teacher: UserProfile,
+  adminUser: UserProfile,
+  reason?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  await setDoc(
+    doc(db, 'users', teacher.uid),
+    {
+      status: 'rejected',
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await logSystemEvent({
+    type: 'PROFESSOR_REJECTED',
+    authorUid: adminUser.uid,
+    authorName: adminUser.displayName,
+    authorEmail: adminUser.email,
+    targetUid: teacher.uid,
+    targetName: teacher.displayName,
+    targetEmail: teacher.email,
+    details: `Administrador ${adminUser.displayName} recusou o cadastro do Professor(a) ${teacher.displayName}.${reason ? ` Motivo: ${reason}` : ''}`,
+  });
+}
+
+/**
+ * Exclui permanentemente um usuário da plataforma (Exclusivo para o Administrador)
+ * Observação: Conforme regra estrita do sistema, o professor NUNCA pode excluir da plataforma, apenas o administrador.
+ */
+export async function deleteUserPermanently(
+  targetUser: UserProfile,
+  adminUser: UserProfile
+): Promise<void> {
+  if (adminUser.role !== 'admin' && adminUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Apenas o Administrador possui permissão para excluir usuários da plataforma.');
+  }
+
+  // Deleta o registro do usuário na coleção 'users'
+  await deleteDoc(doc(db, 'users', targetUser.uid));
+
+  // Registra no histórico de auditoria
+  await logSystemEvent({
+    type: 'USER_DELETED',
+    authorUid: adminUser.uid,
+    authorName: adminUser.displayName,
+    authorEmail: adminUser.email,
+    targetUid: targetUser.uid,
+    targetName: targetUser.displayName,
+    targetEmail: targetUser.email,
+    details: `Administrador ${adminUser.displayName} excluiu permanentemente o usuário ${targetUser.displayName} (${targetUser.email}, perfil: ${targetUser.role.toUpperCase()}) da plataforma.`,
+  });
 }
 
