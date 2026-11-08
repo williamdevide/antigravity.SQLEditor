@@ -72,7 +72,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   // Feedback e Toasts
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'members' | 'pending' | 'admit' | 'materials' | 'submissions'>('members');
+  const [activeStudentTab, setActiveStudentTab] = useState<'members' | 'pending' | 'admit'>('members');
+  const [activeResourcePanel, setActiveResourcePanel] = useState<'materials' | 'submissions' | null>(null);
 
   // Materiais e Scripts Pedagógicos
   const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
@@ -171,16 +172,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   useEffect(() => {
     if (selectedClass) {
       loadClassMembers(selectedClass.id);
-      if (activeTab === 'materials') {
-        loadClassMaterials();
-      } else if (activeTab === 'submissions') {
-        loadSubmissions(selectedClass.id);
-      }
+      loadClassMaterials();
+      loadSubmissions(selectedClass.id);
     } else {
       setMembers([]);
+      setMaterials([]);
       setSubmissions([]);
     }
-  }, [selectedClass, activeTab, loadClassMembers, loadClassMaterials, loadSubmissions]);
+  }, [selectedClass, loadClassMembers, loadClassMaterials, loadSubmissions]);
 
   // Copiar código da turma com feedback
   const handleCopyCode = (code: string) => {
@@ -391,7 +390,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
       showFeedback('success', `Aluno com e-mail "${admitEmail.trim()}" matriculado com sucesso!`);
       setAdmitEmail('');
       loadClassMembers(selectedClass.id);
-      setActiveTab('members');
+      setActiveStudentTab('members');
     } catch (err: any) {
       showFeedback('error', err?.message || 'Falha ao admitir aluno.');
     } finally {
@@ -421,6 +420,30 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     setMatAllClasses(isAll);
     setMatClassIds(isAll ? ['all'] : item.classIds || []);
     setIsMaterialModalOpen(true);
+  };
+
+  // Carregamento de arquivo (.sql ou .txt) para o modal de material pedagógico
+  const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setMatContent(text);
+        if (!matTitle.trim()) {
+          const cleanName = file.name.replace(/\.[^/.]+$/, '');
+          setMatTitle(cleanName);
+        }
+        showFeedback('success', `Arquivo "${file.name}" carregado com sucesso no campo SQL!`);
+      }
+    };
+    reader.onerror = () => {
+      showFeedback('error', 'Falha ao ler o arquivo selecionado.');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleSaveMaterialSubmit = async (e: React.FormEvent) => {
@@ -793,81 +816,305 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               </div>
 
-              {/* Abas de Navegação Interna da Turma */}
-              <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('members')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'members'
-                      ? 'bg-[#0288D1] text-white shadow'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">groups</span>
-                  <span>Matriculados ({approvedMembers.length})</span>
-                </button>
+              {/* DIV DE RECURSOS PEDAGÓGICOS E AVALIAÇÕES (Abaixo do Modo Operacional, Antes da Área de Alunos) */}
+              <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[20px] text-[#FF6B00]">folder_special</span>
+                    <div>
+                      <h3 className="text-xs font-bold text-[var(--text-primary)]">
+                        Materiais, BDs e Avaliações da Turma
+                      </h3>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        Acesse e gerencie os conteúdos disponibilizados e as entregas de provas
+                      </p>
+                    </div>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('pending')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'pending'
-                      ? 'bg-amber-500 text-white shadow'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">hourglass_empty</span>
-                  <span>Solicitações Pendentes</span>
-                  {pendingMembers.length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white text-[10px] font-bold">
-                      {pendingMembers.length}
-                    </span>
-                  )}
-                </button>
+                  <div className="flex items-center gap-2">
+                    {/* Botão Materiais & BDs */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveResourcePanel((prev) => (prev === 'materials' ? null : 'materials'))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        activeResourcePanel === 'materials'
+                          ? 'bg-[#FF6B00] text-black shadow font-extrabold'
+                          : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">inventory_2</span>
+                      <span>Materiais &amp; BDs</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        activeResourcePanel === 'materials' ? 'bg-black/20 text-black' : 'bg-[#FF6B00]/20 text-[#FF6B00]'
+                      }`}>
+                        {filteredMaterials.length}
+                      </span>
+                      <span className="material-symbols-outlined text-[15px]">
+                        {activeResourcePanel === 'materials' ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('materials')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'materials'
-                      ? 'bg-[#FF6B00] text-black shadow'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-                  <span>Materiais &amp; BDs ({filteredMaterials.length})</span>
-                </button>
+                    {/* Botão Entrega de Provas */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveResourcePanel((prev) => (prev === 'submissions' ? null : 'submissions'))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        activeResourcePanel === 'submissions'
+                          ? 'bg-purple-600 text-white shadow font-extrabold'
+                          : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
+                      <span>Entrega de Provas</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        activeResourcePanel === 'submissions' ? 'bg-white/20 text-white' : 'bg-purple-500/20 text-purple-400'
+                      }`}>
+                        {submissions.length}
+                      </span>
+                      <span className="material-symbols-outlined text-[15px]">
+                        {activeResourcePanel === 'submissions' ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('submissions')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'submissions'
-                      ? 'bg-purple-600 text-white shadow'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
-                  <span>Entregas de Provas ({submissions.length})</span>
-                </button>
+                {/* PAINEL EXPANSÍVEL: MATERIAIS & BDS */}
+                {activeResourcePanel === 'materials' && (
+                  <div className="pt-3 border-t border-[var(--border-color)] space-y-4 animate-in fade-in duration-150">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                        {[
+                          { id: 'all', label: 'Todos' },
+                          { id: 'class_database', label: 'BDs Sala de Aula' },
+                          { id: 'example', label: 'Exemplos' },
+                          { id: 'exercise', label: 'Exercícios' },
+                          { id: 'exam', label: 'Avaliações' },
+                        ].map((f) => (
+                          <button
+                            key={f.id}
+                            onClick={() => setMaterialCategoryFilter(f.id)}
+                            type="button"
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                              materialCategoryFilter === f.id
+                                ? 'bg-[#FF6B00] text-black font-bold'
+                                : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('admit')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'admit'
-                      ? 'bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white shadow'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">person_add</span>
-                  <span>Admitir por E-mail</span>
-                </button>
+                      <button
+                        onClick={handleOpenNewMaterialModal}
+                        type="button"
+                        className="px-4 py-1.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8800] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow self-start sm:self-auto"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">add_circle</span>
+                        <span>+ Novo Material</span>
+                      </button>
+                    </div>
+
+                    {isLoadingMaterials ? (
+                      <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                        <span className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin inline-block" />
+                        <p>Carregando materiais pedagógicos...</p>
+                      </div>
+                    ) : filteredMaterials.length === 0 ? (
+                      <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                        <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
+                          post_add
+                        </span>
+                        <p className="text-xs text-[var(--text-secondary)] font-medium">
+                          Nenhum material publicado para esta turma nesta categoria.
+                        </p>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios ou Avaliações.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {filteredMaterials.map((mat) => (
+                          <div
+                            key={mat.id}
+                            className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex flex-col justify-between space-y-3"
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="font-bold text-xs text-[var(--text-primary)] truncate">
+                                  {mat.title}
+                                </h4>
+                                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                                  {mat.category === 'class_database'
+                                    ? '🗄️ BD Aula'
+                                    : mat.category === 'example'
+                                    ? '💡 Exemplo'
+                                    : mat.category === 'exercise'
+                                    ? '📝 Exercício'
+                                    : '🎯 Avaliação'}
+                                </span>
+                              </div>
+
+                              {mat.description && (
+                                <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2">
+                                  {mat.description}
+                                </p>
+                              )}
+
+                              <div className="flex items-center gap-2 mt-2 text-[10px] text-[var(--text-muted)] font-mono">
+                                <span>{mat.content.split('\n').length} linhas</span>
+                                <span>•</span>
+                                <span>
+                                  {(mat.classIds || []).includes('all')
+                                    ? '🌐 Todas as turmas'
+                                    : `Turmas: ${(mat.classIds || []).length}`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]/60">
+                              <button
+                                onClick={() => handleOpenEditMaterialModal(mat)}
+                                type="button"
+                                className="px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer flex items-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">edit</span>
+                                <span>Editar</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteMaterial(mat)}
+                                type="button"
+                                className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-400 cursor-pointer flex items-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">delete</span>
+                                <span>Excluir</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* PAINEL EXPANSÍVEL: ENTREGAS DE PROVAS */}
+                {activeResourcePanel === 'submissions' && (
+                  <div className="pt-3 border-t border-[var(--border-color)] space-y-3 animate-in fade-in duration-150">
+                    {isLoadingSubmissions ? (
+                      <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                        <span className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin inline-block" />
+                        <p>Carregando resoluções de provas dos alunos...</p>
+                      </div>
+                    ) : submissions.length === 0 ? (
+                      <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                        <span className="material-symbols-outlined text-[32px] text-purple-400">
+                          quiz
+                        </span>
+                        <p className="text-xs text-[var(--text-secondary)] font-medium">
+                          Nenhuma entrega de avaliação registrada para esta turma ainda.
+                        </p>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Quando os alunos clicarem em <strong>Entregar Avaliação</strong> durante o modo de prova, suas resoluções completas aparecerão aqui.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[var(--bg-surface)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
+                            <tr>
+                              <th className="px-4 py-3">Aluno</th>
+                              <th className="px-4 py-3">E-mail</th>
+                              <th className="px-4 py-3">Avaliação</th>
+                              <th className="px-4 py-3">Data/Hora da Entrega</th>
+                              <th className="px-4 py-3 text-right">Resolução</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--border-color)]">
+                            {submissions.map((sub) => (
+                              <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors">
+                                <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
+                                  {sub.authorName}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
+                                  {sub.authorEmail}
+                                </td>
+                                <td className="px-4 py-3 text-[var(--text-primary)]">
+                                  {sub.title}
+                                </td>
+                                <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
+                                  {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingSubmission(sub)}
+                                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5 ml-auto"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">visibility</span>
+                                    <span>Visualizar SQL</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
+              {/* ÁREA DE ALUNOS DA TURMA */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudentTab('members')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeStudentTab === 'members'
+                        ? 'bg-[#0288D1] text-white shadow'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">groups</span>
+                    <span>Matriculados ({approvedMembers.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudentTab('pending')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeStudentTab === 'pending'
+                        ? 'bg-amber-500 text-white shadow'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">hourglass_empty</span>
+                    <span>Solicitações Pendentes</span>
+                    {pendingMembers.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {pendingMembers.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudentTab('admit')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeStudentTab === 'admit'
+                        ? 'bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white shadow'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">person_add</span>
+                    <span>Admitir por E-mail</span>
+                  </button>
+                </div>
+
               {/* 1. ABA DE MATRICULADOS */}
-              {activeTab === 'members' && (
+              {activeStudentTab === 'members' && (
                 <div className="space-y-3">
                   {isLoadingMembers ? (
                     <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
@@ -934,7 +1181,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
               )}
 
               {/* 2. ABA DE SOLICITAÇÕES PENDENTES */}
-              {activeTab === 'pending' && (
+              {activeStudentTab === 'pending' && (
                 <div className="space-y-3">
                   {pendingMembers.length === 0 ? (
                     <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
@@ -996,194 +1243,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               )}
 
-              {/* 3. ABA DE MATERIAIS & BDS DA TURMA */}
-              {activeTab === 'materials' && (
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-                      {[
-                        { id: 'all', label: 'Todos' },
-                        { id: 'class_database', label: 'BDs Sala de Aula' },
-                        { id: 'example', label: 'Exemplos' },
-                        { id: 'exercise', label: 'Exercícios' },
-                        { id: 'exam', label: 'Avaliações' },
-                      ].map((f) => (
-                        <button
-                          key={f.id}
-                          onClick={() => setMaterialCategoryFilter(f.id)}
-                          type="button"
-                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                            materialCategoryFilter === f.id
-                              ? 'bg-[#FF6B00] text-black font-bold'
-                              : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                          }`}
-                        >
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      onClick={handleOpenNewMaterialModal}
-                      type="button"
-                      className="px-4 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#FF8800] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow self-start sm:self-auto"
-                    >
-                      <span className="material-symbols-outlined text-[17px]">add_circle</span>
-                      <span>+ Novo Material</span>
-                    </button>
-                  </div>
-
-                  {isLoadingMaterials ? (
-                    <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
-                      <span className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin inline-block" />
-                      <p>Carregando materiais pedagógicos...</p>
-                    </div>
-                  ) : filteredMaterials.length === 0 ? (
-                    <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
-                      <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
-                        post_add
-                      </span>
-                      <p className="text-xs text-[var(--text-secondary)] font-medium">
-                        Nenhum material publicado para esta turma nesta categoria.
-                      </p>
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios ou Avaliações.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      {filteredMaterials.map((mat) => (
-                        <div
-                          key={mat.id}
-                          className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex flex-col justify-between space-y-3"
-                        >
-                          <div>
-                            <div className="flex items-start justify-between gap-2">
-                              <h4 className="font-bold text-xs text-[var(--text-primary)] truncate">
-                                {mat.title}
-                              </h4>
-                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[var(--bg-surface)] border border-[var(--border-color)]">
-                                {mat.category === 'class_database'
-                                  ? '🗄️ BD Aula'
-                                  : mat.category === 'example'
-                                  ? '💡 Exemplo'
-                                  : mat.category === 'exercise'
-                                  ? '📝 Exercício'
-                                  : '🎯 Avaliação'}
-                              </span>
-                            </div>
-
-                            {mat.description && (
-                              <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2">
-                                {mat.description}
-                              </p>
-                            )}
-
-                            <div className="flex items-center gap-2 mt-2 text-[10px] text-[var(--text-muted)] font-mono">
-                              <span>{mat.content.split('\n').length} linhas</span>
-                              <span>•</span>
-                              <span>
-                                {(mat.classIds || []).includes('all')
-                                  ? '🌐 Todas as turmas'
-                                  : `Turmas: ${(mat.classIds || []).length}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]/60">
-                            <button
-                              onClick={() => handleOpenEditMaterialModal(mat)}
-                              type="button"
-                              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer flex items-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">edit</span>
-                              <span>Editar</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteMaterial(mat)}
-                              type="button"
-                              className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-400 cursor-pointer flex items-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">delete</span>
-                              <span>Excluir</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 4. ABA DE ENTREGAS DE PROVAS */}
-              {activeTab === 'submissions' && (
-                <div className="space-y-3">
-                  {isLoadingSubmissions ? (
-                    <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
-                      <span className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin inline-block" />
-                      <p>Carregando resoluções de provas dos alunos...</p>
-                    </div>
-                  ) : submissions.length === 0 ? (
-                    <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
-                      <span className="material-symbols-outlined text-[32px] text-purple-400">
-                        quiz
-                      </span>
-                      <p className="text-xs text-[var(--text-secondary)] font-medium">
-                        Nenhuma entrega de avaliação registrada para esta turma ainda.
-                      </p>
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        Quando os alunos clicarem em <strong>Entregar Avaliação</strong> durante o modo de prova, suas resoluções completas aparecerão aqui.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-[var(--bg-primary)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
-                          <tr>
-                            <th className="px-4 py-3">Aluno</th>
-                            <th className="px-4 py-3">E-mail</th>
-                            <th className="px-4 py-3">Avaliação</th>
-                            <th className="px-4 py-3">Data/Hora da Entrega</th>
-                            <th className="px-4 py-3 text-right">Resolução</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--border-color)]">
-                          {submissions.map((sub) => (
-                            <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors">
-                              <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
-                                {sub.authorName}
-                              </td>
-                              <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
-                                {sub.authorEmail}
-                              </td>
-                              <td className="px-4 py-3 text-[var(--text-primary)]">
-                                {sub.title}
-                              </td>
-                              <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
-                                {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingSubmission(sub)}
-                                  className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5 ml-auto"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">visibility</span>
-                                  <span>Visualizar SQL</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 5. ABA DE ADMITIR POR E-MAIL */}
-              {activeTab === 'admit' && (
+              {/* 3. ABA DE ADMITIR POR E-MAIL */}
+              {activeStudentTab === 'admit' && (
                 <div className="space-y-4">
                   <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
                     <div className="flex items-center gap-2">
@@ -1219,7 +1280,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               )}
             </div>
-          ) : (
+          </div>
+        ) : (
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-12 text-center text-xs text-[var(--text-muted)] space-y-2 shadow-xl">
               <span className="material-symbols-outlined text-[48px] text-[var(--text-muted)]/50 block">
                 touch_app
@@ -1528,15 +1590,28 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
               </div>
 
               {/* Conteúdo SQL */}
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Código SQL <span className="text-red-400">*</span>
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)]">
+                    Código SQL <span className="text-red-400">*</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer transition-colors shadow-sm">
+                    <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">upload_file</span>
+                    <span>Carregar Arquivo (.sql, .txt)</span>
+                    <input
+                      type="file"
+                      accept=".sql,.txt,text/plain"
+                      className="hidden"
+                      onChange={handleMaterialFileUpload}
+                    />
+                  </label>
+                </div>
                 <textarea
                   rows={8}
                   required
                   value={matContent}
                   onChange={(e) => setMatContent(e.target.value)}
+                  placeholder="Cole o código SQL aqui ou clique em 'Carregar Arquivo' acima..."
                   className="w-full p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00] resize-none"
                 />
               </div>

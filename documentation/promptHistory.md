@@ -3710,3 +3710,30 @@ no laboratorio, sempre comece com todos os bancos que estiverem abertos minimiza
    - **Garantia de Qualidade e Compilação:**
      - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com sucesso absoluto (**0 erros** de TypeScript e Vite).
 
+### Prompt 18
+```text
+/agente-orquestrador /grill-me /goal na tela de novo material didático, alem da opção de ser colado o código deixe também a opção para carregar um arquivo (se carregar o arquivo ele exibe o conteudo no campo Código SQL). na tela de minhas turmas deixe o botão materiais & bds e entrega de provas em um div abaixo da div de modo operacional, mas antes da area de alunos
+```
+
+### Decisões e Alinhamentos (/grill-me):
+1. **Upload de Arquivo no Modal "Novo Material Didático / Prova":**
+   - Disponibilizado botão estilizado com input de arquivo oculto aceitando extensões `.sql` e `.txt`.
+   - Leitura nativa e instantânea via `FileReader.readAsText(file)` preenchendo automaticamente o campo "Código SQL" (`matContent`).
+   - Preenchimento inteligente do título do material (`matTitle`) caso esteja em branco, adotando o nome do arquivo sem a extensão.
+   - Feedback em toast confirmando o carregamento do arquivo com sucesso.
+
+2. **Reorganização Estrutural da Tela "Minhas Turmas" (`TeacherPanelView.tsx`):**
+   - Criação de uma `div` dedicada para **"Recursos Pedagógicos e Avaliações"** situada diretamente abaixo do card de "Modo Operacional da Turma" e antes da "Área de Alunos".
+   - Botões em destaque com badges em tempo real:
+     - **Materiais & BDs** (exibe contagem de materiais filtrados para a turma e alterna o painel expansível de materiais).
+     - **Entrega de Provas** (exibe contagem de provas entregues e alterna o painel expansível de resoluções dos alunos).
+   - A **Área de Alunos da Turma** fica organizada de forma isolada logo abaixo da nova div de recursos, contendo abas próprias para:
+     - **Matriculados** (`{approvedMembers.length}`)
+     - **Solicitações Pendentes** (`{pendingMembers.length}`)
+     - **Admitir por E-mail**
+   - Pré-carregamento imediato de membros, materiais e entregas de provas na seleção de qualquer turma via `useEffect`.
+
+### Status da Conclusão
+- Arquivo `frontend/src/components/TeacherPanelView.tsx` modificado com sucesso.
+- Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
+
