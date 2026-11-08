@@ -3578,3 +3578,20 @@ outra coisa, quando um professor ou admin cria uma turma ele não esta já salva
    - Melhorada a consistência de exibição de foto de perfil no menu móvel da Landing Page e no cabeçalho do editor (`Header.tsx`).
 2. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 114 (Sessão: 08/11/2026 - Botão de Perfil Minimalista no Cabeçalho do Editor)
+**Data:** 08/11/2026 - 00:58  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+no header tambem pode fazer a mesma coisa
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Cabeçalho do Editor (`frontend/src/components/Header.tsx`):**
+   - Removido o rótulo de texto com o primeiro nome do usuário e o badge de perfil (Admin/Docente/Aluno) da barra de ações do cabeçalho.
+   - O botão de perfil foi transformado em um ícone circular de avatar (`w-7 h-7 rounded-full`), alinhado aos demais botões de controle do cabeçalho.
+   - Exibe a foto do perfil (`user.photoURL` / `userProfile?.photoURL`) quando disponível ou a letra inicial com fundo em degradê SENAI quando não houver foto, preservando o tooltip completo com nome e permissão no hover (`title`).
+2. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).

@@ -421,11 +421,12 @@ export const Header: React.FC<HeaderProps> = ({
         {/* 4. Acesso / Perfil do Aluno e Administrador */}
         <div className="flex items-center gap-1.5 pl-1.5 border-l border-[var(--border-color)]">
           {user ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              {/* Botão de Perfil: apenas foto ou letra inicial (sem texto do nome) */}
               <button
                 type="button"
                 onClick={() => onViewChange('profile')}
-                className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] transition-colors cursor-pointer group"
+                className="w-7 h-7 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] flex items-center justify-center p-0.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0 overflow-hidden"
                 title={`Perfil: ${userProfile?.displayName || user.displayName || user.email} (${
                   isAdmin
                     ? 'Administrador'
@@ -433,36 +434,19 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'Professor'
                     : 'Aluno'
                 })`}
+                aria-label="Acessar Meu Perfil"
               >
-                <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center text-black font-bold text-[10px] shrink-0 overflow-hidden">
-                  {user.photoURL || userProfile?.photoURL ? (
-                    <img
-                      src={(userProfile?.photoURL || user.photoURL) || undefined}
-                      alt="Avatar"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    (userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()
-                  )}
-                </div>
-                <span className="hidden xl:inline font-semibold text-[11px] max-w-[85px] truncate">
-                  {userProfile?.displayName?.split(' ')[0] || 'Perfil'}
-                </span>
-                <span
-                  className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase ${
-                    isAdmin
-                      ? 'bg-purple-500/20 text-purple-400'
-                      : isProfessor || userProfile?.role === 'professor'
-                      ? 'bg-[#0288D1]/20 text-[#29B6F6]'
-                      : 'bg-[#FF6B00]/20 text-[#FF6B00]'
-                  }`}
-                >
-                  {isAdmin
-                    ? 'Admin'
-                    : isProfessor || userProfile?.role === 'professor'
-                    ? 'Docente'
-                    : 'Aluno'}
-                </span>
+                {user.photoURL || userProfile?.photoURL ? (
+                  <img
+                    src={(userProfile?.photoURL || user.photoURL) || undefined}
+                    alt={userProfile?.displayName || user.displayName || 'Avatar'}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="w-full h-full rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] text-black text-[10px] font-black flex items-center justify-center shadow-inner">
+                    {(userProfile?.displayName || user.displayName || user.email || 'U')[0].toUpperCase()}
+                  </span>
+                )}
               </button>
 
               <button
