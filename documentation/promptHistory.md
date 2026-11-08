@@ -3260,3 +3260,34 @@ outra coisa, já no sqledditor, logado como aluno, cliquei em sair da conta e el
    - **`Header.tsx`:** O botão de logout do cabeçalho agora chama `onViewChange('landing')`.
    - **`MainMenuDropdown.tsx`:** O botão "Sair da Conta" no menu hambúrguer agora chama `onSelectView('landing')`.
    - **`App.tsx`:** Implementado `useEffect` reativo que detecta logout (`!user`) em visões protegidas (`'profile'`, `'admin-panel'`, `'teacher-panel'`) e direciona imediatamente para a visão institucional `'landing'`.
+
+
+## 📌 Prompt 103 (Sessão: 07/11/2026 - Resolução Definitiva de Cadastro Docente via Google & Isenção de Turma para Professor)
+**Data:** 07/11/2026 - 21:58  
+**Agente Especialista:** `agente-orquestrador` (Camada 2 - SENAI Edition)  
+**Solicitação:**
+```text
+/agente-orquestrador /grill-me /goal tentei cadastrar como professor com conta google, o botão diz que é cadastro de professor, mas após escokher minha conta ao entrar automaticamente na tela de perfil, ao lado do nome aparece a etiqueta Aluno ao invés de Professor (e importante, o professor não precisa informar no cadastro a turma que faz parte)
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Eliminação de Condição de Corrida Assíncrona no Google Auth (`authService.ts` & `AuthContext.tsx`):**
+   - Identificado que o listener nativo `onAuthStateChanged` disparava imediatamente ao término do popup do Google chamando `syncUserProfile(currentUser)` sem parâmetros antes que o retorno de `loginWithGoogle` pudesse salvar as propriedades do formulário.
+   - Implementado o gerenciamento de estado transitório `pendingRegistrationData` em `authService.ts`: quando `loginWithGoogle(extraData)` é invocado, os dados são retidos globalmente durante o popup e consumidos transparentemente pelo `syncUserProfile`, garantindo que qualquer chamada (do listener ou do componente) processe `requestedRole: 'professor'` com fidelidade.
+   - Exposta a função `setUserProfile` no `AuthContext` e chamada imediatamente em `AuthModal.tsx` após o retorno do perfil docente, eliminando qualquer delay de propagação para a interface.
+
+2. **Isenção de Turma para Professores (`UserProfileView.tsx` & `authService.ts`):**
+   - Conforme diretriz do usuário, professores gerenciam suas próprias classes e não são membros de turmas.
+   - No perfil docente (`role === 'professor'`), os campos `turma`, `classCode` e `classStatus` são automaticamente fixados como vazios (`''` e `'none'`).
+   - Em `UserProfileView.tsx`:
+     - O campo `Turma` é ocultado para professores e administradores (`!isProfessor && !isAdmin`).
+     - A validação no salvamento do formulário `handleSaveProfile` deixa de exigir turma para docentes (`if (!turma.trim() && !isAdmin && !isProfessor)`).
+     - A identificação de curso no cabeçalho exibe diretamente o curso docente (`userProfile?.course || 'Técnico em Desenvolvimento de Sistemas'`) sem sufixos de turma.
+     - O campo de Matrícula passa a exibir `"Matrícula Docente (Opcional)"`.
+
+3. **Robustecimento das Regras no Cloud Firestore (`firestore.rules`):**
+   - Delegado ao subagente especialista `firestore-rules-author`.
+   - Na regra `allow update:` da coleção `users/{userId}`, refinadas as comparações de `createdAt`, `email` e `providerId` para utilização de `.get(...)` e verificação defensiva de presença (`!('providerId' in resource.data) || ...`), evitando erros de tempo de execução CEL caso o documento prévio tenha sido criado sem estes campos.
+
+4. **Validação de Compilação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com **0 erros**.

@@ -39,6 +39,17 @@ export interface ExtraRegistrationData {
   classCode?: string;
 }
 
+// Armazena temporariamente os dados de cadastro durante o fluxo de popup social (ex: Google)
+let pendingRegistrationData: ExtraRegistrationData | null = null;
+
+export function setPendingRegistrationData(data: ExtraRegistrationData | null) {
+  pendingRegistrationData = data;
+}
+
+export function getPendingRegistrationData(): ExtraRegistrationData | null {
+  return pendingRegistrationData;
+}
+
 /**
  * Cria um objeto de perfil padrão seguro caso o Firestore esteja em inicialização ou com regras pendentes
  */
@@ -87,6 +98,7 @@ export async function syncUserProfile(
   extraData?: ExtraRegistrationData
 ): Promise<UserProfile> {
   const isProfessorAdmin = (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const effectiveExtraData = extraData || pendingRegistrationData;
 
   try {
     const userDocRef = doc(db, 'users', user.uid);
@@ -101,47 +113,46 @@ export async function syncUserProfile(
         return updated;
       }
 
-      // Se o usuário já existia como 'aluno', mas está explicitamente se cadastrando como 'professor'
-      if (extraData?.requestedRole === 'professor' && data.role === 'aluno' && !isProfessorAdmin) {
-        const course = extraData.course || data.course || DEFAULT_COURSE;
-        const turma = extraData.turma || data.turma || '';
+      // Se o usuário solicitou cadastro como 'professor' e não é o administrador superusuário
+      if (effectiveExtraData?.requestedRole === 'professor' && !isProfessorAdmin) {
+        const course = effectiveExtraData.course || data.course || DEFAULT_COURSE;
+        const now = new Date().toISOString();
         const updated: UserProfile = {
           ...data,
+          uid: user.uid,
+          email: user.email || data.email || '',
+          displayName: effectiveExtraData.fullName || user.displayName || data.displayName || 'Professor(a) SQLEditor',
           role: 'professor',
-          status: 'pending_approval',
+          // Se já estava previamente aprovado como professor, mantém 'active'; se veio de 'aluno' ou novo pedido, 'pending_approval'
+          status: data.role === 'professor' && data.status === 'active' ? 'active' : 'pending_approval',
           course,
-          turma,
-          courseOrClass: turma ? `${course} - ${turma}` : course,
-          registrationNumber: extraData.registrationNumber || data.registrationNumber || '',
-          phone: extraData.phone || data.phone || '',
-          updatedAt: new Date().toISOString(),
+          turma: '', // Professor não pertence a turma
+          courseOrClass: course,
+          registrationNumber: effectiveExtraData.registrationNumber || data.registrationNumber || '',
+          phone: effectiveExtraData.phone || data.phone || '',
+          photoURL: user.photoURL || data.photoURL || '',
+          classCode: '',
+          classStatus: 'none',
+          createdAt: data.createdAt || now,
+          updatedAt: now,
+          emailVerified: user.emailVerified || data.emailVerified || false,
+          providerId: user.providerData[0]?.providerId || data.providerId || 'google.com',
         };
 
-        await setDoc(
-          userDocRef,
-          {
-            role: 'professor',
-            status: 'pending_approval',
-            course: updated.course,
-            turma: updated.turma,
-            courseOrClass: updated.courseOrClass,
-            registrationNumber: updated.registrationNumber,
-            phone: updated.phone,
-            updatedAt: updated.updatedAt,
-          },
-          { merge: true }
-        );
+        if (data.role !== 'professor' || data.status !== updated.status) {
+          await setDoc(userDocRef, updated, { merge: true });
 
-        try {
-          await logSystemEvent({
-            type: 'USER_REGISTERED',
-            authorUid: user.uid,
-            authorName: data.displayName || 'Professor(a) SQLEditor',
-            authorEmail: user.email || '',
-            details: 'Cadastro/Solicitação de perfil de Professor(a) via Google realizada (Aguardando autorização de um Administrador).',
-          });
-        } catch (err) {
-          console.warn('Erro ao auditar solicitação de professor:', err);
+          try {
+            await logSystemEvent({
+              type: 'USER_REGISTERED',
+              authorUid: user.uid,
+              authorName: updated.displayName,
+              authorEmail: updated.email,
+              details: 'Cadastro/Solicitação de perfil de Professor(a) via Google realizada (Aguardando autorização de um Administrador).',
+            });
+          } catch (err) {
+            console.warn('Erro ao auditar solicitação de professor:', err);
+          }
         }
 
         return updated;
@@ -150,8 +161,8 @@ export async function syncUserProfile(
       return data;
     }
 
-    const course = extraData?.course || extraData?.courseOrClass || DEFAULT_COURSE;
-    const turma = extraData?.turma || '';
+    const course = effectiveExtraData?.course || effectiveExtraData?.courseOrClass || DEFAULT_COURSE;
+    const isTeacher = effectiveExtraData?.requestedRole === 'professor';
 
     let role: UserRole = 'aluno';
     let status: UserStatus = 'active';
@@ -159,26 +170,28 @@ export async function syncUserProfile(
     if (isProfessorAdmin) {
       role = 'admin';
       status = 'active';
-    } else if (extraData?.requestedRole === 'professor') {
+    } else if (isTeacher) {
       role = 'professor';
       status = 'pending_approval';
     }
+
+    const turma = role === 'professor' ? '' : (effectiveExtraData?.turma || '');
 
     // Novo perfil a ser gravado no Firestore
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
-      displayName: extraData?.fullName || user.displayName || (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor'),
+      displayName: effectiveExtraData?.fullName || user.displayName || (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor'),
       role,
       status,
       course,
       turma,
       courseOrClass: turma ? `${course} - ${turma}` : course,
-      registrationNumber: extraData?.registrationNumber || '',
-      phone: extraData?.phone || '',
+      registrationNumber: effectiveExtraData?.registrationNumber || '',
+      phone: effectiveExtraData?.phone || '',
       photoURL: user.photoURL || '',
-      classCode: extraData?.classCode?.trim().toUpperCase() || '',
-      classStatus: extraData?.classCode ? 'pending' : 'none',
+      classCode: role === 'aluno' ? (effectiveExtraData?.classCode?.trim().toUpperCase() || '') : '',
+      classStatus: role === 'aluno' && effectiveExtraData?.classCode ? 'pending' : 'none',
       createdAt: new Date().toISOString(),
       emailVerified: user.emailVerified,
       providerId: user.providerData[0]?.providerId || 'password',
@@ -187,9 +200,9 @@ export async function syncUserProfile(
     await setDoc(userDocRef, newProfile);
 
     // Se aluno forneceu classCode válido, associa solicitação
-    if (newProfile.role === 'aluno' && extraData?.classCode && extraData.classCode.trim()) {
+    if (newProfile.role === 'aluno' && effectiveExtraData?.classCode && effectiveExtraData.classCode.trim()) {
       try {
-        const targetClass = await getClassByCode(extraData.classCode.trim());
+        const targetClass = await getClassByCode(effectiveExtraData.classCode.trim());
         if (targetClass) {
           await requestJoinClass({ classItem: targetClass, student: newProfile });
         }
@@ -200,7 +213,6 @@ export async function syncUserProfile(
 
     // Registra evento de auditoria para o novo perfil
     try {
-      const isTeacher = newProfile.role === 'professor';
       await logSystemEvent({
         type: 'USER_REGISTERED',
         authorUid: user.uid,
@@ -208,7 +220,7 @@ export async function syncUserProfile(
         authorEmail: newProfile.email,
         details: isTeacher
           ? 'Cadastro de novo Professor(a) realizado com sucesso (Aguardando autorização de um Administrador).'
-          : `Cadastro de novo Aluno(a) realizado com sucesso${extraData?.classCode ? ` com solicitação para turma código [${extraData.classCode.toUpperCase()}].` : '.'}`,
+          : `Cadastro de novo Aluno(a) realizado com sucesso${effectiveExtraData?.classCode ? ` com solicitação para turma código [${effectiveExtraData.classCode.toUpperCase()}].` : '.'}`,
       });
     } catch (err) {
       console.warn('Erro ao auditar novo cadastro:', err);
@@ -218,7 +230,7 @@ export async function syncUserProfile(
   } catch (err: any) {
     console.warn('[syncUserProfile] Aviso: Falha ao sincronizar perfil no Firestore (verifique firestore.rules):', err);
     // Retorna o perfil de fallback para não impedir o login e a experiência do usuário
-    return createFallbackProfile(user, extraData);
+    return createFallbackProfile(user, effectiveExtraData ?? undefined);
   }
 }
 
@@ -294,8 +306,15 @@ export async function registerWithEmail(
  * Realiza login ou cadastro via Conta Google (Popup)
  */
 export async function loginWithGoogle(extraData?: ExtraRegistrationData): Promise<UserProfile> {
-  const cred = await signInWithPopup(auth, googleProvider);
-  return syncUserProfile(cred.user, extraData);
+  pendingRegistrationData = extraData || null;
+  try {
+    const cred = await signInWithPopup(auth, googleProvider);
+    return await syncUserProfile(cred.user, extraData);
+  } finally {
+    setTimeout(() => {
+      pendingRegistrationData = null;
+    }, 5000);
+  }
 }
 
 /**

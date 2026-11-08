@@ -22,7 +22,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialTab = 'login',
   onAuthSuccess,
 }) => {
-  const { user, refreshEmailVerification, refreshUserProfile } = useAuth();
+  const { user, refreshEmailVerification, refreshUserProfile, setUserProfile } = useAuth();
   const [tab, setTab] = useState<AuthModalTab>(initialTab);
 
   // Campos de Login e Recuperação
@@ -172,15 +172,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           ? {
               fullName: fullName.trim() || undefined,
               course: course.trim() || undefined,
-              turma: turma.trim() || undefined,
+              turma: selectedRole === 'professor' ? undefined : (turma.trim() || undefined),
               registrationNumber: registrationNumber.trim() || undefined,
               phone: phone.trim() || undefined,
-              classCode: classCode.trim() || undefined,
+              classCode: selectedRole === 'professor' ? undefined : (classCode.trim() || undefined),
               requestedRole: selectedRole,
             }
           : undefined;
 
       const profile = await loginWithGoogle(extraData);
+      setUserProfile(profile);
       await refreshUserProfile();
       onClose();
       if (onAuthSuccess) onAuthSuccess();

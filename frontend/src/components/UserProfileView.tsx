@@ -75,18 +75,19 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       setProfileMessage({ type: 'error', text: 'O curso deve ser informado.' });
       return;
     }
-    if (!turma.trim() && !isAdmin) {
+    if (!turma.trim() && !isAdmin && !isProfessor) {
       setProfileMessage({ type: 'error', text: 'Por favor, informe a sua turma.' });
       return;
     }
 
     try {
       setIsSavingProfile(true);
+      const finalTurma = isProfessor ? '' : turma.trim();
       await updateUserProfileData(user.uid, {
         displayName: displayName.trim(),
         course: course.trim(),
-        turma: turma.trim(),
-        courseOrClass: turma.trim() ? `${course.trim()} - ${turma.trim()}` : course.trim(),
+        turma: finalTurma,
+        courseOrClass: finalTurma ? `${course.trim()} - ${finalTurma}` : course.trim(),
         registrationNumber: registrationNumber.trim(),
         phone: phone.trim(),
       });
@@ -293,7 +294,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">
                   school
                 </span>
-                <span>{userProfile?.courseOrClass || 'Curso não informado'}</span>
+                <span>
+                  {isProfessor
+                    ? userProfile?.course || 'Técnico em Desenvolvimento de Sistemas'
+                    : userProfile?.courseOrClass || 'Curso não informado'}
+                </span>
               </div>
               {userProfile?.createdAt && (
                 <div className="flex items-center gap-1.5">
@@ -451,27 +456,28 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
               {/* Turma e Matrícula - Grid de 2 Colunas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Turma *
-                  </label>
-                  <div className="relative flex items-center">
-                    <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
-                      groups
-                    </span>
-                    <input
-                      type="text"
-                      required={!isAdmin}
-                      value={turma}
-                      onChange={(e) => setTurma(e.target.value)}
-                      placeholder="Ex: TDS-01 / 2º Módulo"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
-                    />
+                {!isProfessor && !isAdmin && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                      Turma (Opcional)
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
+                        groups
+                      </span>
+                      <input
+                        type="text"
+                        value={turma}
+                        onChange={(e) => setTurma(e.target.value)}
+                        placeholder="Ex: TDS-01 / 2º Módulo"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div>
+                )}
+                <div className={isProfessor || isAdmin ? 'sm:col-span-2' : ''}>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    Matrícula SENAI (Opcional)
+                    Matrícula {isProfessor ? 'Docente (Opcional)' : 'SENAI (Opcional)'}
                   </label>
                   <div className="relative flex items-center">
                     <span className="material-symbols-outlined absolute left-3.5 text-[18px] text-[var(--text-muted)]">
@@ -481,7 +487,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                       type="text"
                       value={registrationNumber}
                       onChange={(e) => setRegistrationNumber(e.target.value)}
-                      placeholder="Ex: 2026-9041"
+                      placeholder={isProfessor ? 'Ex: PROF-2026' : 'Ex: 2026-9041'}
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#FF6B00] transition-colors"
                     />
                   </div>

@@ -26,6 +26,7 @@ interface AuthContextType {
   authModalInitialTab: AuthModalTab;
   openAuthModal: (tab?: AuthModalTab) => void;
   closeAuthModal: () => void;
+  setUserProfile: (profile: UserProfile | null) => void;
   refreshUserProfile: () => Promise<void>;
   refreshEmailVerification: () => Promise<boolean>;
   logout: () => Promise<void>;
@@ -167,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authModalInitialTab,
         openAuthModal,
         closeAuthModal,
+        setUserProfile,
         refreshUserProfile,
         refreshEmailVerification,
         logout,
