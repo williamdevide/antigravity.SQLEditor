@@ -3490,3 +3490,23 @@ outra coisa, quando um professor ou admin cria uma turma ele não esta já salva
      - Habilitada visualização de todas as turmas para o perfil de Administrador via `getAllClasses()`.
 4. **Compilação e Verificação:**
    - Executado build de produção do frontend (`npm --prefix frontend run build`), concluído com êxito total (**0 erros**).
+
+
+## 📌 Prompt 110 (Sessão: 08/11/2026 - Abertura Automática da Central ao Entrar no Laboratório e Reposicionamento do Botão no Menu Hambúrguer)
+**Data:** 08/11/2026 - 00:04  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador quando eu abro o laboratorio já deve abrir o modal da Central. e o botão da central saiu do header e vai para dentro do menu hamburguer.
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Abertura Automática da Central de Início ao Abrir o Laboratório:**
+   - Em `LandingPageView`, todos os pontos de entrada no editor via `onOpenEditor` agora realizam a transição para `workspace` e abrem automaticamente o modal `NavigationHubModal` (`isHubModalOpen = true`).
+   - Em `App.tsx`, o estado inicial de `isHubModalOpen` foi inicializado dinamicamente com base na rota ativa (`parseActiveViewFromHash(window.location.hash) === 'workspace'`), garantindo que acessos diretos via `#editor` ou recargas no laboratório já recebam a Central de Início aberta sobre o editor.
+2. **Reposicionamento do Botão da Central para Dentro do Menu Hambúrguer:**
+   - Removido o botão de atalho "Central" da barra de ações do cabeçalho em `Header.tsx`.
+   - Em `MainMenuDropdown.tsx` (Menu Hambúrguer), a opção "Central de Início (Hub)" foi promovida para a posição de destaque no topo do menu, estilizada com gradiente temático, ícone e chamada clara para acessar todos os módulos do SQLEditor a qualquer momento.
+3. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).

@@ -100,7 +100,13 @@ export const App: React.FC = () => {
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
-  const [isHubModalOpen, setIsHubModalOpen] = useState<boolean>(false);
+  const [isHubModalOpen, setIsHubModalOpen] = useState<boolean>(() => {
+    try {
+      return parseActiveViewFromHash(window.location.hash) === 'workspace';
+    } catch {
+      return false;
+    }
+  });
 
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
@@ -1313,7 +1319,10 @@ export const App: React.FC = () => {
       {activeView === 'landing' ? (
         <div className="flex-1 w-full h-full overflow-y-auto">
           <LandingPageView
-            onOpenEditor={() => setActiveView('workspace')}
+            onOpenEditor={() => {
+              setActiveView('workspace');
+              setIsHubModalOpen(true);
+            }}
             onOpenView={(view) => setActiveView(view)}
             theme={theme}
             onToggleTheme={handleToggleTheme}

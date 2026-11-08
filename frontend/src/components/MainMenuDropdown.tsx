@@ -154,14 +154,21 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
                 closeAllSubmenus();
                 onOpenHub();
               }}
-              className="w-full px-3 py-2 text-left hover:bg-[#FF6B00]/20 flex items-center justify-between transition-colors cursor-pointer border-b border-[var(--border-color)]/80 bg-[#FF6B00]/10 text-[#FF6B00] font-bold"
+              className="w-full px-3.5 py-2.5 text-left hover:bg-[#FF6B00]/15 flex items-center justify-between transition-colors cursor-pointer border-b border-[var(--border-color)] bg-gradient-to-r from-[#FF6B00]/15 to-transparent text-[var(--text-primary)] font-bold group"
               type="button"
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[18px]">hub</span>
-                <span>Central de Início (Hub)</span>
+                <div className="w-6 h-6 rounded-lg bg-[#FF6B00] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <span className="material-symbols-outlined text-[15px]">hub</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[#FF6B00] text-xs font-bold leading-tight">Central de Início (Hub)</span>
+                  <span className="text-[10px] text-[var(--text-secondary)] font-normal">Acessar todos os módulos</span>
+                </div>
               </div>
-              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+              <span className="material-symbols-outlined text-[16px] text-[#FF6B00] group-hover:translate-x-0.5 transition-transform">
+                arrow_forward
+              </span>
             </button>
           )}
 
