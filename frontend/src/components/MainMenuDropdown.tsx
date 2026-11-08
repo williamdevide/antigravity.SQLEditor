@@ -23,6 +23,7 @@ interface MainMenuDropdownProps {
   onThemeChange: (theme: ThemeMode) => void;
   fontTheme: FontTheme;
   onFontThemeChange: (fontTheme: FontTheme) => void;
+  onOpenHub?: () => void;
 }
 
 export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
@@ -34,6 +35,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
   onThemeChange,
   fontTheme,
   onFontThemeChange,
+  onOpenHub,
 }) => {
   const { user, userProfile, isAdmin, isProfessor, isTeacherApproved, openAuthModal, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -144,6 +146,25 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
       {isOpen && (
         <div className="absolute left-0 mt-1.5 z-50 min-w-[260px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
           
+          {/* Botão de Destaque: Central de Início (Hub) */}
+          {onOpenHub && (
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                closeAllSubmenus();
+                onOpenHub();
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-[#FF6B00]/20 flex items-center justify-between transition-colors cursor-pointer border-b border-[var(--border-color)]/80 bg-[#FF6B00]/10 text-[#FF6B00] font-bold"
+              type="button"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-[18px]">hub</span>
+                <span>Central de Início (Hub)</span>
+              </div>
+              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+            </button>
+          )}
+
           {/* ========================================================== */}
           {/* CATEGORIA 1: 🎓 JORNADA DA DISCIPLINA DE BANCO DE DADOS   */}
           {/* ========================================================== */}

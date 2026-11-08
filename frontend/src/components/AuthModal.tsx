@@ -186,11 +186,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
       if (onAuthSuccess) onAuthSuccess();
 
-      // Redirecionamentos pós-autenticação Google
-      if (profile.role === 'professor') {
-        window.location.hash = '#perfil';
-      } else if (!profile.turma && profile.role === 'aluno') {
-        window.location.hash = '#perfil';
+      // Redirecionamentos pós-autenticação Google: direciona ao perfil apenas se for cadastro novo com pendências
+      if (tab === 'register') {
+        if (profile.role === 'professor') {
+          window.location.hash = '#perfil';
+        } else if (!profile.turma && profile.role === 'aluno') {
+          window.location.hash = '#perfil';
+        }
       }
     } catch (err: any) {
       console.error('[SQL Editor Firebase Google Auth Error]', err);

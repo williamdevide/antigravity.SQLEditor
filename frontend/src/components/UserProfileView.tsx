@@ -7,11 +7,13 @@ import { getFirebaseErrorMessage } from '../services/firebase';
 interface UserProfileViewProps {
   onBackToWorkspace: () => void;
   onNavigateToLanding?: () => void;
+  onSaveComplete?: () => void;
 }
 
 export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onBackToWorkspace,
   onNavigateToLanding,
+  onSaveComplete,
 }) => {
   const { user, userProfile, isAdmin, isProfessor, isPendingTeacher, isEmailVerified, refreshUserProfile, logout } = useAuth();
 
@@ -93,7 +95,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       });
       await refreshUserProfile();
       setProfileMessage({ type: 'success', text: 'Dados atualizados com sucesso!' });
-      setTimeout(() => setProfileMessage(null), 4000);
+      setTimeout(() => {
+        setProfileMessage(null);
+        if (onSaveComplete) {
+          onSaveComplete();
+        }
+      }, 1200);
     } catch (err: any) {
       console.error('[SQL Editor Firebase Profile Save Error]', err);
       setProfileMessage({

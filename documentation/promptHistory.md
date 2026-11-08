@@ -3449,3 +3449,44 @@ Sua missão é reescrever o arquivo `firestore.rules` na raiz do projeto (`g:\an
    - `updateUserProfileData` foi fortalecido para reconciliar documentos inexistentes ou parciais, injetando `uid`, `email`, `role`, `status`, `createdAt` e `providerId` de forma consistente.
 3. **Compilação e Verificação:**
    - `npm --prefix frontend run build` executado com êxito (código de saída 0, 0 erros).
+
+
+## 📌 Prompt 109 (Sessão: 07/11/2026 - Central de Início / Hub de Navegação Modal e Correção da Exibição Imediata de Turmas)
+**Data:** 07/11/2026 - 23:48  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal agora funciona, vamos prosseguir.
+após salvar os dados completos do perfil ele deve ir para uma pagina que vamos construir agora.
+quero que após logar o usuario é enviado para um modal que aparece a frente do editor, nesse modal (centralizado na vertical e horizontal) o usuario tem acesso a 4 grandes botoões dispostos de 2x2 (Laboratório SQL (Editor), Estúdio DER, Modelo Lógico & Dicionário, Galeria & Prática Guiada. abaixo desse 4 botões tem 5 botões menores em uma linha (Meu Perfil, Configurações, Guia Rápido & Treinamentos, Feedback & Canal Direto. Sobre o Projeto.
+Se for Administrador tem abaixo em tamanho médio (Painel do Administrador e Minhas Turmas), Professor tem Minhas Turmas.
+outra coisa, quando um professor ou admin cria uma turma ele não esta já salvando a turma, talvez esteja esperando ter algum aluno, mas isso não é obrigatório. criou esta criado, já deve aparecer na lista de turma
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Criação do Componente Central de Início / Hub de Navegação (`NavigationHubModal.tsx`):**
+   - Implementado o modal `NavigationHubModal` centralizado vertical e horizontalmente sobre o editor com backdrop blur (`bg-black/80 backdrop-blur-md`), suporte a tecla `Escape` e cabeçalho com saudação e badge de papel.
+   - **4 Grandes Botões em Grade 2x2:**
+     - **Laboratório SQL (Editor):** Acesso ao workspace SQL com console e split-view.
+     - **Estúdio DER:** Modelagem relacional visual e interativa com geração DDL.
+     - **Modelo Lógico & Dicionário:** Dicionário de dados, chaves primárias e estrangeiras.
+     - **Galeria & Prática Guiada:** Desafios gamificados de aula com validação de IA.
+   - **5 Botões Menores em Linha Única:**
+     - `Meu Perfil`, `Configurações`, `Guia Rápido & Treinamentos`, `Feedback & Canal Direto` e `Sobre o Projeto`.
+   - **Botões Médios Governança por Papel:**
+     - Administrador: `Painel do Administrador` e `Minhas Turmas`.
+     - Professor: `Minhas Turmas`.
+2. **Integração de Fluxo de Pós-Login e Pós-Salvar Perfil (`App.tsx`, `UserProfileView.tsx`, `AuthModal.tsx`):**
+   - Ao salvar as alterações de perfil em `UserProfileView`, o callback `onSaveComplete` direciona o usuário para o editor (`workspace`) e abre a Central de Início (Hub Modal).
+   - Ao autenticar no `AuthModal` (E-mail ou Google), o callback `onAuthSuccess` envia o usuário para o editor com o Hub Modal aberto à frente.
+   - Adicionado botão de atalho "Central" no `Header.tsx` e opção no `MainMenuDropdown.tsx` para reabertura a qualquer instante.
+3. **Correção Definitiva da Criação e Exibição Imediata de Turmas (`classService.ts`, `TeacherPanelView.tsx`):**
+   - **Causa Raiz Identificada:** A consulta de turmas e membros combinava filtros de igualdade (`where`) com ordenação de outro campo (`orderBy('createdAt', 'desc')`), o que exigia índices compostos não provisionados no Firestore, fazendo com que a consulta falhasse silenciosamente e retornasse array vazio `[]`, apagando a turma recém-criada da tela. Além disso, o `useEffect` de recarga escutava `selectedClass`, provocando re-execução em loop ao criar uma nova turma.
+   - **Solução Aplicada:**
+     - Removida a obrigatoriedade de índice composto no Firestore, realizando a ordenação por data de criação (`createdAt`) e requisição (`requestedAt`) diretamente em memória em JavaScript.
+     - Protegida a chamada de log de auditoria em `createClass` com `try/catch` para que falhas de log nunca impeçam a criação e retorno da turma.
+     - `TeacherPanelView` agora atualiza o estado local `classes` imediatamente ao criar uma nova turma (mesmo com 0 alunos), seleciona a nova turma e sincroniza com o banco sem desmarcar ou apagar o estado.
+     - Habilitada visualização de todas as turmas para o perfil de Administrador via `getAllClasses()`.
+4. **Compilação e Verificação:**
+   - Executado build de produção do frontend (`npm --prefix frontend run build`), concluído com êxito total (**0 erros**).

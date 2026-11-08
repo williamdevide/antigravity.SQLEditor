@@ -34,6 +34,7 @@ interface HeaderProps {
   workspaceLayoutMode?: 'editor' | 'split' | 'der';
   onWorkspaceLayoutModeChange?: (mode: 'editor' | 'split' | 'der') => void;
   confirmBeforeCloseAllTabs?: boolean;
+  onOpenHub?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -59,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   workspaceLayoutMode = 'editor',
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
+  onOpenHub,
 }) => {
   const { user, userProfile, isAdmin, isProfessor, isTeacherApproved, openAuthModal, logout } = useAuth();
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
@@ -124,6 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
           onThemeChange={onThemeChange}
           fontTheme={fontTheme}
           onFontThemeChange={onFontThemeChange}
+          onOpenHub={onOpenHub}
         />
 
         {/* Brand */}
@@ -419,6 +422,19 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-1.5 pl-1.5 border-l border-[var(--border-color)]">
           {user ? (
             <div className="flex items-center gap-1">
+              {/* Botão Central de Início / Hub */}
+              {onOpenHub && (
+                <button
+                  type="button"
+                  onClick={onOpenHub}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] text-xs font-semibold text-[var(--text-primary)] transition-all cursor-pointer shadow-sm group"
+                  title="Abrir Central de Início (Hub de Navegação)"
+                >
+                  <span className="material-symbols-outlined text-[15px] text-[#FF6B00] group-hover:scale-110 transition-transform">hub</span>
+                  <span className="hidden sm:inline text-[11px]">Central</span>
+                </button>
+              )}
+
               {/* Botão Atalho Painel de Turmas para Professores Autorizados */}
               {isTeacherApproved && (
                 <button

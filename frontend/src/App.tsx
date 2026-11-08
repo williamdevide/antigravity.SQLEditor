@@ -17,6 +17,7 @@ import { UserProfileView } from './components/UserProfileView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { TeacherPanelView } from './components/TeacherPanelView';
 import { AuthModal } from './components/AuthModal';
+import { NavigationHubModal } from './components/NavigationHubModal';
 import { useAuth } from './context/AuthContext';
 import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
@@ -99,6 +100,7 @@ export const App: React.FC = () => {
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
+  const [isHubModalOpen, setIsHubModalOpen] = useState<boolean>(false);
 
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
@@ -1351,6 +1353,7 @@ export const App: React.FC = () => {
             workspaceLayoutMode={workspaceLayoutMode}
             onWorkspaceLayoutModeChange={setWorkspaceLayoutMode}
             confirmBeforeCloseAllTabs={preferences.editor.confirmBeforeCloseAllTabs}
+            onOpenHub={() => setIsHubModalOpen(true)}
           />
 
           {/* Banner de Desafio Ativo Acoplado ao Topo da Tela */}
@@ -1452,6 +1455,10 @@ export const App: React.FC = () => {
             <UserProfileView
               onBackToWorkspace={() => setActiveView('workspace')}
               onNavigateToLanding={() => setActiveView('landing')}
+              onSaveComplete={() => {
+                setActiveView('workspace');
+                setIsHubModalOpen(true);
+              }}
             />
           ) : activeView === 'admin-panel' ? (
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
@@ -1962,6 +1969,17 @@ export const App: React.FC = () => {
         isOpen={authModalOpen}
         onClose={closeAuthModal}
         initialTab={authModalInitialTab}
+        onAuthSuccess={() => {
+          setActiveView('workspace');
+          setIsHubModalOpen(true);
+        }}
+      />
+
+      {/* Central de Início / Hub de Navegação (Aparece à frente do Editor) */}
+      <NavigationHubModal
+        isOpen={isHubModalOpen}
+        onClose={() => setIsHubModalOpen(false)}
+        onSelectView={(view) => setActiveView(view)}
       />
     </div>
   );

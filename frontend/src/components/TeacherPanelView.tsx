@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   createClass,
   getClassesByTeacher,
+  getAllClasses,
   getClassMembers,
   approveStudentRequest,
   removeStudentFromClass,
@@ -45,23 +46,28 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     setTimeout(() => setFeedback(null), 4500);
   };
 
-  // Carrega as turmas do professor
+  // Carrega as turmas do professor (ou todas as turmas para Administrador)
   const loadTeacherClasses = useCallback(async () => {
     if (!user) return;
     try {
       setIsLoadingClasses(true);
-      const list = await getClassesByTeacher(user.uid);
+      const list = isAdmin ? await getAllClasses() : await getClassesByTeacher(user.uid);
       setClasses(list);
-      if (list.length > 0 && !selectedClass) {
-        setSelectedClass(list[0]);
-      }
+      setSelectedClass((curr) => {
+        if (!curr && list.length > 0) return list[0];
+        if (curr) {
+          const match = list.find((c) => c.id === curr.id);
+          return match || (list.length > 0 ? list[0] : null);
+        }
+        return null;
+      });
     } catch (err: any) {
       console.error('[TeacherPanel] Erro ao carregar turmas:', err);
       showFeedback('error', 'Falha ao carregar lista de turmas.');
     } finally {
       setIsLoadingClasses(false);
     }
-  }, [user, selectedClass]);
+  }, [user, isAdmin]);
 
   // Carrega membros da turma selecionada
   const loadClassMembers = useCallback(async (classId: string) => {
@@ -118,12 +124,18 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         teacherEmail: userProfile.email,
       });
 
-      setClasses((prev) => [created, ...prev]);
+      // Atualiza o estado imediatamente para exibição em tempo real
+      setClasses((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
       setSelectedClass(created);
       setIsCreateModalOpen(false);
       setNewClassName('');
       setNewClassDesc('');
       showFeedback('success', `Turma "${created.name}" criada com sucesso! Código: ${created.code}`);
+
+      // Sincroniza em segundo plano sem desmarcar a turma
+      setTimeout(() => {
+        loadTeacherClasses();
+      }, 350);
     } catch (err: any) {
       console.error('[TeacherPanel] Erro ao criar turma:', err);
       showFeedback('error', 'Erro ao criar turma: ' + (err?.message || 'Tente novamente.'));

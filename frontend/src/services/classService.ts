@@ -8,7 +8,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -55,14 +54,18 @@ export async function createClass(params: {
 
   const docRef = await addDoc(collection(db, 'classes'), newClassPayload);
 
-  // Registra no log de auditoria
-  await logSystemEvent({
-    type: 'CLASS_CREATED',
-    authorUid: params.teacherId,
-    authorName: params.teacherName,
-    authorEmail: params.teacherEmail,
-    details: `Turma criada: "${params.name}" (${params.course}) com código de acesso [${code}].`,
-  });
+  // Registra no log de auditoria de forma assíncrona e resiliente
+  try {
+    await logSystemEvent({
+      type: 'CLASS_CREATED',
+      authorUid: params.teacherId,
+      authorName: params.teacherName,
+      authorEmail: params.teacherEmail,
+      details: `Turma criada: "${params.name}" (${params.course}) com código de acesso [${code}].`,
+    });
+  } catch (auditErr) {
+    console.warn('[ClassService] Aviso ao registrar auditoria de turma criada:', auditErr);
+  }
 
   return {
     id: docRef.id,
@@ -72,20 +75,20 @@ export async function createClass(params: {
 
 /**
  * Lista as turmas criadas por um determinado professor
+ * Ordenação em memória para não depender de índices compostos no Firestore
  */
 export async function getClassesByTeacher(teacherId: string): Promise<ClassItem[]> {
   try {
     const q = query(
       collection(db, 'classes'),
-      where('teacherId', '==', teacherId),
-      orderBy('createdAt', 'desc')
+      where('teacherId', '==', teacherId)
     );
     const snap = await getDocs(q);
     const classes: ClassItem[] = [];
     snap.forEach((d) => {
       classes.push({ id: d.id, ...(d.data() as Omit<ClassItem, 'id'>) });
     });
-    return classes;
+    return classes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   } catch (err) {
     console.warn('[ClassService] Erro ao listar turmas do professor:', err);
     return [];
@@ -94,16 +97,16 @@ export async function getClassesByTeacher(teacherId: string): Promise<ClassItem[
 
 /**
  * Lista todas as turmas cadastradas na plataforma (Visão do Administrador)
+ * Ordenação em memória para não depender de índices compostos no Firestore
  */
 export async function getAllClasses(): Promise<ClassItem[]> {
   try {
-    const q = query(collection(db, 'classes'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
+    const snap = await getDocs(collection(db, 'classes'));
     const classes: ClassItem[] = [];
     snap.forEach((d) => {
       classes.push({ id: d.id, ...(d.data() as Omit<ClassItem, 'id'>) });
     });
-    return classes;
+    return classes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   } catch (err) {
     console.warn('[ClassService] Erro ao listar todas as turmas:', err);
     return [];
@@ -345,20 +348,20 @@ export async function removeStudentFromClass(params: {
 
 /**
  * Retorna todos os membros (aprovados e pendentes) de uma turma
+ * Ordenação em memória para não depender de índices compostos no Firestore
  */
 export async function getClassMembers(classId: string): Promise<ClassMemberItem[]> {
   try {
     const q = query(
       collection(db, 'class_members'),
-      where('classId', '==', classId),
-      orderBy('requestedAt', 'desc')
+      where('classId', '==', classId)
     );
     const snap = await getDocs(q);
     const members: ClassMemberItem[] = [];
     snap.forEach((d) => {
       members.push({ id: d.id, ...(d.data() as Omit<ClassMemberItem, 'id'>) });
     });
-    return members;
+    return members.sort((a, b) => (b.requestedAt || '').localeCompare(a.requestedAt || ''));
   } catch (err) {
     console.warn('[ClassService] Erro ao buscar membros da turma:', err);
     return [];
