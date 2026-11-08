@@ -7,25 +7,25 @@ rules_version = '2';
 // 1. Coleção: users/{userId}
 // Document ID: UID do usuário autenticado (request.auth.uid)
 // Campos:
-//   - uid: string (obrigatório, tamanho 1 a 128) - UID do usuário autenticado (imutável)
-//   - email: string (obrigatório, tamanho até 150) - E-mail do usuário
-//   - displayName: string (obrigatório, tamanho 1 a 100) - Nome completo ou de exibição
-//   - role: string (obrigatório, 'admin' | 'professor' | 'aluno') - Papel de acesso
-//   - status: string (opcional, 'active' | 'pending_approval' | 'rejected') - Status de aprovação do usuário
-//   - course: string (opcional, tamanho até 100) - Nome do curso SENAI
-//   - turma: string (opcional, tamanho até 100) - Código/identificação da turma
-//   - courseOrClass: string (opcional, tamanho até 150) - Compatibilidade legada
-//   - registrationNumber: string (opcional, tamanho até 50) - Matrícula acadêmica
-//   - phone: string (opcional, tamanho até 30) - Telefone/WhatsApp
-//   - photoURL: string (opcional, tamanho até 1000) - URL do avatar de perfil
-//   - classId: string (opcional, tamanho até 128) - ID da turma vinculada
-//   - className: string (opcional, tamanho até 100) - Nome da turma vinculada
-//   - classCode: string (opcional, tamanho até 10) - Código de acesso de 6 caracteres
-//   - classStatus: string (opcional, 'none' | 'pending' | 'approved' | '') - Situação da matrícula na turma
-//   - createdAt: string (obrigatório, tamanho até 50) - Data ISO de criação (imutável)
-//   - updatedAt: string (opcional, tamanho até 50) - Data ISO da última atualização
-//   - emailVerified: bool (obrigatório) - Status de confirmação do e-mail
-//   - providerId: string (obrigatório, tamanho até 50) - Identificador do provedor de autenticação
+//   - uid: string (tamanho 1 a 128) - UID do usuário autenticado (imutável)
+//   - email: string (tamanho até 150) - E-mail do usuário
+//   - displayName: string (tamanho até 100) - Nome completo ou de exibição
+//   - role: string ('admin' | 'professor' | 'aluno') - Papel de acesso
+//   - status: string ('active' | 'pending_approval' | 'rejected') - Status de aprovação
+//   - course: string (tamanho até 100) - Nome do curso SENAI
+//   - turma: string (tamanho até 100) - Código/identificação da turma
+//   - courseOrClass: string (tamanho até 150) - Compatibilidade legada
+//   - registrationNumber: string (tamanho até 50) - Matrícula acadêmica
+//   - phone: string (tamanho até 30) - Telefone/WhatsApp
+//   - photoURL: string (tamanho até 1000) - URL do avatar de perfil
+//   - classId: string (tamanho até 128) - ID da turma vinculada
+//   - className: string (tamanho até 100) - Nome da turma vinculada
+//   - classCode: string (tamanho até 10) - Código de acesso de 6 caracteres
+//   - classStatus: string ('none' | 'pending' | 'approved' | '') - Situação da matrícula na turma
+//   - createdAt: string (tamanho até 50) - Data ISO de criação (imutável)
+//   - updatedAt: string (tamanho até 50) - Data ISO da última atualização
+//   - emailVerified: bool - Status de confirmação do e-mail
+//   - providerId: string (tamanho até 50) - Identificador do provedor de autenticação
 //
 // 2. Coleção: classes/{classId}
 // Document ID: ID único gerado automaticamente pelo Firestore
@@ -62,7 +62,7 @@ rules_version = '2';
 //   - id: string (opcional, tamanho até 128) - ID do evento no sistema
 //   - type: string (obrigatório, enum de tipos de eventos de auditoria)
 //   - authorUid: string (obrigatório, tamanho 1 a 128) - UID do usuário que executou a ação (imutável)
-//   - authorName: string (obrigatório, tamanho 1 a 100) - Nome do autor da ação
+//   - authorName: string (obrigatório, tamanho até 100) - Nome do autor da ação
 //   - authorEmail: string (obrigatório, tamanho até 150) - E-mail do autor da ação
 //   - targetUid: string (opcional, tamanho até 128) - UID do usuário afetado (se aplicável)
 //   - targetName: string (opcional, tamanho até 100) - Nome do usuário afetado
@@ -89,11 +89,15 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Administrador Bootstrap garantido para o professor responsável
+    // Administrador Bootstrap garantido para o professor responsável (resiliente a maiúsculas/minúsculas)
     function isBootstrapAdmin() {
       return isAuthenticated() &&
         'email' in request.auth.token &&
-        request.auth.token.email == 'williamdevide@gmail.com';
+        request.auth.token.email is string &&
+        (
+          request.auth.token.email == 'williamdevide@gmail.com' ||
+          request.auth.token.email.matches('(?i)^williamdevide@gmail\\.com$')
+        );
     }
 
     // Administrador com role 'admin' persistida no Firestore
@@ -139,10 +143,10 @@ service cloud.firestore {
       );
     }
 
-    // Validação estrita de formato de e-mail
+    // Validação estrita de formato de e-mail (suporta subdomínios e é insensível a maiúsculas/minúsculas)
     function isValidEmail(email) {
       return email is string &&
-        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+        email.matches('(?i)^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$');
     }
 
     // ===============================================================
@@ -150,14 +154,19 @@ service cloud.firestore {
     // ===============================================================
 
     // Validador de esquema e limites para a coleção 'users'
+    // Resiliente a documentos legados e atualizações parciais
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'role']) &&
-        data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'status', 'course', 'turma', 'courseOrClass', 'registrationNumber', 'phone', 'photoURL', 'classId', 'className', 'classCode', 'classStatus', 'createdAt', 'updatedAt', 'emailVerified', 'providerId']) &&
-        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+      return data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'role', 'status', 'course', 'turma',
+          'courseOrClass', 'registrationNumber', 'phone', 'photoURL',
+          'classId', 'className', 'classCode', 'classStatus',
+          'createdAt', 'updatedAt', 'emailVerified', 'providerId'
+        ]) &&
+        (!('uid' in data) || data.uid == null || (data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128)) &&
         (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 150 && (data.email.size() == 0 || isValidEmail(data.email)))) &&
-        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100)) &&
-        data.role is string && (data.role in ['admin', 'professor', 'aluno']) &&
-        (!('status' in data) || data.status == null || (data.status is string && data.status in ['active', 'pending_approval', 'rejected'])) &&
+        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 100)) &&
+        (!('role' in data) || data.role == null || (data.role is string && (data.role in ['admin', 'professor', 'aluno']))) &&
+        (!('status' in data) || data.status == null || (data.status is string && (data.status in ['active', 'pending_approval', 'rejected']))) &&
         (!('course' in data) || data.course == null || (data.course is string && data.course.size() <= 100)) &&
         (!('turma' in data) || data.turma == null || (data.turma is string && data.turma.size() <= 100)) &&
         (!('courseOrClass' in data) || data.courseOrClass == null || (data.courseOrClass is string && data.courseOrClass.size() <= 150)) &&
@@ -167,9 +176,9 @@ service cloud.firestore {
         (!('classId' in data) || data.classId == null || (data.classId is string && data.classId.size() <= 128)) &&
         (!('className' in data) || data.className == null || (data.className is string && data.className.size() <= 100)) &&
         (!('classCode' in data) || data.classCode == null || (data.classCode is string && data.classCode.size() <= 10)) &&
-        (!('classStatus' in data) || data.classStatus == null || (data.classStatus is string && data.classStatus in ['none', 'pending', 'approved', ''])) &&
+        (!('classStatus' in data) || data.classStatus == null || (data.classStatus is string && (data.classStatus in ['none', 'pending', 'approved', '']))) &&
         (!('createdAt' in data) || data.createdAt == null || (data.createdAt is string && data.createdAt.size() <= 50)) &&
-        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
         (!('emailVerified' in data) || data.emailVerified == null || data.emailVerified is bool) &&
         (!('providerId' in data) || data.providerId == null || (data.providerId is string && data.providerId.size() <= 50));
     }
@@ -224,7 +233,7 @@ service cloud.firestore {
           'USER_DELETED'
         ]) &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
-        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+        data.authorName is string && data.authorName.size() <= 100 &&
         data.authorEmail is string && data.authorEmail.size() <= 150 && (data.authorEmail.size() == 0 || isValidEmail(data.authorEmail)) &&
         (!('targetUid' in data) || (data.targetUid is string && data.targetUid.size() <= 128)) &&
         (!('targetName' in data) || (data.targetName is string && data.targetName.size() <= 100)) &&
@@ -246,18 +255,18 @@ service cloud.firestore {
       allow list: if isTeacherApproved() || isAdmin();
 
       // Criação de perfil no auto-cadastro ou aprovação:
-      // a) Aluno: role 'aluno' e status 'active' (ou não definido)
+      // a) Aluno: role 'aluno' e status 'active'
       // b) Professor: role 'professor' e status 'pending_approval' (aguardando autorização)
       // c) Administrador: permissão para criar com qualquer papel/status
       allow create: if isAuthenticated() &&
                        (isOwner(userId) || isAdmin()) &&
-                       request.resource.data.get('uid', '') == userId &&
+                       request.resource.data.get('uid', userId) == userId &&
                        isValidUser(request.resource.data) &&
                        (
-                         (isOwner(userId) && request.resource.data.get('role', '') == 'aluno' &&
+                         (isOwner(userId) && request.resource.data.get('role', 'aluno') == 'aluno' &&
                           request.resource.data.get('status', 'active') == 'active') ||
                          (isOwner(userId) && request.resource.data.get('role', '') == 'professor' &&
-                          request.resource.data.get('status', '') == 'pending_approval') ||
+                          request.resource.data.get('status', 'pending_approval') == 'pending_approval') ||
                          isAdmin()
                        );
 
@@ -270,32 +279,57 @@ service cloud.firestore {
       // - Campos estruturais e de integridade resolvidos com resiliência a esquemas legados via .get(...)
       allow update: if isAuthenticated() &&
                        isValidUser(request.resource.data) &&
-                       (!('uid' in resource.data) || resource.data.uid == null || request.resource.data.get('uid', '') == resource.data.get('uid', '')) &&
+                       // UID imutável e estritamente correspondente ao ID da rota
+                       (!('uid' in resource.data) || resource.data.uid == null || resource.data.uid == '' || request.resource.data.get('uid', '') == resource.data.get('uid', '')) &&
                        request.resource.data.get('uid', userId) == userId &&
-                       (!('createdAt' in resource.data) || resource.data.createdAt == null || request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')) &&
+                       // Data de criação imutável quando previamente gravada
+                       (!('createdAt' in resource.data) || resource.data.createdAt == null || resource.data.createdAt == '' || request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')) &&
                        (
-                         // 1. Administrador pleno
+                         // 1. Administrador pleno (pode alterar qualquer campo, aprovar/rejeitar professores, etc.)
                          isAdmin() ||
                          // 2. O próprio usuário atualizando seus dados de perfil ou solicitando credenciamento docente
                          (
                            isOwner(userId) &&
-                           (!('email' in resource.data) || resource.data.email == null || request.resource.data.get('email', '') == resource.data.get('email', '')) &&
-                           (!('providerId' in resource.data) || resource.data.providerId == null || request.resource.data.get('providerId', '') == resource.data.get('providerId', '')) &&
+                           // E-mail imutável ou sincronizado com o e-mail autenticado da sessão Auth
+                           (!('email' in resource.data) || resource.data.email == null || resource.data.email == '' ||
+                            request.resource.data.get('email', '') == resource.data.get('email', '') ||
+                            ('email' in request.auth.token && request.resource.data.get('email', '') == request.auth.token.email)) &&
+                           // Provedor imutável ou transição suportada (ex: senha para google.com)
+                           (!('providerId' in resource.data) || resource.data.providerId == null || resource.data.providerId == '' ||
+                            request.resource.data.get('providerId', '') == resource.data.get('providerId', '') ||
+                            request.resource.data.get('providerId', '') in ['google.com', 'password']) &&
+                           // Status de turma: aluno pode manter ou solicitar ('none' ou 'pending')
                            (
                              request.resource.data.get('classStatus', 'none') == resource.data.get('classStatus', 'none') ||
                              request.resource.data.get('classStatus', 'none') in ['none', 'pending']
                            ) &&
+                           // Proibição estrita de auto-elevação para 'admin'
+                           (request.resource.data.get('role', 'aluno') != 'admin' || resource.data.get('role', '') == 'admin') &&
                            (
-                             // 2a. Atualização cadastral padrão: mantém role e status inalterados
+                             // 2a. Usuário com role 'aluno': mantém 'aluno' e status inalterado
                              (
-                               request.resource.data.get('role', 'aluno') == resource.data.get('role', 'aluno') &&
+                               resource.data.get('role', 'aluno') == 'aluno' &&
+                               request.resource.data.get('role', 'aluno') == 'aluno' &&
                                request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
                              ) ||
-                             // 2b. Transição de aluno para professor com status estritamente pendente de aprovação
+                             // 2b. Usuário com role 'professor': mantém 'professor' e status inalterado
+                             // (resiliente para documentos legados sem status gravado, inferindo 'pending_approval')
+                             (
+                               resource.data.get('role', '') == 'professor' &&
+                               request.resource.data.get('role', '') == 'professor' &&
+                               request.resource.data.get('status', 'pending_approval') == resource.data.get('status', 'pending_approval')
+                             ) ||
+                             // 2c. Transição de 'aluno' para 'professor' com status estritamente pendente de aprovação
                              (
                                resource.data.get('role', 'aluno') == 'aluno' &&
                                request.resource.data.get('role', '') == 'professor' &&
-                               request.resource.data.get('status', '') == 'pending_approval'
+                               request.resource.data.get('status', 'pending_approval') == 'pending_approval'
+                             ) ||
+                             // 2d. Usuário com role 'admin' atualizando dados cadastrais próprios
+                             (
+                               resource.data.get('role', '') == 'admin' &&
+                               request.resource.data.get('role', '') == 'admin' &&
+                               request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
                              )
                            )
                          ) ||

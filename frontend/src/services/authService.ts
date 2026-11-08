@@ -351,7 +351,16 @@ export async function updateUserProfileData(
   updates: Partial<UserProfile>
 ): Promise<void> {
   const userDocRef = doc(db, 'users', uid);
+  
+  // Se o documento no Firestore ainda não existir (ex: falha transitória prévia),
+  // garante a criação com a estrutura base completa antes de aplicar as alterações
+  const snap = await getDoc(userDocRef);
+  if (!snap.exists() && auth.currentUser) {
+    await syncUserProfile(auth.currentUser);
+  }
+
   const payload = {
+    uid,
     ...updates,
     updatedAt: new Date().toISOString(),
   };

@@ -3326,3 +3326,35 @@ outra coisa, já no sqledditor, logado como aluno, cliquei em sair da conta e el
 
 4. **Validação de Compilação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com sucesso (**0 erros**).
+
+
+## 📌 Prompt 105 (Sessão: 07/11/2026 - Correção de Permissões nas Regras do Firestore para Cadastro e Perfil de Professor via Google)
+**Data:** 07/11/2026 - 22:30  
+**Agente Especialista:** `firebase-security-rules-auditor` / `agente-orquestrador` (SENAI Edition)  
+**Solicitação:**
+```text
+tentei cadastrar o professor com a conta google e deu Erro ao salvar alterações: Missing or insufficient permissions
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Diagnóstico e Análise Adversarial de `firestore.rules`:**
+   - **Vulnerabilidade/Falha de Bloqueio em `providerId`:** A regra anterior forçava estritamente `request.resource.data.get('providerId', '') == resource.data.get('providerId', '')`. Quando o usuário criava o perfil ou se registrava inicialmente com senha (`password`) e posteriormente autenticava/vinculava com Conta Google (`google.com`), a regra de atualização no Firestore bloqueava a requisição sumariamente.
+   - **Falha de Validação de Esquema (`isValidUser`):** A verificação estrita `data.keys().hasAll(['uid', 'role'])` causava rejeição em documentos legados ou atualizações parciais via `merge: true` que não reenviassem todos os metadados simultaneamente.
+   - **Resiliência de Campos Estruturais Imutáveis:** Campos como `uid`, `createdAt` e `email` foram ajustados para que, caso estivessem ausentes ou vazios (`""`) em documentos criados em iterações preliminares, possam ser preenchidos e validados sem acusar violação de imutabilidade.
+   - **Fluxo do Perfil Docente no `allow update`:** Separadas as ramificações de atualização cadastral do próprio usuário:
+     - `2a`: Aluno atualizando dados mantendo papel e status.
+     - `2b`: Professor atualizando dados cadastrais mantendo `role == 'professor'` e status inalterado (com fallback seguro para `pending_approval` em documentos antigos).
+     - `2c`: Migração legítima de Aluno para Professor com status estritamente forçado para `pending_approval` (aguardando homologação da administração).
+     - `2d`: Administrador atualizando seus dados cadastrais.
+   - **Imutabilidade e Segurança RBAC Reforçadas:**
+     - Proibição estrita de auto-elevação para `admin`.
+     - Proibição estrita de auto-aprovação de status para `active` por professores pendentes.
+     - Suporte no validador `isValidEmail` para e-mails acadêmicos institucionais com múltiplos subdomínios (ex: `@aluno.sp.senai.br`) e insensibilidade a maiúsculas/minúsculas.
+     - `isBootstrapAdmin` tornado insensível a maiúsculas/minúsculas no Firebase Auth token (`williamdevide@gmail.com`).
+
+2. **Robustecimento na Camada de Serviço do Frontend (`frontend/src/services/authService.ts`):**
+   - Na função `updateUserProfileData(uid, updates)`, garantido que `uid` sempre esteja presente no payload enviado ao Firestore.
+   - Adicionada verificação preventiva: caso o documento do usuário ainda não exista no Firestore (por exemplo, devido a bloqueio transitório em tentativa anterior), a estrutura base completa é automaticamente provisionada através de `syncUserProfile(auth.currentUser)` antes de aplicar as alterações parciais de perfil.
+
+3. **Compilação e Verificação:**
+   - Executado build de produção do frontend (`npm --prefix frontend run build`), com compilação TypeScript e empacotamento Vite finalizados com sucesso (**0 erros**).
