@@ -7,6 +7,8 @@ import {
   sendEmailVerification,
   updateProfile,
   updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   type User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -385,23 +387,40 @@ export async function updateUserProfileData(
 
   await setDoc(userDocRef, payload, { merge: true });
 
-  if (updates.displayName && currentUser) {
-    try {
-      await updateProfile(currentUser, { displayName: updates.displayName });
-    } catch {
-      // Ignora erro leve de sincronia local
+  if (currentUser) {
+    const profileUpdates: { displayName?: string; photoURL?: string } = {};
+    if (updates.displayName) profileUpdates.displayName = updates.displayName;
+    if (updates.photoURL !== undefined) profileUpdates.photoURL = updates.photoURL;
+
+    if (Object.keys(profileUpdates).length > 0) {
+      try {
+        await updateProfile(currentUser, profileUpdates);
+      } catch {
+        // Ignora erro leve de sincronia local
+      }
     }
   }
 }
 
 /**
- * Altera a senha do usuário atualmente autenticado
+ * Altera a senha do usuário atualmente autenticado com suporte a reautenticação segura
  */
-export async function updateCurrentUserPassword(newPass: string): Promise<void> {
-  if (!auth.currentUser) {
+export async function updateCurrentUserPassword(
+  newPass: string,
+  currentPass?: string
+): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
     throw new Error('Nenhum usuário logado para alterar senha.');
   }
-  await updatePassword(auth.currentUser, newPass);
+
+  // Se a senha atual foi fornecida e o usuário tem e-mail direto, reautentica primeiro
+  if (currentPass && currentUser.email) {
+    const credential = EmailAuthProvider.credential(currentUser.email, currentPass);
+    await reauthenticateWithCredential(currentUser, credential);
+  }
+
+  await updatePassword(currentUser, newPass);
 }
 
 /**

@@ -2,7 +2,18 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
-import type { TabItem, ThemeMode, FontTheme, DatabaseSchema, QueryResult, ReviewTargetRange } from '../types';
+import { SaveScriptModal } from './SaveScriptModal';
+import type {
+  TabItem,
+  ThemeMode,
+  FontTheme,
+  DatabaseSchema,
+  QueryResult,
+  ReviewTargetRange,
+  UserProfile,
+  SavedScriptItem,
+  ClassItem,
+} from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 import { registerEnhancedSqlLanguage } from '../services/mysqlLanguageDefinition';
@@ -312,6 +323,18 @@ interface EditorWorkspaceProps {
   selectedResultIndex?: number;
   onSelectResultIndex?: (index: number, fromGutterClick?: boolean) => void;
   preferences?: AppPreferences;
+  user?: any;
+  userProfile?: UserProfile | null;
+  teacherClasses?: ClassItem[];
+  isExamModeActive?: boolean;
+  classroomName?: string;
+  savedScripts?: SavedScriptItem[];
+  onSelectSavedScript?: (script: SavedScriptItem) => void;
+  classExamples?: SavedScriptItem[];
+  classExercises?: SavedScriptItem[];
+  classExams?: SavedScriptItem[];
+  onDeliverExam?: () => void;
+  onScriptSaved?: () => void;
 }
 
 // Registro global de provedores de autocompletar do Monaco para evitar duplicação em re-renderizações e troca de abas
@@ -350,6 +373,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   selectedResultIndex = 0,
   onSelectResultIndex,
   preferences = DEFAULT_APP_PREFERENCES,
+  user,
+  userProfile,
+  teacherClasses = [],
+  isExamModeActive = false,
+  classroomName,
+  savedScripts = [],
+  onSelectSavedScript,
+  classExamples = [],
+  classExercises = [],
+  classExams = [],
+  onDeliverExam,
+  onScriptSaved,
 }) => {
   const preferencesRef = useRef<AppPreferences>(preferences);
   preferencesRef.current = preferences;
@@ -383,6 +418,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal de salvar script no perfil (Ctrl+S)
+  const [isSaveScriptModalOpen, setIsSaveScriptModalOpen] = useState<boolean>(false);
 
   // Menu de contexto suspenso customizado do Editor de Script (elimina 100% de itens indesejados)
   const [editorContextMenu, setEditorContextMenu] = useState<{
@@ -1196,13 +1234,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       },
     });
 
-    // 3. Exportar Script .sql (Ctrl+S) com tecla de atalho
+    // 3. Salvar no Perfil (Ctrl+S) com tecla de atalho
     editor.addAction({
-      id: 'sql-export-script',
-      label: 'Exportar Script .sql (Ctrl+S)',
+      id: 'sql-save-profile',
+      label: 'Salvar no Perfil (Ctrl+S)',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
       contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 3,
+      run: () => {
+        setIsSaveScriptModalOpen(true);
+      },
+    });
+
+    // 4. Exportar Script .sql (Ctrl+Shift+S)
+    editor.addAction({
+      id: 'sql-export-script',
+      label: 'Exportar Script .sql (Ctrl+Shift+S)',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS],
+      contextMenuGroupId: '1_sql_actions',
+      contextMenuOrder: 4,
       run: () => {
         if (onExportScriptRef.current) {
           onExportScriptRef.current();
@@ -1212,13 +1262,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       },
     });
 
-    // 4. Alterar todas as ocorrências (Substituir) (Ctrl+F2 / Ctrl+H)
+    // 5. Alterar todas as ocorrências (Substituir) (Ctrl+F2 / Ctrl+H)
     editor.addAction({
       id: 'sql-find-and-replace',
       label: 'Alterar todas as ocorrências (Substituir)',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, monaco.KeyMod.CtrlCmd | monaco.KeyCode.F2],
       contextMenuGroupId: '1_sql_actions',
-      contextMenuOrder: 4,
+      contextMenuOrder: 5,
       run: (ed) => {
         ed.getAction('editor.action.startFindReplaceAction')?.run();
       },
@@ -1469,6 +1519,34 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-h-[160px] bg-[var(--bg-secondary)] overflow-hidden transition-colors">
+      {/* Banner de Modo Avaliação Ativo */}
+      {isExamModeActive && (
+        <div className="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 border-b border-purple-500/40 px-3 py-1.5 flex items-center justify-between text-xs select-none shadow-md shrink-0">
+          <div className="flex items-center gap-2 text-purple-200">
+            <span className="material-symbols-outlined text-[16px] text-purple-400 animate-pulse">lock</span>
+            <span className="font-semibold text-white tracking-wide">MODO AVALIAÇÃO ATIVO</span>
+            {classroomName && (
+              <span className="text-purple-200 text-[11px] bg-purple-900/60 px-2 py-0.5 rounded border border-purple-500/30">
+                Turma: {classroomName}
+              </span>
+            )}
+            <span className="hidden md:inline text-[11px] text-purple-300/80">
+              — Abas avulsas bloqueadas. Salve suas respostas e entregue ao professor ao finalizar.
+            </span>
+          </div>
+          {onDeliverExam && (
+            <button
+              onClick={onDeliverExam}
+              className="px-3 py-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded shadow flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 active:scale-95 text-xs border border-purple-400/40"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[15px]">send</span>
+              <span>Entregar Avaliação</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Barra de Abas e Controle de Zoom */}
       <div className="h-9 bg-[var(--bg-primary)] flex items-center justify-between border-b border-[var(--border-color)] px-2 select-none shrink-0">
         <div
@@ -1564,6 +1642,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           <div className="flex items-center ml-1 shrink-0 bg-[var(--bg-secondary)] rounded border border-[var(--border-color)]/60 p-0.5 shadow-sm">
             <button
               onClick={() => {
+                if (isExamModeActive) {
+                  alert('Criação de abas em branco bloqueada durante o Modo Avaliação.');
+                  return;
+                }
                 flushPendingContent();
                 onNewBlankTab();
               }}
@@ -1576,6 +1658,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
             <NewTabDropdown
               onNewBlankTab={() => {
+                if (isExamModeActive) {
+                  alert('Criação de abas em branco bloqueada durante o Modo Avaliação.');
+                  return;
+                }
                 flushPendingContent();
                 onNewBlankTab();
               }}
@@ -1584,11 +1670,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 onOpenSolution(sol);
               }}
               solutions={solutions}
+              savedScripts={savedScripts}
+              onSelectSavedScript={onSelectSavedScript}
+              classExamples={classExamples}
+              classExercises={classExercises}
+              classExams={classExams}
+              isExamModeActive={isExamModeActive}
               align="left"
               triggerButton={({ isOpen, toggle }) => (
                 <button
                   onClick={toggle}
-                  title="Mais Opções (Carregar Soluções)"
+                  title="Mais Opções (Carregar Scripts Salvos, Exemplos, Exercícios)"
                   className={`w-4 h-6 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded transition-colors cursor-pointer ${
                     isOpen ? 'text-[var(--accent-yellow)] bg-[var(--bg-hover)]' : ''
                   }`}
@@ -1599,6 +1691,19 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               )}
             />
           </div>
+
+          {/* Botão Salvar Aba no Perfil (Ctrl+S) */}
+          {activeTab && (
+            <button
+              onClick={() => setIsSaveScriptModalOpen(true)}
+              title="Salvar Aba Ativa no Perfil (Ctrl+S)"
+              className="ml-1 px-2 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--accent-yellow)] hover:bg-[var(--accent-yellow)]/15 rounded transition-colors cursor-pointer shrink-0 border border-[var(--accent-yellow)]/30 hover:border-[var(--accent-yellow)]/60"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[13px]">save</span>
+              <span className="hidden sm:inline">Salvar no Perfil</span>
+            </button>
+          )}
 
           {/* Botão Fechar Todas as Abas se houver abas abertas */}
           {tabs.length > 0 && onCloseAllTabs && (
@@ -1785,7 +1890,27 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
             <div className="h-px bg-[var(--border-color)] my-1" />
 
-            {/* 3. Exportar Script .sql (Ctrl+S) */}
+            {/* 3. Salvar no Perfil (Ctrl+S) */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                setIsSaveScriptModalOpen(true);
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--accent-yellow)] group-hover:scale-110 transition-transform">
+                  save
+                </span>
+                <span className="font-medium">Salvar no Perfil</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">
+                Ctrl+S
+              </kbd>
+            </button>
+
+            {/* 4. Exportar Script .sql (Ctrl+Shift+S) */}
             <button
               onClick={() => {
                 handleCloseContextMenu();
@@ -1805,11 +1930,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 <span className="font-medium">Exportar Script .sql</span>
               </div>
               <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-orange)]">
-                Ctrl+S
+                Ctrl+Shift+S
               </kbd>
             </button>
 
-            {/* 4. Alterar todas as ocorrências (Substituir) (Ctrl+F2) */}
+            {/* 5. Alterar todas as ocorrências (Substituir) (Ctrl+F2) */}
             <button
               onClick={() => {
                 handleCloseContextMenu();
@@ -1847,6 +1972,22 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               <span className="truncate max-w-[130px]">{tabContextMenu.tabTitle}</span>
               <span className="text-[9px] text-[var(--text-muted)] font-normal">Aba</span>
             </div>
+
+            {/* Salvar no Perfil */}
+            <button
+              onClick={() => {
+                setTabContextMenu(prev => ({ ...prev, visible: false }));
+                setIsSaveScriptModalOpen(true);
+              }}
+              className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)]">save</span>
+                <span>Salvar no Perfil</span>
+              </div>
+              <kbd className="text-[10px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">Ctrl+S</kbd>
+            </button>
 
             {/* Renomear Aba */}
             <button
@@ -1940,6 +2081,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Salvar Script no Perfil */}
+      <SaveScriptModal
+        isOpen={isSaveScriptModalOpen}
+        onClose={() => setIsSaveScriptModalOpen(false)}
+        activeTabTitle={activeTab?.title || 'script.sql'}
+        activeTabContent={activeTab?.content || ''}
+        user={user}
+        userProfile={userProfile || null}
+        teacherClasses={teacherClasses}
+        currentClassId={userProfile?.classId}
+        isExamModeActive={isExamModeActive}
+        onSaveSuccess={() => {
+          setIsSaveScriptModalOpen(false);
+          onScriptSaved?.();
+        }}
+      />
     </div>
   );
 };

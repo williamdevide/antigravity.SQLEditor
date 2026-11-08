@@ -40,6 +40,8 @@ rules_version = '2';
 //   - active: bool (obrigatório) - Indicador se a turma está ativa
 //   - studentCount: int (opcional, >= 0) - Contador de alunos matriculados na turma
 //   - description: string (opcional, tamanho até 500) - Observações e plano pedagógico
+//   - classroomMode: string (opcional, 'normal' | 'classroom' | 'exam') - Modo de operação da sala de aula
+//   - updatedAt: string (opcional, tamanho até 50) - Data ISO da última atualização
 //
 // 3. Coleção: class_members/{memberId}
 // Document ID: ID no formato `${classId}_${studentUid}`
@@ -69,6 +71,24 @@ rules_version = '2';
 //   - targetEmail: string (opcional, tamanho até 150) - E-mail do usuário afetado
 //   - details: string (obrigatório, tamanho 1 a 1000) - Descrição minuciosa do evento
 //   - timestamp: string (obrigatório, tamanho até 50) - Data e hora ISO do evento (imutável)
+//
+// 5. Coleção: savedScripts/{scriptId} (Scripts Salvos, Modelos de Banco e Avaliações)
+// Document ID: ID único gerado automaticamente pelo Firestore
+// Campos:
+//   - title: string (obrigatório, tamanho 1 a 150) - Título do script SQL
+//   - description: string (opcional, tamanho até 500) - Descrição detalhada do script
+//   - content: string (obrigatório, tamanho 1 a 100000) - Conteúdo SQL ou DDL
+//   - authorUid: string (obrigatório, tamanho 1 a 128) - UID do autor do script (imutável)
+//   - authorName: string (obrigatório, tamanho 1 a 100) - Nome do autor da publicação
+//   - authorEmail: string (obrigatório, tamanho até 150) - E-mail do autor
+//   - authorRole: string (obrigatório, 'aluno' | 'professor' | 'admin') - Papel acadêmico do autor
+//   - category: string (obrigatório, 'student_saved' | 'class_database' | 'example' | 'exercise' | 'exam' | 'exam_submission')
+//   - classIds: list (obrigatório, máx 50 elementos) - Turmas associadas ou ['all']
+//   - isTemporary: bool (opcional) - Indicador de script temporário (backup pré-avaliação)
+//   - submittedAt: string (opcional, null ou tamanho até 50) - Data ISO de envio da resolução de avaliação
+//   - createdAt: string (obrigatório, tamanho até 50) - Data ISO de criação (imutável)
+//   - updatedAt: string (obrigatório, tamanho até 50) - Data ISO da última atualização
+//   - id: string (opcional, tamanho até 128) - ID do documento
 //
 // ===============================================================
 
@@ -198,7 +218,27 @@ service cloud.firestore {
         data.active is bool &&
         (!('studentCount' in data) || (data.studentCount is int && data.studentCount >= 0)) &&
         (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+        (!('classroomMode' in data) || (data.classroomMode is string && (data.classroomMode in ['normal', 'classroom', 'exam']))) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
         (!('id' in data) || (data.id is string && data.id.size() <= 128));
+    }
+
+    // Validador de esquema e limites para a coleção 'savedScripts'
+    function isValidSavedScript(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 100000 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+        data.authorEmail is string && data.authorEmail.size() <= 150 &&
+        data.authorRole is string && (data.authorRole in ['aluno', 'professor', 'admin']) &&
+        data.category is string && (data.category in ['student_saved', 'class_database', 'example', 'exercise', 'exam', 'exam_submission']) &&
+        data.classIds is list && data.classIds.size() <= 50 &&
+        data.createdAt is string && data.createdAt.size() <= 50 &&
+        data.updatedAt is string && data.updatedAt.size() <= 50 &&
+        (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 500)) &&
+        (!('isTemporary' in data) || data.isTemporary == null || data.isTemporary is bool) &&
+        (!('submittedAt' in data) || data.submittedAt == null || (data.submittedAt is string && data.submittedAt.size() <= 50)) &&
+        (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128));
     }
 
     // Validador de esquema e limites para a coleção 'class_members'
@@ -417,6 +457,31 @@ service cloud.firestore {
 
       // Atualização e Exclusão: estritamente proibidos para garantir integridade e não-repúdio do log
       allow update, delete: if false;
+    }
+
+    // ===============================================================
+    // Coleção: savedScripts/{scriptId} (Scripts Salvos, BDs de Aula e Avaliações)
+    // ===============================================================
+    match /savedScripts/{scriptId} {
+      // Leitura: qualquer usuário autenticado (carregamento no editor, galeria, perfil e avaliações)
+      allow get, list: if isAuthenticated();
+
+      // Criação: usuário autenticado criando seu próprio script ou Administrador
+      allow create: if isAuthenticated() &&
+                       isValidSavedScript(request.resource.data) &&
+                       (request.resource.data.authorUid == request.auth.uid || isAdmin());
+
+      // Atualização: o próprio autor do script ou Administrador
+      // authorUid e createdAt são estritamente imutáveis para integridade do registro
+      allow update: if isAuthenticated() &&
+                       isValidSavedScript(request.resource.data) &&
+                       (resource.data.authorUid == request.auth.uid || isAdmin()) &&
+                       request.resource.data.authorUid == resource.data.authorUid &&
+                       request.resource.data.createdAt == resource.data.createdAt;
+
+      // Exclusão: o próprio autor do script ou Administrador
+      allow delete: if isAuthenticated() &&
+                       (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
     // ===============================================================

@@ -10,15 +10,30 @@ import {
   approveStudentRequest,
   removeStudentFromClass,
   admitStudentByEmail,
+  updateClassMode,
+  updateAllTeacherClassesMode,
 } from '../services/classService';
-import type { ClassItem, ClassMemberItem } from '../types';
+import {
+  saveScript,
+  getTeacherPublishedScripts,
+  updateScript,
+  deleteScript,
+  getExamSubmissions,
+} from '../services/scriptService';
+import type {
+  ClassItem,
+  ClassMemberItem,
+  ClassroomMode,
+  SavedScriptItem,
+  SavedScriptCategory,
+} from '../types';
 
 interface TeacherPanelViewProps {
   onBackToWorkspace: () => void;
 }
 
 export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWorkspace }) => {
-  const { user, userProfile, isAdmin, isProfessor, isTeacherApproved } = useAuth();
+  const { user, userProfile, isAdmin } = useAuth();
 
   // Estados de Turmas
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -43,6 +58,13 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
   const [isDeletingClass, setIsDeletingClass] = useState(false);
 
+  // Confirmação de Mudança de Modo
+  const [pendingModeChange, setPendingModeChange] = useState<{
+    mode: ClassroomMode;
+    applyAll: boolean;
+  } | null>(null);
+  const [isChangingMode, setIsChangingMode] = useState(false);
+
   // Admissão por E-mail
   const [admitEmail, setAdmitEmail] = useState('');
   const [isAdmittingEmail, setIsAdmittingEmail] = useState(false);
@@ -50,7 +72,28 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   // Feedback e Toasts
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'members' | 'pending' | 'admit'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'pending' | 'admit' | 'materials' | 'submissions'>('members');
+
+  // Materiais e Scripts Pedagógicos
+  const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
+  const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+  const [materialCategoryFilter, setMaterialCategoryFilter] = useState<string>('all');
+
+  // Modal de Criação / Edição de Material
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<SavedScriptItem | null>(null);
+  const [matTitle, setMatTitle] = useState('');
+  const [matDesc, setMatDesc] = useState('');
+  const [matContent, setMatContent] = useState('');
+  const [matCategory, setMatCategory] = useState<SavedScriptCategory>('class_database');
+  const [matClassIds, setMatClassIds] = useState<string[]>(['all']);
+  const [matAllClasses, setMatAllClasses] = useState(true);
+  const [isSavingMaterial, setIsSavingMaterial] = useState(false);
+
+  // Entregas dos Alunos na Avaliação
+  const [submissions, setSubmissions] = useState<SavedScriptItem[]>([]);
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+  const [viewingSubmission, setViewingSubmission] = useState<SavedScriptItem | null>(null);
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -94,6 +137,33 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     }
   }, []);
 
+  // Carrega materiais / scripts pedagógicos
+  const loadClassMaterials = useCallback(async () => {
+    if (!user) return;
+    try {
+      setIsLoadingMaterials(true);
+      const list = await getTeacherPublishedScripts(user.uid);
+      setMaterials(list);
+    } catch (err) {
+      console.error('[TeacherPanel] Erro ao carregar materiais:', err);
+    } finally {
+      setIsLoadingMaterials(false);
+    }
+  }, [user]);
+
+  // Carrega entregas de avaliações da turma
+  const loadSubmissions = useCallback(async (classId: string) => {
+    try {
+      setIsLoadingSubmissions(true);
+      const list = await getExamSubmissions(classId);
+      setSubmissions(list);
+    } catch (err) {
+      console.error('[TeacherPanel] Erro ao carregar entregas:', err);
+    } finally {
+      setIsLoadingSubmissions(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadTeacherClasses();
   }, [loadTeacherClasses]);
@@ -101,80 +171,75 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   useEffect(() => {
     if (selectedClass) {
       loadClassMembers(selectedClass.id);
+      if (activeTab === 'materials') {
+        loadClassMaterials();
+      } else if (activeTab === 'submissions') {
+        loadSubmissions(selectedClass.id);
+      }
     } else {
       setMembers([]);
+      setSubmissions([]);
     }
-  }, [selectedClass, loadClassMembers]);
+  }, [selectedClass, activeTab, loadClassMembers, loadClassMaterials, loadSubmissions]);
 
   // Copiar código da turma com feedback
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2500);
-    showFeedback('success', `Código [${code}] copiado para a área de transferência!`);
+    showFeedback('success', `Código ${code} copiado para a área de transferência!`);
+    setTimeout(() => setCopiedCode(null), 3000);
   };
 
-  // Criação de nova turma
-  const handleCreateClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !userProfile) return;
-
-    if (!newClassName.trim()) {
-      showFeedback('error', 'Informe o nome da turma (ex: TDS-01 / Noite).');
-      return;
+  // Alteração de Modo de Turma (Normal, Sala de Aula, Avaliação)
+  const requestModeChange = (mode: ClassroomMode, applyAll = false) => {
+    if (mode === 'exam') {
+      setPendingModeChange({ mode, applyAll });
+    } else {
+      executeModeChange(mode, applyAll);
     }
+  };
 
+  const executeModeChange = async (mode: ClassroomMode, applyAll: boolean) => {
+    if (!user || !userProfile || !selectedClass) return;
     try {
-      setIsCreatingClass(true);
-      const created = await createClass({
-        name: newClassName.trim(),
-        course: newClassCourse.trim(),
-        description: newClassDesc.trim(),
-        teacherId: user.uid,
-        teacherName: userProfile.displayName || 'Professor(a) SENAI',
-        teacherEmail: userProfile.email,
-      });
-
-      // Atualiza o estado imediatamente para exibição em tempo real
-      setClasses((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-      setSelectedClass(created);
-      setIsCreateModalOpen(false);
-      setNewClassName('');
-      setNewClassDesc('');
-      showFeedback('success', `Turma "${created.name}" criada com sucesso! Código: ${created.code}`);
-
-      // Sincroniza em segundo plano sem desmarcar a turma
-      setTimeout(() => {
-        loadTeacherClasses();
-      }, 350);
+      setIsChangingMode(true);
+      if (applyAll) {
+        await updateAllTeacherClassesMode(user.uid, mode, userProfile);
+        setClasses((prev) => prev.map((c) => ({ ...c, classroomMode: mode })));
+        setSelectedClass((curr) => (curr ? { ...curr, classroomMode: mode } : null));
+        showFeedback('success', `Modo "${mode.toUpperCase()}" aplicado a todas as suas turmas!`);
+      } else {
+        await updateClassMode(selectedClass.id, mode, userProfile);
+        setClasses((prev) =>
+          prev.map((c) => (c.id === selectedClass.id ? { ...c, classroomMode: mode } : c))
+        );
+        setSelectedClass((curr) => (curr ? { ...curr, classroomMode: mode } : null));
+        showFeedback('success', `Modo da turma "${selectedClass.name}" atualizado para ${mode.toUpperCase()}!`);
+      }
+      setPendingModeChange(null);
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao criar turma:', err);
-      showFeedback('error', 'Erro ao criar turma: ' + (err?.message || 'Tente novamente.'));
+      console.error('[executeModeChange Error]', err);
+      showFeedback('error', 'Falha ao alterar modo da turma: ' + (err?.message || 'Erro'));
     } finally {
-      setIsCreatingClass(false);
+      setIsChangingMode(false);
     }
   };
 
-  // Abrir Modal de Edição de Turma
-  const handleOpenEditModal = (cls: ClassItem) => {
-    setEditClassName(cls.name);
-    setEditClassCourse(cls.course);
-    setEditClassDesc(cls.description || '');
-    setEditClassActive(cls.active !== undefined ? cls.active : true);
+  // Abertura do Modal de Edição de Turma
+  const handleOpenEditModal = (classItem: ClassItem) => {
+    setEditClassName(classItem.name);
+    setEditClassCourse(classItem.course);
+    setEditClassDesc(classItem.description || '');
+    setEditClassActive(classItem.active !== false);
     setIsEditModalOpen(true);
   };
 
-  // Salvar Edição da Turma
-  const handleUpdateClass = async (e: React.FormEvent) => {
+  // Submissão da Atualização de Turma
+  const handleUpdateClassSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClass || !userProfile) return;
-
-    if (!editClassName.trim()) {
-      showFeedback('error', 'Informe o nome da turma.');
-      return;
-    }
-    if (!editClassCourse.trim()) {
-      showFeedback('error', 'Informe o curso da turma.');
+    if (!selectedClass || !user || !userProfile) return;
+    if (!editClassName.trim() || !editClassCourse.trim()) {
+      showFeedback('error', 'Nome e curso da turma são obrigatórios.');
       return;
     }
 
@@ -189,7 +254,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         teacher: userProfile,
       });
 
-      const updated: ClassItem = {
+      const updatedItem: ClassItem = {
         ...selectedClass,
         name: editClassName.trim(),
         course: editClassCourse.trim(),
@@ -197,54 +262,84 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         active: editClassActive,
       };
 
-      setSelectedClass(updated);
-      setClasses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setClasses((prev) => prev.map((c) => (c.id === selectedClass.id ? updatedItem : c)));
+      setSelectedClass(updatedItem);
       setIsEditModalOpen(false);
-      showFeedback('success', `Turma "${updated.name}" atualizada com sucesso!`);
-      loadTeacherClasses();
+      showFeedback('success', `Turma "${editClassName}" atualizada com sucesso!`);
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao atualizar turma:', err);
-      showFeedback('error', 'Falha ao atualizar turma: ' + (err?.message || ''));
+      console.error('[handleUpdateClassSubmit Error]', err);
+      showFeedback('error', 'Falha ao atualizar turma: ' + (err?.message || 'Erro'));
     } finally {
       setIsUpdatingClass(false);
     }
   };
 
-  // Excluir Turma com Confirmação Rigorosa (Alunos nunca são excluídos da plataforma)
-  const handleDeleteClass = async (cls: ClassItem) => {
-    if (!userProfile) return;
-
-    const confirmDelete = window.confirm(
-      `ATENÇÃO: Deseja realmente excluir permanentemente a turma "${cls.name}" (${cls.code})?\n\n` +
-      `• Esta ação é irreversível.\n` +
-      `• Todos os alunos matriculados serão desvinculados desta classe.\n` +
-      `• IMPORTANTE: Os alunos NÃO serão excluídos da plataforma SQLEditor (mantêm seus perfis e acessos normais ao laboratório).\n\n` +
-      `Clique em OK para confirmar a exclusão definitiva.`
-    );
-    if (!confirmDelete) return;
+  // Exclusão de Turma
+  const handleDeleteClass = async (classItem: ClassItem) => {
+    if (!user || !userProfile) return;
+    const confirmMsg = `ATENÇÃO: Deseja realmente excluir permanentemente a turma "${classItem.name}" [${classItem.code}]?\n\nOs alunos permanecerão cadastrados na plataforma com seus perfis intactos, mas seu vínculo com esta turma será desfeito.`;
+    if (!window.confirm(confirmMsg)) return;
 
     try {
       setIsDeletingClass(true);
       await deleteClass({
-        classItem: cls,
+        classItem,
         teacher: userProfile,
       });
 
-      showFeedback('success', `Turma "${cls.name}" excluída com sucesso. Alunos desvinculados mantidos na plataforma.`);
-
-      const remaining = classes.filter((c) => c.id !== cls.id);
-      setClasses(remaining);
-      setSelectedClass(remaining.length > 0 ? remaining[0] : null);
-      loadTeacherClasses();
+      setClasses((prev) => prev.filter((c) => c.id !== classItem.id));
+      setSelectedClass((curr) => {
+        if (curr?.id === classItem.id) {
+          const remaining = classes.filter((c) => c.id !== classItem.id);
+          return remaining.length > 0 ? remaining[0] : null;
+        }
+        return curr;
+      });
+      setIsEditModalOpen(false);
+      showFeedback('success', `Turma "${classItem.name}" excluída com sucesso!`);
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao excluir turma:', err);
-      showFeedback('error', 'Erro ao excluir turma: ' + (err?.message || ''));
+      console.error('[handleDeleteClass Error]', err);
+      showFeedback('error', 'Falha ao excluir turma: ' + (err?.message || 'Erro'));
     } finally {
       setIsDeletingClass(false);
     }
   };
 
-  // Aprovar solicitação de aluno
+  // Criação de Turma
+  const handleCreateClassSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !userProfile) return;
+    if (!newClassName.trim() || !newClassCourse.trim()) {
+      showFeedback('error', 'Nome e curso da turma são obrigatórios.');
+      return;
+    }
+
+    try {
+      setIsCreatingClass(true);
+      const created = await createClass({
+        name: newClassName.trim(),
+        course: newClassCourse.trim(),
+        description: newClassDesc.trim(),
+        teacherId: user.uid,
+        teacherName: userProfile.displayName || user.displayName || 'Professor',
+        teacherEmail: userProfile.email || user.email || '',
+      });
+
+      setClasses((prev) => [created, ...prev]);
+      setSelectedClass(created);
+      setIsCreateModalOpen(false);
+      setNewClassName('');
+      setNewClassDesc('');
+      showFeedback('success', `Turma "${created.name}" criada com código [${created.code}]!`);
+    } catch (err: any) {
+      console.error('[handleCreateClassSubmit Error]', err);
+      showFeedback('error', 'Falha ao criar turma: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsCreatingClass(false);
+    }
+  };
+
+  // Aprovação e Remoção de Alunos
   const handleApproveStudent = async (member: ClassMemberItem) => {
     if (!selectedClass || !userProfile) return;
     try {
@@ -256,24 +351,16 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         studentEmail: member.studentEmail,
         teacher: userProfile,
       });
-
-      showFeedback('success', `Aluno(a) ${member.studentName} aprovado(a) na turma!`);
-      await loadClassMembers(selectedClass.id);
-      await loadTeacherClasses();
+      showFeedback('success', `Aluno "${member.studentName}" aprovado na turma!`);
+      loadClassMembers(selectedClass.id);
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao aprovar aluno:', err);
-      showFeedback('error', 'Falha ao aprovar aluno: ' + (err?.message || ''));
+      showFeedback('error', 'Erro ao aprovar aluno.');
     }
   };
 
-  // Remover aluno da turma
   const handleRemoveStudent = async (member: ClassMemberItem) => {
     if (!selectedClass || !userProfile) return;
-    const confirm = window.confirm(
-      `Deseja realmente remover o aluno "${member.studentName}" da turma "${selectedClass.name}"?\n\nEle deixará de ver as tarefas desta classe, mas continuará com a conta ativa na plataforma SQLEditor.`
-    );
-    if (!confirm) return;
-
+    if (!window.confirm(`Deseja remover ${member.studentName} da turma?`)) return;
     try {
       await removeStudentFromClass({
         memberId: member.id,
@@ -283,25 +370,17 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         studentEmail: member.studentEmail,
         teacher: userProfile,
       });
-
-      showFeedback('success', `Aluno(a) ${member.studentName} removido da turma.`);
-      await loadClassMembers(selectedClass.id);
-      await loadTeacherClasses();
+      showFeedback('success', `Aluno "${member.studentName}" removido.`);
+      loadClassMembers(selectedClass.id);
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao remover aluno:', err);
-      showFeedback('error', 'Falha ao remover aluno: ' + (err?.message || ''));
+      showFeedback('error', 'Erro ao remover aluno.');
     }
   };
 
-  // Admitir diretamente por e-mail
+  // Admissão por E-mail
   const handleAdmitByEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClass || !userProfile) return;
-    if (!admitEmail.trim()) {
-      showFeedback('error', 'Informe o e-mail do aluno cadastrado.');
-      return;
-    }
-
+    if (!selectedClass || !userProfile || !admitEmail.trim()) return;
     try {
       setIsAdmittingEmail(true);
       await admitStudentByEmail({
@@ -309,47 +388,113 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         studentEmail: admitEmail.trim(),
         teacher: userProfile,
       });
-
-      showFeedback('success', `Aluno com e-mail "${admitEmail.trim()}" admitido na turma!`);
+      showFeedback('success', `Aluno com e-mail "${admitEmail.trim()}" matriculado com sucesso!`);
       setAdmitEmail('');
-      await loadClassMembers(selectedClass.id);
-      await loadTeacherClasses();
+      loadClassMembers(selectedClass.id);
+      setActiveTab('members');
     } catch (err: any) {
-      console.error('[TeacherPanel] Erro ao admitir por e-mail:', err);
       showFeedback('error', err?.message || 'Falha ao admitir aluno.');
     } finally {
       setIsAdmittingEmail(false);
     }
   };
 
-  // Se não for professor autorizado nem admin, bloqueia o acesso
-  if (!isTeacherApproved) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[var(--bg-primary)]">
-        <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-8 text-center space-y-4 shadow-xl">
-          <div className="w-16 h-16 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
-            <span className="material-symbols-outlined text-[32px]">lock</span>
-          </div>
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Acesso Restrito ao Corpo Docente</h2>
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-            {isProfessor
-              ? 'Seu cadastro como Professor(a) foi submetido com sucesso e está aguardando aprovação de um Administrador. Assim que aprovado, você poderá gerenciar suas turmas.'
-              : 'Esta área é exclusiva para professores e instrutores do SENAI. Se você é professor, solicite autorização a um Administrador.'}
-          </p>
-          <button
-            onClick={onBackToWorkspace}
-            type="button"
-            className="w-full py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white font-bold text-xs shadow transition-all cursor-pointer"
-          >
-            Voltar ao Laboratório SQL
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Gestão de Materiais Pedagógicos
+  const handleOpenNewMaterialModal = () => {
+    setEditingMaterial(null);
+    setMatTitle('');
+    setMatDesc('');
+    setMatContent('-- Escreva aqui o script SQL do Banco de Dados, Exemplo ou Exercício...\n');
+    setMatCategory('class_database');
+    setMatClassIds(selectedClass ? [selectedClass.id] : ['all']);
+    setMatAllClasses(false);
+    setIsMaterialModalOpen(true);
+  };
+
+  const handleOpenEditMaterialModal = (item: SavedScriptItem) => {
+    setEditingMaterial(item);
+    setMatTitle(item.title);
+    setMatDesc(item.description || '');
+    setMatContent(item.content);
+    setMatCategory(item.category);
+    const isAll = (item.classIds || []).includes('all');
+    setMatAllClasses(isAll);
+    setMatClassIds(isAll ? ['all'] : item.classIds || []);
+    setIsMaterialModalOpen(true);
+  };
+
+  const handleSaveMaterialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !userProfile) return;
+    if (!matTitle.trim() || !matContent.trim()) {
+      showFeedback('error', 'Título e código SQL são obrigatórios.');
+      return;
+    }
+
+    try {
+      setIsSavingMaterial(true);
+      const cleanClassIds = matAllClasses
+        ? ['all']
+        : matClassIds.length > 0
+        ? matClassIds
+        : (selectedClass ? [selectedClass.id] : ['all']);
+
+      if (editingMaterial) {
+        await updateScript(editingMaterial.id, {
+          title: matTitle.trim(),
+          description: matDesc.trim(),
+          content: matContent,
+          category: matCategory,
+          classIds: cleanClassIds,
+        });
+        showFeedback('success', `Material "${matTitle.trim()}" atualizado com sucesso!`);
+      } else {
+        await saveScript({
+          title: matTitle.trim(),
+          description: matDesc.trim(),
+          content: matContent,
+          authorUid: user.uid,
+          authorName: userProfile.displayName || user.displayName || 'Professor',
+          authorEmail: userProfile.email || user.email || '',
+          authorRole: userProfile.role,
+          category: matCategory,
+          classIds: cleanClassIds,
+        });
+        showFeedback('success', `Material "${matTitle.trim()}" publicado para a turma!`);
+      }
+      setIsMaterialModalOpen(false);
+      loadClassMaterials();
+    } catch (err: any) {
+      console.error('[handleSaveMaterialSubmit Error]', err);
+      showFeedback('error', 'Erro ao salvar material: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsSavingMaterial(false);
+    }
+  };
+
+  const handleDeleteMaterial = async (item: SavedScriptItem) => {
+    if (!window.confirm(`Deseja excluir o material "${item.title}"?`)) return;
+    try {
+      await deleteScript(item.id);
+      showFeedback('success', `Material "${item.title}" excluído.`);
+      loadClassMaterials();
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao excluir material.');
+    }
+  };
+
+  // Filtragem de materiais da turma selecionada
+  const filteredMaterials = materials.filter((m) => {
+    if (materialCategoryFilter !== 'all' && m.category !== materialCategoryFilter) return false;
+    if (!selectedClass) return true;
+    const matchesClass = (m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id);
+    return matchesClass;
+  });
 
   const approvedMembers = members.filter((m) => m.status === 'approved');
   const pendingMembers = members.filter((m) => m.status === 'pending');
+
+  const currentMode = selectedClass?.classroomMode || 'normal';
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--bg-primary)] overflow-y-auto">
@@ -393,7 +538,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </span>
               </h1>
               <p className="text-[11px] text-[var(--text-secondary)]">
-                Crie turmas, compartilhe códigos de 6 dígitos e aprove a admissão dos seus alunos
+                Controle o modo de sala de aula, avaliações em tempo real e materiais didáticos
               </p>
             </div>
           </div>
@@ -452,44 +597,49 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
             </div>
           ) : (
             <div className="space-y-2.5">
-              {classes.map((cls) => {
-                const isSelected = selectedClass?.id === cls.id;
+              {classes.map((c) => {
+                const isSelected = selectedClass?.id === c.id;
+                const cMode = c.classroomMode || 'normal';
                 return (
                   <div
-                    key={cls.id}
-                    onClick={() => setSelectedClass(cls)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                    key={c.id}
+                    onClick={() => setSelectedClass(c)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
                       isSelected
                         ? 'bg-[var(--bg-surface)] border-[#0288D1] shadow-lg shadow-[#0288D1]/10'
-                        : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-hover)]'
+                        : 'bg-[var(--bg-surface)]/60 border-[var(--border-color)] hover:border-[var(--border-color)]/80 hover:bg-[var(--bg-surface)]'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-bold text-sm text-[var(--text-primary)]">{cls.name}</h3>
-                          {cls.active === false && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
-                              Inativa
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-sm text-[var(--text-primary)] truncate">
+                            {c.name}
+                          </h3>
+                          {cMode === 'exam' ? (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              🎯 Avaliação
                             </span>
-                          )}
+                          ) : cMode === 'classroom' ? (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              🏫 Sala de Aula
+                            </span>
+                          ) : null}
                         </div>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 line-clamp-1">
-                          {cls.course}
+                        <p className="text-xs text-[var(--text-secondary)] truncate mt-0.5">
+                          {c.course}
                         </p>
                       </div>
-                      <span className="px-2 py-0.5 rounded-md bg-[#0288D1]/15 text-[#29B6F6] text-[11px] font-mono font-bold tracking-wider">
-                        {cls.code}
+
+                      <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] text-[#FF6B00]">
+                        {c.code}
                       </span>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[15px]">group</span>
-                        <span>{cls.studentCount || 0} aluno(s)</span>
-                      </span>
-                      <span className="text-[10px]">
-                        {new Date(cls.createdAt).toLocaleDateString('pt-BR')}
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] mt-3 pt-2.5 border-t border-[var(--border-color)]/50">
+                      <span>Criada em {new Date(c.createdAt).toLocaleDateString('pt-BR')}</span>
+                      <span className="font-semibold text-[var(--text-secondary)]">
+                        {c.studentCount ?? 0} alunos
                       </span>
                     </div>
                   </div>
@@ -499,7 +649,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
           )}
         </div>
 
-        {/* Coluna Direita: Detalhes e Gestão de Alunos da Turma Selecionada (8 Colunas) */}
+        {/* Coluna Direita: Detalhes, Modos e Materiais da Turma Selecionada (8 Colunas) */}
         <div className="lg:col-span-8">
           {selectedClass ? (
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-xl space-y-6">
@@ -527,7 +677,6 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
                 {/* Ações da Turma: Código de Acesso + Editar e Excluir */}
                 <div className="flex flex-wrap items-center gap-2.5">
-                  {/* Card de Código de Acesso com botão de cópia */}
                   <div className="flex items-center gap-2 p-1.5 px-2.5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
                     <div>
                       <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] leading-none">
@@ -549,12 +698,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     </button>
                   </div>
 
-                  {/* Botões de Ação da Turma */}
                   <button
                     onClick={() => handleOpenEditModal(selectedClass)}
                     type="button"
                     className="px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] hover:border-[#0288D1] hover:bg-[#0288D1]/10 text-xs font-semibold text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    title="Editar informações da turma"
                   >
                     <span className="material-symbols-outlined text-[16px] text-[#0288D1]">edit</span>
                     <span>Editar</span>
@@ -565,24 +712,93 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     type="button"
                     disabled={isDeletingClass}
                     className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
-                    title="Excluir turma (pede confirmação)"
                   >
-                    {isDeletingClass ? (
-                      <span className="w-3.5 h-3.5 border-2 border-rose-400/30 border-t-rose-400 rounded-full animate-spin" />
-                    ) : (
-                      <span className="material-symbols-outlined text-[16px]">delete</span>
-                    )}
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
                     <span>Excluir</span>
                   </button>
                 </div>
               </div>
 
+              {/* SELETOR DE MODOS EM TEMPO REAL: Normal | Sala de Aula | Avaliação */}
+              <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-[22px] text-[#FF6B00]">tune</span>
+                  <div>
+                    <h3 className="text-xs font-bold text-[var(--text-primary)]">
+                      Modo Operacional da Turma
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      Alterne em tempo real o que os alunos veem no laboratório SQL
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Seletor com 3 opções */}
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                    <button
+                      type="button"
+                      disabled={isChangingMode}
+                      onClick={() => requestModeChange('normal', false)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        currentMode === 'normal'
+                          ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow font-bold'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      Normal
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isChangingMode}
+                      onClick={() => requestModeChange('classroom', false)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                        currentMode === 'classroom'
+                          ? 'bg-emerald-500 text-white shadow font-bold'
+                          : 'text-[var(--text-muted)] hover:text-emerald-400'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">school</span>
+                      <span>Sala de Aula</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isChangingMode}
+                      onClick={() => requestModeChange('exam', false)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                        currentMode === 'exam'
+                          ? 'bg-purple-600 text-white shadow font-bold animate-pulse'
+                          : 'text-[var(--text-muted)] hover:text-purple-400'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">quiz</span>
+                      <span>Avaliação</span>
+                    </button>
+                  </div>
+
+                  {/* Ação em Lote */}
+                  {classes.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={isChangingMode}
+                      onClick={() => requestModeChange(currentMode, true)}
+                      title={`Aplicar modo "${currentMode.toUpperCase()}" a todas as minhas ${classes.length} turmas`}
+                      className="px-2.5 py-1.5 rounded-xl border border-[var(--border-color)] hover:border-[#FF6B00] text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[#FF6B00] transition-colors cursor-pointer"
+                    >
+                      🌐 Aplicar a Todas
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Abas de Navegação Interna da Turma */}
-              <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2">
+              <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => setActiveTab('members')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                     activeTab === 'members'
                       ? 'bg-[#0288D1] text-white shadow'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -595,7 +811,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 <button
                   type="button"
                   onClick={() => setActiveTab('pending')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                     activeTab === 'pending'
                       ? 'bg-amber-500 text-white shadow'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -612,10 +828,36 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
                 <button
                   type="button"
+                  onClick={() => setActiveTab('materials')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                    activeTab === 'materials'
+                      ? 'bg-[#FF6B00] text-black shadow'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">inventory_2</span>
+                  <span>Materiais &amp; BDs ({filteredMaterials.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('submissions')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                    activeTab === 'submissions'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
+                  <span>Entregas de Provas ({submissions.length})</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveTab('admit')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                     activeTab === 'admit'
-                      ? 'bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white shadow'
+                      ? 'bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white shadow'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                   }`}
                 >
@@ -678,7 +920,6 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                   type="button"
                                   onClick={() => handleRemoveStudent(member)}
                                   className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-bold transition-colors cursor-pointer"
-                                  title="Remover aluno apenas desta turma"
                                 >
                                   Remover da Turma
                                 </button>
@@ -755,102 +996,315 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               )}
 
-              {/* 3. ABA DE ADMITIR ALUNO POR E-MAIL */}
-              {activeTab === 'admit' && (
-                <div className="p-5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-4">
-                  <div>
-                    <h3 className="font-bold text-sm text-[var(--text-primary)]">
-                      Admissão Direta por E-mail
-                    </h3>
-                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                      Insira o e-mail exato cadastrado pelo aluno na plataforma SQLEditor para vinculá-lo imediatamente a esta turma, dispensando o código de acesso.
-                    </p>
+              {/* 3. ABA DE MATERIAIS & BDS DA TURMA */}
+              {activeTab === 'materials' && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                      {[
+                        { id: 'all', label: 'Todos' },
+                        { id: 'class_database', label: 'BDs Sala de Aula' },
+                        { id: 'example', label: 'Exemplos' },
+                        { id: 'exercise', label: 'Exercícios' },
+                        { id: 'exam', label: 'Avaliações' },
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => setMaterialCategoryFilter(f.id)}
+                          type="button"
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                            materialCategoryFilter === f.id
+                              ? 'bg-[#FF6B00] text-black font-bold'
+                              : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={handleOpenNewMaterialModal}
+                      type="button"
+                      className="px-4 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#FF8800] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow self-start sm:self-auto"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">add_circle</span>
+                      <span>+ Novo Material</span>
+                    </button>
                   </div>
 
-                  <form onSubmit={handleAdmitByEmail} className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <span className="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-[var(--text-muted)]">
+                  {isLoadingMaterials ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                      <span className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin inline-block" />
+                      <p>Carregando materiais pedagógicos...</p>
+                    </div>
+                  ) : filteredMaterials.length === 0 ? (
+                    <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                      <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
+                        post_add
+                      </span>
+                      <p className="text-xs text-[var(--text-secondary)] font-medium">
+                        Nenhum material publicado para esta turma nesta categoria.
+                      </p>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios ou Avaliações.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {filteredMaterials.map((mat) => (
+                        <div
+                          key={mat.id}
+                          className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex flex-col justify-between space-y-3"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-bold text-xs text-[var(--text-primary)] truncate">
+                                {mat.title}
+                              </h4>
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                                {mat.category === 'class_database'
+                                  ? '🗄️ BD Aula'
+                                  : mat.category === 'example'
+                                  ? '💡 Exemplo'
+                                  : mat.category === 'exercise'
+                                  ? '📝 Exercício'
+                                  : '🎯 Avaliação'}
+                              </span>
+                            </div>
+
+                            {mat.description && (
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2">
+                                {mat.description}
+                              </p>
+                            )}
+
+                            <div className="flex items-center gap-2 mt-2 text-[10px] text-[var(--text-muted)] font-mono">
+                              <span>{mat.content.split('\n').length} linhas</span>
+                              <span>•</span>
+                              <span>
+                                {(mat.classIds || []).includes('all')
+                                  ? '🌐 Todas as turmas'
+                                  : `Turmas: ${(mat.classIds || []).length}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]/60">
+                            <button
+                              onClick={() => handleOpenEditMaterialModal(mat)}
+                              type="button"
+                              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">edit</span>
+                              <span>Editar</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteMaterial(mat)}
+                              type="button"
+                              className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-400 cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">delete</span>
+                              <span>Excluir</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. ABA DE ENTREGAS DE PROVAS */}
+              {activeTab === 'submissions' && (
+                <div className="space-y-3">
+                  {isLoadingSubmissions ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                      <span className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin inline-block" />
+                      <p>Carregando resoluções de provas dos alunos...</p>
+                    </div>
+                  ) : submissions.length === 0 ? (
+                    <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                      <span className="material-symbols-outlined text-[32px] text-purple-400">
+                        quiz
+                      </span>
+                      <p className="text-xs text-[var(--text-secondary)] font-medium">
+                        Nenhuma entrega de avaliação registrada para esta turma ainda.
+                      </p>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        Quando os alunos clicarem em <strong>Entregar Avaliação</strong> durante o modo de prova, suas resoluções completas aparecerão aqui.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[var(--bg-primary)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
+                          <tr>
+                            <th className="px-4 py-3">Aluno</th>
+                            <th className="px-4 py-3">E-mail</th>
+                            <th className="px-4 py-3">Avaliação</th>
+                            <th className="px-4 py-3">Data/Hora da Entrega</th>
+                            <th className="px-4 py-3 text-right">Resolução</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-color)]">
+                          {submissions.map((sub) => (
+                            <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors">
+                              <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
+                                {sub.authorName}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
+                                {sub.authorEmail}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--text-primary)]">
+                                {sub.title}
+                              </td>
+                              <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
+                                {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingSubmission(sub)}
+                                  className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5 ml-auto"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">visibility</span>
+                                  <span>Visualizar SQL</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5. ABA DE ADMITIR POR E-MAIL */}
+              {activeTab === 'admit' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[20px] text-[#0288D1]">
                         mail
                       </span>
+                      <h3 className="text-xs font-bold text-[var(--text-primary)]">
+                        Matricular Aluno Imediatamente pelo E-mail
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                      Se o aluno já criou sua conta no SQLEditor (via Google ou e-mail), digite o e-mail cadastrado dele abaixo para vinculá-lo diretamente a esta turma sem necessidade de aprovação pendente.
+                    </p>
+
+                    <form onSubmit={handleAdmitByEmail} className="flex gap-2 pt-1">
                       <input
                         type="email"
                         required
                         value={admitEmail}
                         onChange={(e) => setAdmitEmail(e.target.value)}
-                        placeholder="aluno@escola.senai.br"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                        placeholder="email.do.aluno@provedor.com"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1]"
                       />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isAdmittingEmail || !admitEmail.trim()}
-                      className="px-5 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white font-bold text-xs shadow-[0_0_15px_rgba(255,107,0,0.3)] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isAdmittingEmail ? (
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <span className="material-symbols-outlined text-[16px]">add_task</span>
-                      )}
-                      <span>Admitir na Turma</span>
-                    </button>
-                  </form>
+                      <button
+                        type="submit"
+                        disabled={isAdmittingEmail || !admitEmail.trim()}
+                        className="px-5 py-2.5 rounded-xl bg-[#0288D1] hover:bg-[#0288D1]/80 text-white font-bold text-xs shadow disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        {isAdmittingEmail ? 'Admitindo...' : 'Admitir Aluno'}
+                      </button>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="p-12 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl space-y-3">
-              <span className="material-symbols-outlined text-[40px] text-[var(--text-muted)]">
-                arrow_back
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-12 text-center text-xs text-[var(--text-muted)] space-y-2 shadow-xl">
+              <span className="material-symbols-outlined text-[48px] text-[var(--text-muted)]/50 block">
+                touch_app
               </span>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                Selecione uma turma ao lado
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Ou crie uma nova turma para começar a compartilhar o código com seus alunos.
-              </p>
+              <p>Selecione uma turma na coluna à esquerda para gerenciar seus alunos, modos e materiais.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal de Criação de Turma */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#0288D1] text-[22px]">
-                  add_circle
-                </span>
-                <h3 className="text-base font-bold text-[var(--text-primary)]">Nova Turma / Classe</h3>
-              </div>
+      {/* MODAL DE CONFIRMAÇÃO DE MODO AVALIAÇÃO */}
+      {pendingModeChange && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-purple-500/40 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150 text-center">
+            <div className="w-14 h-14 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto shadow-[0_0_24px_rgba(168,85,247,0.3)]">
+              <span className="material-symbols-outlined text-[32px]">quiz</span>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-[var(--text-primary)]">
+                Ativar Modo Avaliação?
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+                Ao ativar o modo de prova, todas as guias abertas nos navegadores dos alunos desta turma serão{' '}
+                <strong className="text-purple-300">automaticamente salvas como backup temporário no perfil</strong> e fechadas. Apenas as guias e os bancos da prova ficarão disponíveis durante a avaliação.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+                onClick={() => setPendingModeChange(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
               >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isChangingMode}
+                onClick={() => executeModeChange(pendingModeChange.mode, pendingModeChange.applyAll)}
+                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                {isChangingMode ? 'Ativando...' : 'Confirmar e Iniciar Avaliação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CRIAÇÃO DE TURMA */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#0288D1]">add_circle</span>
+                <span>Nova Turma</span>
+              </h3>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                type="button"
+                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateClass} className="space-y-4">
+            <form onSubmit={handleCreateClassSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Nome da Turma *
+                  Nome da Turma <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
-                  placeholder="Ex: TDS-01 / Noite ou 2º Módulo A"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  placeholder="Ex: 2º TDS - Manhã (Banco de Dados)"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Curso SENAI *
+                  Curso SENAI <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -858,49 +1312,37 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   value={newClassCourse}
                   onChange={(e) => setNewClassCourse(e.target.value)}
                   placeholder="Ex: Técnico em Desenvolvimento de Sistemas"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Descrição ou Observações (Opcional)
+                  Observações / Semestre (opcional)
                 </label>
                 <textarea
                   rows={2}
                   value={newClassDesc}
                   onChange={(e) => setNewClassDesc(e.target.value)}
-                  placeholder="Ex: Aulas às terças e quintas-feiras - Laboratório 04"
-                  className="w-full px-3.5 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors resize-none"
+                  placeholder="Ex: Aulas de terças e quintas no Lab 04"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1] resize-none"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-[#0288D1]/10 border border-[#0288D1]/20 text-[11px] text-[var(--text-secondary)] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#29B6F6] text-[18px] shrink-0">
-                  vpn_key
-                </span>
-                <span>Um código de 6 caracteres único será gerado automaticamente após a criação.</span>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-color)]">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] text-xs font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isCreatingClass}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white text-xs font-bold shadow hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-[#0288D1] hover:bg-[#0288D1]/80 text-white font-bold text-xs shadow"
                 >
-                  {isCreatingClass ? (
-                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <span className="material-symbols-outlined text-[16px]">check</span>
-                  )}
-                  <span>Criar Turma</span>
+                  {isCreatingClass ? 'Criando...' : 'Criar Turma'}
                 </button>
               </div>
             </form>
@@ -908,121 +1350,271 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         </div>
       )}
 
-      {/* Modal de Edição de Turma */}
-      {isEditModalOpen && selectedClass && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#0288D1] text-[22px]">
-                  edit_note
-                </span>
-                <h3 className="text-base font-bold text-[var(--text-primary)]">Editar Turma</h3>
-              </div>
+      {/* MODAL DE EDIÇÃO DE TURMA */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#0288D1]">edit</span>
+                <span>Editar Turma</span>
+              </h3>
               <button
-                type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+                type="button"
+                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleUpdateClass} className="space-y-4">
+            <form onSubmit={handleUpdateClassSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Nome da Turma *
+                  Nome da Turma
                 </label>
                 <input
                   type="text"
                   required
                   value={editClassName}
                   onChange={(e) => setEditClassName(e.target.value)}
-                  placeholder="Ex: TDS-01 / Noite"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Curso SENAI *
+                  Curso SENAI
                 </label>
                 <input
                   type="text"
                   required
                   value={editClassCourse}
                   onChange={(e) => setEditClassCourse(e.target.value)}
-                  placeholder="Ex: Técnico em Desenvolvimento de Sistemas"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Descrição ou Observações (Opcional)
+                  Observações
                 </label>
                 <textarea
                   rows={2}
                   value={editClassDesc}
                   onChange={(e) => setEditClassDesc(e.target.value)}
-                  placeholder="Ex: Aulas às terças e quintas-feiras"
-                  className="w-full px-3.5 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors resize-none"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#0288D1] resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
-                <div>
-                  <span className="text-xs font-semibold text-[var(--text-primary)] block">
-                    Status da Turma
-                  </span>
-                  <span className="text-[11px] text-[var(--text-muted)]">
-                    {editClassActive ? 'Turma ativa e aceitando novos ingressos' : 'Turma desativada temporariamente'}
-                  </span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editClassActive}
-                    onChange={(e) => setEditClassActive(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0288D1]"></div>
-                </label>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">Código de Acesso (inalterável):</span>
-                <span className="font-mono font-bold text-[#FF6B00] tracking-wider">
-                  {selectedClass.code}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-color)]">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] text-xs font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isUpdatingClass}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white text-xs font-bold shadow hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-[#0288D1] text-white font-bold text-xs shadow"
                 >
-                  {isUpdatingClass ? (
-                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <span className="material-symbols-outlined text-[16px]">save</span>
-                  )}
-                  <span>Salvar Alterações</span>
+                  {isUpdatingClass ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* MODAL DE CRIAÇÃO / EDIÇÃO DE MATERIAL PEDAGÓGICO */}
+      {isMaterialModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl w-full max-w-xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#FF6B00]">inventory_2</span>
+                <span>{editingMaterial ? 'Editar Material' : 'Novo Material Didático / Prova'}</span>
+              </h3>
+              <button
+                onClick={() => setIsMaterialModalOpen(false)}
+                type="button"
+                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMaterialSubmit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Título do Material <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={matTitle}
+                    onChange={(e) => setMatTitle(e.target.value)}
+                    placeholder="Ex: bd_clinica_medica.sql ou avaliacao_1_ddl"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Finalidade / Categoria <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={matCategory}
+                    onChange={(e) => setMatCategory(e.target.value as SavedScriptCategory)}
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                  >
+                    <option value="class_database">🗄️ Banco de Dados Sala de Aula</option>
+                    <option value="example">💡 Exemplo de Aula</option>
+                    <option value="exercise">📝 Exercício Prático</option>
+                    <option value="exam">🎯 Avaliação / Prova</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Descrição (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={matDesc}
+                  onChange={(e) => setMatDesc(e.target.value)}
+                  placeholder="Instruções ou resumo para os alunos"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
+                />
+              </div>
+
+              {/* Vinculação de Turmas */}
+              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
+                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={matAllClasses}
+                    onChange={() => setMatAllClasses(!matAllClasses)}
+                    className="rounded border-[var(--border-color)] accent-[#FF6B00]"
+                  />
+                  <span>🌐 Disponibilizar para todas as minhas turmas</span>
+                </label>
+
+                {!matAllClasses && (
+                  <div className="space-y-1 max-h-24 overflow-y-auto pl-5 text-xs text-[var(--text-secondary)]">
+                    {classes.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={matClassIds.includes(c.id)}
+                          onChange={() => {
+                            setMatClassIds((prev) =>
+                              prev.includes(c.id)
+                                ? prev.filter((id) => id !== c.id)
+                                : [...prev, c.id]
+                            );
+                          }}
+                          className="rounded border-[var(--border-color)] accent-[#FF6B00]"
+                        />
+                        <span>{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Conteúdo SQL */}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Código SQL <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={8}
+                  required
+                  value={matContent}
+                  onChange={(e) => setMatContent(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00] resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-color)]">
+                <button
+                  type="button"
+                  onClick={() => setIsMaterialModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingMaterial}
+                  className="px-5 py-2.5 rounded-xl bg-[#FF6B00] text-black font-bold text-xs shadow hover:brightness-110"
+                >
+                  {isSavingMaterial ? 'Salvando...' : 'Publicar Material'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VISUALIZAÇÃO DE ENTREGA DE PROVA */}
+      {viewingSubmission && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-purple-500/40 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                  <span className="material-symbols-outlined text-purple-400">assignment_turned_in</span>
+                  <span>{viewingSubmission.title}</span>
+                </h3>
+                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                  Aluno: <strong>{viewingSubmission.authorName}</strong> ({viewingSubmission.authorEmail}) • Enviado em{' '}
+                  {new Date(viewingSubmission.submittedAt || viewingSubmission.createdAt).toLocaleString('pt-BR')}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingSubmission(null)}
+                type="button"
+                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl p-3 max-h-96 overflow-y-auto">
+              <pre className="font-mono text-xs text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed">
+                {viewingSubmission.content}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(viewingSubmission.content);
+                  showFeedback('success', 'Código da resolução copiado!');
+                }}
+                className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                <span>Copiar SQL</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingSubmission(null)}
+                className="px-5 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs shadow hover:bg-purple-500 cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-

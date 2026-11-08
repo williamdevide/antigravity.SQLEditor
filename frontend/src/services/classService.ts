@@ -6,13 +6,14 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  onSnapshot,
   query,
   where,
   increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { logSystemEvent } from './auditService';
-import type { ClassItem, ClassMemberItem, UserProfile } from '../types';
+import type { ClassItem, ClassMemberItem, UserProfile, ClassroomMode } from '../types';
 
 /**
  * Gera um código de acesso de 6 caracteres único e legível para a turma
@@ -470,4 +471,81 @@ export async function getClassMembers(classId: string): Promise<ClassMemberItem[
     console.warn('[ClassService] Erro ao buscar membros da turma:', err);
     return [];
   }
+}
+
+/**
+ * Atualiza o modo de operação de uma turma específica ('normal' | 'classroom' | 'exam')
+ */
+export async function updateClassMode(
+  classId: string,
+  mode: ClassroomMode,
+  teacher: UserProfile
+): Promise<void> {
+  const classRef = doc(db, 'classes', classId);
+  await updateDoc(classRef, {
+    classroomMode: mode,
+    updatedAt: new Date().toISOString(),
+  });
+
+  const modeLabels: Record<ClassroomMode, string> = {
+    normal: 'Modo Normal (Padrão)',
+    classroom: 'Modo Sala de Aula',
+    exam: 'Modo Avaliação',
+  };
+
+  try {
+    await logSystemEvent({
+      type: 'CLASS_UPDATED',
+      authorUid: teacher.uid,
+      authorName: teacher.displayName,
+      authorEmail: teacher.email,
+      targetUid: classId,
+      details: `Modo da turma alterado para: ${modeLabels[mode]}.`,
+    });
+  } catch (auditErr) {
+    console.warn('[ClassService] Aviso ao registrar auditoria de modo de turma:', auditErr);
+  }
+}
+
+/**
+ * Atualiza o modo de todas as turmas de um professor em lote
+ */
+export async function updateAllTeacherClassesMode(
+  teacherId: string,
+  mode: ClassroomMode,
+  teacher: UserProfile
+): Promise<number> {
+  const classes = await getClassesByTeacher(teacherId);
+  for (const c of classes) {
+    await updateClassMode(c.id, mode, teacher);
+  }
+  return classes.length;
+}
+
+/**
+ * Listener em tempo real (onSnapshot) para uma turma
+ * Permite que a interface do aluno reaja instantaneamente à ativação do modo sala de aula ou avaliação
+ */
+export function subscribeToClass(
+  classId: string,
+  callback: (classItem: ClassItem | null) => void
+): () => void {
+  if (!classId) {
+    callback(null);
+    return () => {};
+  }
+  const classRef = doc(db, 'classes', classId);
+  return onSnapshot(
+    classRef,
+    (snap) => {
+      if (snap.exists()) {
+        callback({ id: snap.id, ...(snap.data() as Omit<ClassItem, 'id'>) });
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn('[ClassService] Aviso ao escutar turma em tempo real:', err);
+    }
+  );
 }

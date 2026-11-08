@@ -184,6 +184,8 @@ export interface UserProfile {
   providerId: 'password' | 'google.com' | string;
 }
 
+export type ClassroomMode = 'normal' | 'classroom' | 'exam';
+
 export interface ClassItem {
   id: string;
   name: string;
@@ -194,6 +196,7 @@ export interface ClassItem {
   teacherEmail: string;
   createdAt: string;
   active: boolean;
+  classroomMode?: ClassroomMode; // Modo ativo: 'normal', 'classroom' ou 'exam'
   studentCount?: number;
   description?: string;
 }
@@ -238,7 +241,32 @@ export interface SystemEventItem {
   timestamp: string;
 }
 
-export type DatabasePreset = 'empty' | 'samples' | 'class';
+export type DatabasePreset = 'empty' | 'samples' | 'class' | 'teacher_class' | 'exam';
+
+export type SavedScriptCategory =
+  | 'student_saved'
+  | 'class_database'
+  | 'example'
+  | 'exercise'
+  | 'exam'
+  | 'exam_submission';
+
+export interface SavedScriptItem {
+  id: string;
+  title: string;
+  description?: string;
+  content: string;
+  authorUid: string;
+  authorName: string;
+  authorEmail: string;
+  authorRole: UserRole;
+  category: SavedScriptCategory;
+  classIds: string[]; // ['all'] ou lista de IDs das turmas vinculadas
+  isTemporary?: boolean; // Backup automático antes de iniciar o modo avaliação
+  submittedAt?: string; // Data/hora formal da entrega da avaliação
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface ContextMenuTarget {
   type: 'database' | 'table' | 'schema_explorer';

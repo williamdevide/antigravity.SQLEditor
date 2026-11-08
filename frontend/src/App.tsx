@@ -18,6 +18,7 @@ import { AdminPanelView } from './components/AdminPanelView';
 import { TeacherPanelView } from './components/TeacherPanelView';
 import { AuthModal } from './components/AuthModal';
 import { NavigationHubModal } from './components/NavigationHubModal';
+import { PostExamRecoveryModal } from './components/PostExamRecoveryModal';
 import { useAuth } from './context/AuthContext';
 import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
@@ -25,6 +26,13 @@ import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
 import { dbStorage } from './services/storage';
 import { reviewSqlQuery, resolveReviewTargetRange, applySuggestedSqlToScript } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
+import { subscribeToClass, getClassesByTeacher, getAllClasses } from './services/classService';
+import {
+  getUserSavedScripts,
+  getClassScripts,
+  saveScript,
+  submitExam,
+} from './services/scriptService';
 import {
   loadAppPreferences,
   saveAppPreferences,
@@ -54,6 +62,9 @@ import type {
   ConsoleTab,
   TablePreviewData,
   DataPreviewLimit,
+  ClassItem,
+  SavedScriptItem,
+  ClassroomMode,
 } from './types';
 
 const INITIAL_TABS: TabItem[] = [
@@ -96,7 +107,7 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
 }
 
 export const App: React.FC = () => {
-  const { user, authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
+  const { user, userProfile, authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
@@ -223,6 +234,24 @@ export const App: React.FC = () => {
   const [activeDatabase, setActiveDatabase] = useState<string>('');
   const [currentPreset, setCurrentPreset] = useState<DatabasePreset>('empty');
   const [tabs, setTabs] = useState<TabItem[]>(INITIAL_TABS);
+  const tabsRef = useRef<TabItem[]>(tabs);
+  tabsRef.current = tabs;
+
+  // Estados de Sala de Aula, Modo Avaliação e Materiais/Scripts Salvos
+  const [activeClassroomMode, setActiveClassroomMode] = useState<ClassroomMode>('normal');
+  const [activeClassName, setActiveClassName] = useState<string>('');
+  const [isExamModeActive, setIsExamModeActive] = useState<boolean>(false);
+  const isExamModeActiveRef = useRef<boolean>(false);
+  const [teacherClasses, setTeacherClasses] = useState<ClassItem[]>([]);
+  const [savedScripts, setSavedScripts] = useState<SavedScriptItem[]>([]);
+  const [classExamples, setClassExamples] = useState<SavedScriptItem[]>([]);
+  const [classExercises, setClassExercises] = useState<SavedScriptItem[]>([]);
+  const [classExams, setClassExams] = useState<SavedScriptItem[]>([]);
+  const [teacherClassDbs, setTeacherClassDbs] = useState<SavedScriptItem[]>([]);
+
+  // Modal de Recuperação pós-avaliação
+  const [isPostExamRecoveryOpen, setIsPostExamRecoveryOpen] = useState<boolean>(false);
+  const [tempRecoveryScripts, setTempRecoveryScripts] = useState<SavedScriptItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('tab-1');
   const [results, setResults] = useState<QueryResult[]>([]);
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(0);
@@ -835,10 +864,22 @@ export const App: React.FC = () => {
   }, []);
 
   // Carregar Preset do Schema Explorer
-  const handleLoadPreset = useCallback(async (preset: DatabasePreset) => {
+  const handleLoadPreset = useCallback(async (
+    preset: DatabasePreset,
+    customScripts?: { title: string; content: string }[]
+  ) => {
     setIsExecuting(true);
     if (preset === 'class') {
       setIsClassLoading(true);
+    }
+
+    let effectiveCustomScripts = customScripts;
+    if (!effectiveCustomScripts) {
+      if (preset === 'teacher_class') {
+        effectiveCustomScripts = teacherClassDbs.map(s => ({ title: s.title, content: s.content }));
+      } else if (preset === 'exam') {
+        effectiveCustomScripts = classExams.map(s => ({ title: s.title, content: s.content }));
+      }
     }
 
     await dbEngine.loadPreset(preset, (progressMap, completedCount) => {
@@ -848,7 +889,7 @@ export const App: React.FC = () => {
           setSchemas(tree);
         });
       }
-    });
+    }, effectiveCustomScripts);
 
     setCurrentPreset(preset);
     await refreshSchemas();
@@ -858,6 +899,8 @@ export const App: React.FC = () => {
     let presetLabel = 'Vazio';
     if (preset === 'samples') presetLabel = 'BDs de Exemplo (ecommerce_db, universidade_db)';
     if (preset === 'class') presetLabel = 'BDs da Aula (Professor)';
+    if (preset === 'teacher_class') presetLabel = 'BDs Aula Professor (Turma)';
+    if (preset === 'exam') presetLabel = 'BDs da Avaliação';
 
     setResults([
       {
@@ -884,7 +927,7 @@ export const App: React.FC = () => {
       setLoadingProgress(null);
       setIsClassLoading(false);
     }, 1800);
-  }, [refreshSchemas]);
+  }, [refreshSchemas, teacherClassDbs, classExams]);
 
   const handleReloadAllDatabases = useCallback(async () => {
     const preset = dbEngine.getPreset();
@@ -911,6 +954,187 @@ export const App: React.FC = () => {
       return next;
     });
   }, [activeTabId]);
+
+  // 1. Recarrega scripts do usuário e materiais de aula
+  const reloadAllScripts = useCallback(async () => {
+    if (!user) {
+      setSavedScripts([]);
+      setClassExamples([]);
+      setClassExercises([]);
+      setClassExams([]);
+      setTeacherClassDbs([]);
+      return;
+    }
+
+    try {
+      // Scripts salvos pelo próprio usuário
+      const myScripts = await getUserSavedScripts(user.uid);
+      setSavedScripts(myScripts.filter(s => !s.isTemporary));
+
+      // Se for professor ou admin, busca também as turmas lecionadas
+      if (userProfile?.role === 'admin') {
+        const classes = await getAllClasses();
+        setTeacherClasses(classes);
+      } else if (userProfile?.role === 'professor') {
+        const classes = await getClassesByTeacher(user.uid);
+        setTeacherClasses(classes);
+      }
+
+      // Se estiver matriculado em uma turma
+      const classId = userProfile?.classId;
+      if (classId) {
+        const allClassScripts = await getClassScripts(classId);
+        setClassExamples(allClassScripts.filter(s => s.category === 'example'));
+        setClassExercises(allClassScripts.filter(s => s.category === 'exercise'));
+        setClassExams(allClassScripts.filter(s => s.category === 'exam'));
+        setTeacherClassDbs(allClassScripts.filter(s => s.category === 'class_database'));
+      }
+    } catch (err) {
+      console.warn('[reloadAllScripts Warning]', err);
+    }
+  }, [user, userProfile?.classId, userProfile?.role, userProfile?.uid]);
+
+  useEffect(() => {
+    reloadAllScripts();
+  }, [reloadAllScripts]);
+
+  // 2. Ouve alterações da turma do aluno em tempo real (Modo Sala de Aula / Modo Avaliação)
+  useEffect(() => {
+    const classId = userProfile?.classId;
+    const isStudent = userProfile?.role === 'aluno';
+
+    if (!classId || !isStudent) {
+      setActiveClassroomMode('normal');
+      setIsExamModeActive(false);
+      isExamModeActiveRef.current = false;
+      return;
+    }
+
+    const unsubscribe = subscribeToClass(classId, async (classData) => {
+      if (!classData) return;
+      const newMode: ClassroomMode = classData.classroomMode || 'normal';
+      setActiveClassroomMode(newMode);
+      setActiveClassName(classData.name || '');
+
+      const wasInExam = isExamModeActiveRef.current;
+      const willBeInExam = newMode === 'exam';
+
+      if (willBeInExam && !wasInExam) {
+        // ENTRANDO NO MODO AVALIAÇÃO:
+        isExamModeActiveRef.current = true;
+        setIsExamModeActive(true);
+
+        // A. Faz backup de todas as abas abertas no perfil como temporárias
+        try {
+          const currentTabs = tabsRef.current;
+          for (const tab of currentTabs) {
+            await saveScript({
+              title: tab.title,
+              content: tab.content,
+              authorUid: user!.uid,
+              authorName: userProfile.displayName || 'Aluno',
+              authorEmail: userProfile.email || '',
+              authorRole: userProfile.role || 'aluno',
+              category: 'student_saved',
+              isTemporary: true,
+              classIds: [classData.id],
+            });
+          }
+        } catch (backupErr) {
+          console.warn('[Exam Mode Backup Error]', backupErr);
+        }
+
+        // B. Fecha todas as abas atuais
+        setTabs([]);
+        setActiveTabId('');
+
+        // C. Carrega scripts oficiais de prova da turma
+        try {
+          const examScripts = await getClassScripts(classData.id, 'exam');
+          if (examScripts.length > 0) {
+            const newExamTabs: TabItem[] = examScripts.map((s) => ({
+              id: s.id,
+              title: s.title,
+              content: s.content,
+            }));
+            setTabs(newExamTabs);
+            setActiveTabId(newExamTabs[0].id);
+          } else {
+            const defaultExamTab: TabItem = {
+              id: `tab-exam-${Date.now()}`,
+              title: 'avaliacao_respostas.sql',
+              content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e salve no seu perfil com Ctrl+S.\n\n`,
+            };
+            setTabs([defaultExamTab]);
+            setActiveTabId(defaultExamTab.id);
+          }
+        } catch (loadErr) {
+          console.warn('[Exam Scripts Load Error]', loadErr);
+        }
+
+        // D. Carrega BDs de avaliação
+        try {
+          const examDbScripts = (await getClassScripts(classData.id, 'exam')).map(s => ({
+            title: s.title,
+            content: s.content,
+          }));
+          await handleLoadPreset('exam', examDbScripts);
+        } catch (presetErr) {
+          console.warn('[Exam Preset Load Error]', presetErr);
+        }
+      } else if (!willBeInExam && wasInExam) {
+        // SAINDO DO MODO AVALIAÇÃO:
+        isExamModeActiveRef.current = false;
+        setIsExamModeActive(false);
+
+        // Verifica se há scripts temporários para restaurar
+        try {
+          const userScripts = await getUserSavedScripts(user!.uid);
+          const tempOnly = userScripts.filter(s => s.isTemporary);
+          if (tempOnly.length > 0) {
+            setTempRecoveryScripts(tempOnly);
+            setIsPostExamRecoveryOpen(true);
+          }
+        } catch (checkErr) {
+          console.warn('[Post Exam Check Error]', checkErr);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, userProfile?.classId, userProfile?.role, userProfile?.displayName, userProfile?.email, handleLoadPreset]);
+
+  // 3. Entregar Avaliação (Aluno envia todas as abas atuais)
+  const handleDeliverExam = useCallback(async () => {
+    if (!user || !userProfile || !userProfile.classId) return;
+    if (!window.confirm('Deseja realmente entregar sua avaliação agora? O professor receberá todas as suas respostas salvas.')) return;
+
+    try {
+      setIsExecuting(true);
+      const currentTabs = tabsRef.current;
+      const combinedContent = currentTabs
+        .map(t => `-- === ABA: ${t.title} ===\n${t.content || ''}\n`)
+        .join('\n\n');
+
+      await submitExam({
+        classId: userProfile.classId,
+        className: activeClassName || 'Turma',
+        studentUid: user.uid,
+        studentName: userProfile.displayName || 'Aluno',
+        studentEmail: userProfile.email || '',
+        examTitle: activeClassName ? `Avaliação ${activeClassName}` : 'Avaliação SQL',
+        content: combinedContent,
+      });
+      alert('Avaliação entregue com sucesso! Suas respostas foram enviadas ao professor.');
+    } catch (err: any) {
+      console.error('[handleDeliverExam Error]', err);
+      alert('Erro ao entregar avaliação: ' + (err?.message || 'Erro inesperado'));
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [user, userProfile, activeClassName]);
 
   // Limpar Editor
   const handleClearEditor = useCallback(() => {
@@ -1313,6 +1537,56 @@ export const App: React.FC = () => {
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
+  const editorWorkspaceSharedProps = {
+    tabs,
+    activeTabId,
+    onSelectTab: handleSelectTab,
+    onCloseTab: handleCloseTab,
+    onCloseAllTabs: handleCloseAllTabs,
+    onCloseOtherTabs: handleCloseOtherTabs,
+    onNewBlankTab: handleNewBlankTab,
+    onOpenSolution: handleOpenSolution,
+    solutions,
+    onUpdateContent: handleUpdateTabContent,
+    onRunQuery: handleRunQuery,
+    onRunSnippet: handleRunSnippet,
+    onReviewSnippet: handleReviewSnippet,
+    zoomLevel: zoomLevels.editor,
+    onZoomIn: () => setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) })),
+    onZoomOut: () => setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) })),
+    onZoomReset: () => setZoomLevels(p => ({ ...p, editor: 100 })),
+    theme,
+    fontTheme,
+    onRenameTab: handleRenameTab,
+    onExportScript: handleExportScript,
+    onToggleTheme: handleToggleTheme,
+    onToggleFontTheme: handleToggleFontTheme,
+    schemas,
+    activeDatabase,
+    editorRefOut: editorRef,
+    onSelectDatabase: (db: string) => {
+      dbEngine.setActiveDatabase(db);
+      setActiveDatabase(db);
+    },
+    results,
+    executedTabId,
+    selectedResultIndex,
+    onSelectResultIndex: handleEditorSelectResultIndex,
+    preferences,
+    user,
+    userProfile,
+    teacherClasses,
+    isExamModeActive,
+    classroomName: activeClassName,
+    savedScripts,
+    onSelectSavedScript: (script: SavedScriptItem) => handleNewTab(script.content, script.title),
+    classExamples,
+    classExercises,
+    classExams,
+    onDeliverExam: handleDeliverExam,
+    onScriptSaved: reloadAllScripts,
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors">
       {/* 1. Página Inicial / Landing Page nos moldes do DrawDB */}
@@ -1468,6 +1742,10 @@ export const App: React.FC = () => {
                 setActiveView('workspace');
                 setIsHubModalOpen(true);
               }}
+              onOpenSavedScript={(script) => {
+                handleNewTab(script.content, script.title);
+                setActiveView('workspace');
+              }}
             />
           ) : activeView === 'admin-panel' ? (
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
@@ -1537,49 +1815,7 @@ export const App: React.FC = () => {
                             style={{ width: `${preferences.editor.defaultSplitRatio}%` }}
                             className="h-full flex flex-col border-r border-[var(--border-color)] shrink-0"
                           >
-                            <EditorWorkspace
-                              tabs={tabs}
-                              activeTabId={activeTabId}
-                              onSelectTab={handleSelectTab}
-                              onCloseTab={handleCloseTab}
-                              onNewBlankTab={handleNewBlankTab}
-                              onOpenSolution={handleOpenSolution}
-                              solutions={solutions}
-                              onUpdateContent={handleUpdateTabContent}
-                              onRunQuery={handleRunQuery}
-                              onRunSnippet={handleRunSnippet}
-                              onReviewSnippet={handleReviewSnippet}
-                              zoomLevel={zoomLevels.editor}
-                              onZoomIn={() =>
-                                setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                              }
-                              onZoomOut={() =>
-                                setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                              }
-                              onZoomReset={() =>
-                                setZoomLevels(p => ({ ...p, editor: 100 }))
-                              }
-                              onCloseAllTabs={handleCloseAllTabs}
-                              onCloseOtherTabs={handleCloseOtherTabs}
-                              theme={theme}
-                              fontTheme={fontTheme}
-                              onRenameTab={handleRenameTab}
-                              onExportScript={handleExportScript}
-                              onToggleTheme={handleToggleTheme}
-                              onToggleFontTheme={handleToggleFontTheme}
-                              schemas={schemas}
-                              activeDatabase={activeDatabase}
-                              editorRefOut={editorRef}
-                              onSelectDatabase={(db) => {
-                                dbEngine.setActiveDatabase(db);
-                                setActiveDatabase(db);
-                              }}
-                              results={results}
-                              executedTabId={executedTabId}
-                              selectedResultIndex={selectedResultIndex}
-                              onSelectResultIndex={handleEditorSelectResultIndex}
-                              preferences={preferences}
-                            />
+                            <EditorWorkspace {...editorWorkspaceSharedProps} />
                           </div>
 
                           <div className="flex-1 h-full flex flex-col overflow-hidden">
@@ -1633,49 +1869,7 @@ export const App: React.FC = () => {
                         </div>
                       ) : (
                         /* Modo Editor Padrão */
-                        <EditorWorkspace
-                          tabs={tabs}
-                          activeTabId={activeTabId}
-                          onSelectTab={handleSelectTab}
-                          onCloseTab={handleCloseTab}
-                          onNewBlankTab={handleNewBlankTab}
-                          onOpenSolution={handleOpenSolution}
-                          solutions={solutions}
-                          onUpdateContent={handleUpdateTabContent}
-                          onRunQuery={handleRunQuery}
-                          onRunSnippet={handleRunSnippet}
-                          onReviewSnippet={handleReviewSnippet}
-                          zoomLevel={zoomLevels.editor}
-                          onZoomIn={() =>
-                            setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                          }
-                          onZoomOut={() =>
-                            setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                          }
-                          onZoomReset={() =>
-                            setZoomLevels(p => ({ ...p, editor: 100 }))
-                          }
-                          onCloseAllTabs={handleCloseAllTabs}
-                          onCloseOtherTabs={handleCloseOtherTabs}
-                          theme={theme}
-                          fontTheme={fontTheme}
-                          onRenameTab={handleRenameTab}
-                          onExportScript={handleExportScript}
-                          onToggleTheme={handleToggleTheme}
-                          onToggleFontTheme={handleToggleFontTheme}
-                          schemas={schemas}
-                          activeDatabase={activeDatabase}
-                          editorRefOut={editorRef}
-                          onSelectDatabase={(db) => {
-                            dbEngine.setActiveDatabase(db);
-                            setActiveDatabase(db);
-                          }}
-                          results={results}
-                          executedTabId={executedTabId}
-                          selectedResultIndex={selectedResultIndex}
-                          onSelectResultIndex={handleEditorSelectResultIndex}
-                          preferences={preferences}
-                        />
+                        <EditorWorkspace {...editorWorkspaceSharedProps} />
                       )}
                     </div>
 
@@ -1822,49 +2016,7 @@ export const App: React.FC = () => {
                         onExpandToFullStudio={() => setActiveView('er-diagram')}
                       />
                     ) : (
-                      <EditorWorkspace
-                        tabs={tabs}
-                        activeTabId={activeTabId}
-                        onSelectTab={handleSelectTab}
-                        onCloseTab={handleCloseTab}
-                        onNewBlankTab={handleNewBlankTab}
-                        onOpenSolution={handleOpenSolution}
-                        solutions={solutions}
-                        onUpdateContent={handleUpdateTabContent}
-                        onRunQuery={handleRunQuery}
-                        onRunSnippet={handleRunSnippet}
-                        onReviewSnippet={handleReviewSnippet}
-                        zoomLevel={zoomLevels.editor}
-                        onZoomIn={() =>
-                          setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                        }
-                        onZoomOut={() =>
-                          setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                        }
-                        onZoomReset={() =>
-                          setZoomLevels(p => ({ ...p, editor: 100 }))
-                        }
-                        onCloseAllTabs={handleCloseAllTabs}
-                        onCloseOtherTabs={handleCloseOtherTabs}
-                        theme={theme}
-                        fontTheme={fontTheme}
-                        onRenameTab={handleRenameTab}
-                        onExportScript={handleExportScript}
-                        onToggleTheme={handleToggleTheme}
-                        onToggleFontTheme={handleToggleFontTheme}
-                        schemas={schemas}
-                        activeDatabase={activeDatabase}
-                        editorRefOut={editorRef}
-                        onSelectDatabase={(db) => {
-                          dbEngine.setActiveDatabase(db);
-                          setActiveDatabase(db);
-                        }}
-                        results={results}
-                        executedTabId={executedTabId}
-                        selectedResultIndex={selectedResultIndex}
-                        onSelectResultIndex={handleEditorSelectResultIndex}
-                        preferences={preferences}
-                      />
+                      <EditorWorkspace {...editorWorkspaceSharedProps} />
                     )}
                   </div>
                 ) : !visiblePanels.scripts && visiblePanels.info ? (
@@ -1971,6 +2123,9 @@ export const App: React.FC = () => {
         onAction={(sql) => handleNewTab(sql, 'script_contexto.sql')}
         onSelectPreset={handleLoadPreset}
         currentPreset={currentPreset}
+        classroomMode={activeClassroomMode}
+        hasTeacherClassDbs={teacherClassDbs.length > 0}
+        hasExamDbs={classExams.length > 0}
       />
 
       {/* Modal de Autenticação (Firebase Auth & Cadastro SENAI) */}
@@ -1989,6 +2144,26 @@ export const App: React.FC = () => {
         isOpen={isHubModalOpen}
         onClose={() => setIsHubModalOpen(false)}
         onSelectView={(view) => setActiveView(view)}
+      />
+
+      {/* Modal de Recuperação Pós-Avaliação */}
+      <PostExamRecoveryModal
+        isOpen={isPostExamRecoveryOpen}
+        onClose={() => setIsPostExamRecoveryOpen(false)}
+        tempScripts={tempRecoveryScripts}
+        userUid={user?.uid || ''}
+        onRestoreAll={(scripts) => {
+          const restoredTabs: TabItem[] = scripts.map((s) => ({
+            id: s.id,
+            title: s.title,
+            content: s.content,
+          }));
+          setTabs((prev) => [...prev, ...restoredTabs]);
+          if (restoredTabs.length > 0) {
+            setActiveTabId(restoredTabs[0].id);
+          }
+        }}
+        onRefreshUserScripts={reloadAllScripts}
       />
     </div>
   );

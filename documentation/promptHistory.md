@@ -3616,3 +3616,97 @@ no laboratorio, sempre comece com todos os bancos que estiverem abertos minimiza
      - Quando o usuário digita um termo no campo de busca/filtro, os bancos correspondentes continuam se expandindo automaticamente para facilitar a localização das tabelas.
 2. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 117 (Sessão: 08/11/2026 - Inclusão de Foto de Perfil e Alteração Segura de Senha no "Meu Perfil")
+**Data:** 08/11/2026 - 16:18  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal em Meu perfil quero poder incluir minha foto e alterar minha senha se for conta cadastrado com email direto
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Entrevista de Alinhamento Técnico (/grill-me):**
+   - Análise preliminar da arquitetura do `UserProfileView.tsx` e dos serviços de autenticação (`authService.ts`, `firebase.ts`).
+   - Iniciada a rodada socrática de alinhamento com o usuário via `ask_question` para definir o mecanismo de upload/gestão de fotos e as regras de reautenticação para alteração de senha.
+
+## 📌 Prompt 118 (Sessão: 08/11/2026 - Módulo Sala de Aula, Modo Avaliação, Salvamento de Scripts e Gestão Docente)
+**Data:** 08/11/2026 - 16:29  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal agora iremos implementar as função da sala de aula:
+- o professor (administrador também exerce papel de professor) pode ativar em uma ou mais turmas o modo sala de aula ou o modo avaliação ou nenhum dos 2. se nenhum modo estiver ativos, os alunos daquela sala podem usar normalmente seu laboratorio, se estiver no modo sala de aula os alunos só veem as opções carregar vazio e carregar bd's aula e se estiver no modo avaliação só verão a opção carregar bds avaliação (nova opção essa) e os bds de avaliação serão carregados automaticamente, todas as guias abertas serão fechadas e não poderão ser abertas durante o modo avaliação, serão carregadas as guias do modo avaliação.
+- a partir de agora todo aluno pode salvar sua guia (uma-a-uma) no seu perfil. para reabrir ele vai na seta ao lado do nova aba e teremos um novo agrupamento ali chamado Carregar Scripts Salvos. ele também pode ver seus scripts salvos em uma aba dentro da tela Meu Perfil, inclusive por lá ele pode clicar para renomear, editar, excluir um script salvo.
+- o professor também pode salvar scripts, mas tem a permissão de apontar se são BDs para serem carregados no modo sala de aula, exemplos, exercicios ou avaliações, podendo também renomear, editar e excluir. os que forem bds aparecerão no carregar BDs aula professor (os que já existem em BD's Aula serão mantidos em BDs Aula). os exemplos, exercicios e avaliações aparecerão em itens especificos no menu suspenso de nova aba para os alunos e para o proprio professor.
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Entrevista de Alinhamento Técnico (/grill-me):**
+   - Mapeamento das 3 frentes de trabalho:
+     a) **Modos de Turma em Tempo Real** (Normal, Sala de Aula, Avaliação) com restrições dinâmicas de menus e fechamento/abertura forçada de abas no Laboratório.
+     b) **Gestão de Scripts Pessoais do Aluno** (salvamento de abas 1 a 1, reabertura via menu suspenso da Nova Aba e aba de gerenciamento no Meu Perfil).
+     c) **Gestão de Scripts do Professor** (categorias: Banco de Dados de Aula, Exemplos, Exercícios, Avaliações com permissões de publicação para a turma).
+   - **Decisão 1 (Vinculação de Scripts do Docente):** O professor poderá vincular scripts a uma ou mais turmas específicas através de checkboxes, ou marcar a opção "Todas as Turmas".
+   - **Decisão 2 (Backup de Abas no Modo Avaliação):** Ao ativar o Modo Avaliação, as abas abertas do aluno são fechadas e salvas automaticamente na nuvem no perfil do aluno com a etiqueta `isTemporary: true` / "Temporário". Ao sair do modo avaliação, um modal/aviso notifica o aluno com 3 opções: "Abrir todos", "Excluir todos" ou "Manter salvos".
+   - **Decisão 3 (Entrega de Avaliação):** O aluno poderá salvar suas guias durante a prova no seu perfil e terá um botão em destaque "Entregar Avaliação", que confirma o envio final, bloqueia edições adicionais e notifica o professor no painel da turma.
+   - **Decisão 4 (Acionamento de Salvamento):** Botão de disquete na barra de ferramentas do editor, atalho de teclado `Ctrl+S` e item "Salvar no Perfil" no menu de contexto ao clicar com botão direito sobre a aba.
+   - **Decisão 5 (Controle de Modos pelo Docente):** Seletor de modo direto no card/cabeçalho de cada turma no Painel do Professor (Normal, Sala de Aula, Avaliação) + opção de ativação em lote ("Aplicar a todas as minhas turmas") com confirmação ao iniciar Avaliação.
+   - **Decisão 6 (Gestão de Scripts Pedagógicos do Docente):** Em ambos os locais: na aba "Scripts Salvos" do "Meu Perfil" e também em uma aba "Materiais & Provas" do Painel do Professor, com sincronização em tempo real.
+
+2. **Plano de Implementação Completo:**
+   - **Fase 1: Modelo de Dados e Serviços (`types/index.ts`, `scriptService.ts`, `classService.ts`)**
+     - Adição de `classroomMode` no `ClassItem`.
+     - Interface `SavedScriptItem` com campos para título, conteúdo, autor, categoria (`student_saved`, `class_database`, `example`, `exercise`, `exam`, `exam_submission`), `classIds`, `isTemporary`.
+     - Funções CRUD completas no `scriptService.ts` com Firestore.
+     - Funções de alternância de modo de turma individual e em lote no `classService.ts`.
+   - **Fase 2: Regras do Firestore (`firestore.rules`)**
+     - Regras de segurança para a coleção `savedScripts`.
+   - **Fase 3: Sincronização em Tempo Real no Laboratório (`EditorWorkspace.tsx`, `App.tsx`, `Header.tsx`)**
+     - Listener em tempo real da turma do aluno para detecção instantânea da troca de modos.
+     - Lógica de backup automático no perfil (`isTemporary: true`), fechamento de abas e alerta pós-avaliação.
+     - Botão e modal "Salvar no Perfil" (com atalho Ctrl+S e clique direito na aba).
+     - Botão "Entregar Avaliação" em destaque durante o Modo Avaliação.
+   - **Fase 4: Menus Suspensos e de Bancos (`NewTabDropdown.tsx`, `ContextMenu.tsx`, `Sidebar.tsx`)**
+     - Atualização das opções de banco conforme o modo ativo da turma (`Carregar BDs Aula Professor`, `Carregar BDs Avaliação`).
+     - Novo agrupamento "Carregar Scripts Salvos", "Exemplos da Turma", "Exercícios" e "Avaliações" na seta ao lado do `+`.
+   - **Fase 5: Interface de Gestão no "Meu Perfil" (`UserProfileView.tsx`)**
+     - Aba de gestão de scripts salvos com renomear, editar, excluir e abrir no laboratório.
+   - **Fase 6: Gestão e Controle no "Painel do Professor" (`TeacherPanelView.tsx`)**
+     - Controles de modo (Normal, Sala de Aula, Avaliação) individual e em lote.
+     - Aba de Materiais & Provas para gestão de scripts e visualização das entregas dos alunos.
+3. **Implementações e Entregas Concluídas:**
+   - **Foto de Perfil & Alteração Segura de Senha (`UserProfileView.tsx`, `authService.ts`):**
+     - Upload de foto de perfil com redimensionamento local automático via Canvas (160x160 JPEG com Data URL) para alta performance e zero consumo de storage externo.
+     - Suporte a foto por URL externa direta e botão de remoção de avatar.
+     - Sincronização automática do avatar no Firebase Auth (`updateProfile`) e no documento de usuário do Firestore (`users/{uid}`).
+     - Campo de senha atual com reautenticação prévia via `EmailAuthProvider.credential` antes de aplicar a nova senha, garantindo segurança corporativa e acadêmica.
+     - Ocultação inteligente dos campos de senha para contas autenticadas via provedores federados (Google/GitHub).
+   - **Gestão de Scripts Pessoais do Aluno (`SaveScriptModal.tsx`, `UserProfileView.tsx`, `scriptService.ts`):**
+     - Criação do modal de salvamento de scripts (`SaveScriptModal.tsx`) acessível por disquete na barra de abas, atalho `Ctrl+S` e menu de contexto da aba.
+     - Alunos podem salvar qualquer aba aberta individualmente no seu perfil na nuvem.
+     - Aba dedicada "Meus Scripts Salvos" dentro de "Meu Perfil" com busca textual, chips de filtragem por categoria, botões para renomear, editar metadados, excluir e abrir diretamente no editor.
+   - **Modos de Sala de Aula em Tempo Real (`classService.ts`, `App.tsx`, `TeacherPanelView.tsx`):**
+     - Controle de modo da turma pelo professor no painel docente: `normal`, `classroom` (Sala de Aula) ou `exam` (Avaliação), individualmente ou em lote para todas as turmas.
+     - Listener em tempo real com Firestore `onSnapshot` no `App.tsx` para sincronização instantânea sem necessidade de recarregar a página.
+     - **Modo Sala de Aula (`classroom`):** Alunos visualizam apenas "Carregar vazio", "Carregar BDs Aula" e "Carregar BDs Aula Professor" no Schema Explorer.
+     - **Modo Avaliação (`exam`):**
+       - Bloqueio estrito no Schema Explorer: alunos só têm acesso a "Carregar BDs Avaliação".
+       - Backup automático de todas as abas que estavam abertas no perfil do aluno como temporárias (`isTemporary: true`).
+       - Fechamento imediato das abas de estudo e bloqueio de criação de abas avulsas.
+       - Abertura automática das abas oficiais de avaliação da turma e carregamento dos BDs de prova.
+       - Banner superior em destaque indicando o Modo Avaliação ativo com botão "Entregar Avaliação".
+       - Envio formal das resoluções com `submitExam` notificando o docente e registrando auditoria.
+       - Ao encerrar a prova, o modal pós-avaliação (`PostExamRecoveryModal.tsx`) surge automaticamente oferecendo 3 opções: "Restaurar & Abrir Todos", "Manter Salvos no Perfil" ou "Descartar Temporários".
+   - **Publicação Pedagógica Docente (`scriptService.ts`, `TeacherPanelView.tsx`, `NewTabDropdown.tsx`):**
+     - Professores podem categorizar scripts como `class_database` (Banco de Dados de Aula), `example` (Exemplos), `exercise` (Exercícios) ou `exam` (Avaliações).
+     - Vinculação flexível por turma específica ou para "Todas as minhas turmas".
+     - Aba "Materiais & Provas" e visualizador de "Entregas de Provas" com correção no Painel do Professor.
+     - O menu suspenso de nova aba (`NewTabDropdown.tsx`) agrupa organizadamente: "Carregar Scripts Salvos", "Exemplos da Turma", "Exercícios da Turma", "Carregar Soluções" e itens de avaliação.
+   - **Regras de Segurança do Firestore (`firestore.rules`):**
+     - Autoria delegada ao subagente especialista `firestore-rules-author`, estabelecendo políticas granulares de leitura/escrita para a coleção `savedScripts` e validação do atributo `classroomMode` em turmas.
+   - **Garantia de Qualidade e Compilação:**
+     - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com sucesso absoluto (**0 erros** de TypeScript e Vite).
+

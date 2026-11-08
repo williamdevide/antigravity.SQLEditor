@@ -315,7 +315,11 @@ class DatabaseEngine {
     }
   }
 
-  public async loadPreset(preset: DatabasePreset, onProgress?: OnLoadProgressCallback): Promise<void> {
+  public async loadPreset(
+    preset: DatabasePreset,
+    onProgress?: OnLoadProgressCallback,
+    customScripts?: { title: string; content: string }[]
+  ): Promise<void> {
     this.currentPreset = preset;
     try {
       localStorage.setItem('sqleditor_db_preset', preset);
@@ -461,6 +465,74 @@ class DatabaseEngine {
       }
 
       await this.persistAllDatabases();
+      return;
+    }
+
+    if (preset === 'teacher_class' || preset === 'exam') {
+      const scriptsToLoad = customScripts || [];
+      if (scriptsToLoad.length === 0) {
+        this.activeDatabase = '';
+        return;
+      }
+
+      const progressMap: Record<string, DatabaseLoadProgress> = {};
+      for (const script of scriptsToLoad) {
+        const cleanDbName = script.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        progressMap[cleanDbName] = {
+          dbName: cleanDbName,
+          status: 'pending',
+          currentStatement: 0,
+          totalStatements: 1,
+          percentage: 0,
+        };
+      }
+
+      onProgress?.({ ...progressMap }, 0, scriptsToLoad.length, 0);
+
+      for (let sIdx = 0; sIdx < scriptsToLoad.length; sIdx++) {
+        const script = scriptsToLoad[sIdx];
+        const dbName = script.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        progressMap[dbName].status = 'loading';
+
+        try {
+          if (!alasql.databases[dbName]) {
+            alasql(`CREATE DATABASE \`${dbName}\`;`);
+          }
+          alasql(`USE \`${dbName}\`;`);
+          this.activeDatabase = dbName;
+        } catch (_) {}
+
+        // Divide o script por ponto e vírgula
+        const stmts = script.content
+          .split(/;(?=(?:(?:[^']*'){2})*[^']*$)(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+
+        progressMap[dbName].totalStatements = Math.max(1, stmts.length);
+
+        for (let i = 0; i < stmts.length; i++) {
+          const rawStmt = stmts[i];
+          try {
+            alasql(preprocessSqlQuery(rawStmt));
+          } catch (stmtErr) {
+            console.warn(`[loadCustomScripts] Aviso no comando ${i}:`, stmtErr);
+          }
+        }
+
+        await this.persistDatabase(dbName);
+        progressMap[dbName].status = 'completed';
+        progressMap[dbName].percentage = 100;
+        const completed = sIdx + 1;
+        const overall = Math.round((completed / scriptsToLoad.length) * 100);
+        onProgress?.({ ...progressMap }, completed, scriptsToLoad.length, overall);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      const firstLoaded = scriptsToLoad[0]?.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || '';
+      this.activeDatabase = firstLoaded;
+      if (firstLoaded) {
+        try { alasql(`USE \`${firstLoaded}\`;`); } catch (_) {}
+      }
       return;
     }
   }

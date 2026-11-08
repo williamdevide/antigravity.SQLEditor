@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { ContextMenuTarget, DatabasePreset } from '../types';
+import type { ContextMenuTarget, DatabasePreset, ClassroomMode } from '../types';
 import { dbEngine } from '../services/dbEngine';
 
 interface ContextMenuProps {
@@ -8,6 +8,9 @@ interface ContextMenuProps {
   onAction: (sql: string) => void;
   onSelectPreset?: (preset: DatabasePreset) => void;
   currentPreset?: DatabasePreset;
+  classroomMode?: ClassroomMode;
+  hasTeacherClassDbs?: boolean;
+  hasExamDbs?: boolean;
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -16,6 +19,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onAction,
   onSelectPreset,
   currentPreset,
+  classroomMode = 'normal',
+  hasTeacherClassDbs = true,
+  hasExamDbs = true,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -53,68 +59,242 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           <span>Opções do Schema Explorer</span>
           {currentPreset && (
             <span className="text-[9px] font-mono px-1 rounded bg-[var(--bg-hover)] text-[var(--accent-yellow)]">
-              {currentPreset === 'empty' ? 'Vazio' : currentPreset === 'samples' ? 'Exemplos' : 'BDs Aula'}
+              {currentPreset === 'empty'
+                ? 'Vazio'
+                : currentPreset === 'samples'
+                ? 'Exemplos'
+                : currentPreset === 'class'
+                ? 'BDs Aula'
+                : currentPreset === 'teacher_class'
+                ? 'BDs Professor'
+                : 'BDs Avaliação'}
             </span>
           )}
         </div>
 
-        <button
-          onClick={() => {
-            onSelectPreset?.('empty');
-            onClose();
-          }}
-          className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
-            currentPreset === 'empty' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
-          }`}
-          type="button"
-        >
-          <span className="material-symbols-outlined text-[17px] text-[#FF3366] group-hover:scale-110 transition-transform">
-            database_off
-          </span>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar vazio</span>
-            <span className="text-[10px] text-[var(--text-muted)]">Nenhum banco de dados ativo</span>
-          </div>
-        </button>
+        {/* MODO AVALIAÇÃO: Aluno vê estritamente 'Carregar BDs Avaliação' */}
+        {classroomMode === 'exam' ? (
+          <>
+            <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/20 text-purple-300 text-[10px] flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[14px]">lock</span>
+              <span>Modo Avaliação Restrito</span>
+            </div>
 
-        <button
-          onClick={() => {
-            onSelectPreset?.('samples');
-            onClose();
-          }}
-          className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
-            currentPreset === 'samples' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
-          }`}
-          type="button"
-        >
-          <span className="material-symbols-outlined text-[17px] text-[var(--accent-yellow)] group-hover:scale-110 transition-transform">
-            inventory_2
-          </span>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar BDs de exemplo</span>
-            <span className="text-[10px] text-[var(--text-muted)]">ecommerce_db e universidade_db</span>
-          </div>
-        </button>
+            <button
+              id="btn-load-exam-dbs"
+              onClick={() => {
+                onSelectPreset?.('exam');
+                onClose();
+              }}
+              className={`w-full px-3 py-2.5 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'exam' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-purple-400 group-hover:scale-110 transition-transform">
+                quiz
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                  Carregar BDs Avaliação
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  Bancos de dados oficiais da prova
+                </span>
+              </div>
+            </button>
+          </>
+        ) : classroomMode === 'classroom' ? (
+          /* MODO SALA DE AULA: Apenas 'Carregar vazio', 'Carregar BDs Aula' e 'Carregar BDs Aula Professor' */
+          <>
+            <div className="px-3 py-1.5 bg-[var(--status-success)]/10 border-b border-[var(--status-success)]/20 text-[var(--status-success)] text-[10px] flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[14px]">school</span>
+              <span>Modo Sala de Aula Ativo</span>
+            </div>
 
-        <button
-          id="btn-load-class-dbs"
-          onClick={() => {
-            onSelectPreset?.('class');
-            onClose();
-          }}
-          className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
-            currentPreset === 'class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
-          }`}
-          type="button"
-        >
-          <span className="material-symbols-outlined text-[17px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
-            school
-          </span>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar BDs Aula</span>
-            <span className="text-[10px] text-[var(--text-muted)]">Bancos enviados pelo professor</span>
-          </div>
-        </button>
+            <button
+              onClick={() => {
+                onSelectPreset?.('empty');
+                onClose();
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'empty' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[#FF3366] group-hover:scale-110 transition-transform">
+                database_off
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar vazio</span>
+                <span className="text-[10px] text-[var(--text-muted)]">Nenhum banco de dados ativo</span>
+              </div>
+            </button>
+
+            <button
+              id="btn-load-class-dbs"
+              onClick={() => {
+                onSelectPreset?.('class');
+                onClose();
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
+                school
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar BDs Aula</span>
+                <span className="text-[10px] text-[var(--text-muted)]">Bancos didáticos nativos de aula</span>
+              </div>
+            </button>
+
+            {hasTeacherClassDbs && (
+              <button
+                id="btn-load-teacher-dbs"
+                onClick={() => {
+                  onSelectPreset?.('teacher_class');
+                  onClose();
+                }}
+                className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                  currentPreset === 'teacher_class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+                }`}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px] text-[#00E5FF] group-hover:scale-110 transition-transform">
+                  local_library
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                    Carregar BDs Aula Professor
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    Bancos cadastrados pelo seu professor
+                  </span>
+                </div>
+              </button>
+            )}
+          </>
+        ) : (
+          /* MODO NORMAL: Todas as opções disponíveis */
+          <>
+            <button
+              onClick={() => {
+                onSelectPreset?.('empty');
+                onClose();
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'empty' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[#FF3366] group-hover:scale-110 transition-transform">
+                database_off
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar vazio</span>
+                <span className="text-[10px] text-[var(--text-muted)]">Nenhum banco de dados ativo</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                onSelectPreset?.('samples');
+                onClose();
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'samples' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[var(--accent-yellow)] group-hover:scale-110 transition-transform">
+                inventory_2
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                  Carregar BDs de exemplo
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  ecommerce_db e universidade_db
+                </span>
+              </div>
+            </button>
+
+            <button
+              id="btn-load-class-dbs"
+              onClick={() => {
+                onSelectPreset?.('class');
+                onClose();
+              }}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                currentPreset === 'class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              }`}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[17px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
+                school
+              </span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar BDs Aula</span>
+                <span className="text-[10px] text-[var(--text-muted)]">Bancos didáticos nativos de aula</span>
+              </div>
+            </button>
+
+            {hasTeacherClassDbs && (
+              <button
+                id="btn-load-teacher-dbs"
+                onClick={() => {
+                  onSelectPreset?.('teacher_class');
+                  onClose();
+                }}
+                className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                  currentPreset === 'teacher_class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+                }`}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px] text-[#00E5FF] group-hover:scale-110 transition-transform">
+                  local_library
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                    Carregar BDs Aula Professor
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    Bancos cadastrados pelo seu professor
+                  </span>
+                </div>
+              </button>
+            )}
+
+            {hasExamDbs && (
+              <button
+                id="btn-load-exam-dbs"
+                onClick={() => {
+                  onSelectPreset?.('exam');
+                  onClose();
+                }}
+                className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
+                  currentPreset === 'exam' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+                }`}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[17px] text-purple-400 group-hover:scale-110 transition-transform">
+                  quiz
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                    Carregar BDs Avaliação
+                  </span>
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    Bancos de dados para provas e testes
+                  </span>
+                </div>
+              </button>
+            )}
+          </>
+        )}
       </div>
     );
   }
