@@ -476,6 +476,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={async () => {
                   if (window.confirm('Deseja realmente sair da conta?')) {
                     await logout();
+                    onViewChange('landing');
                   }
                 }}
                 className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"

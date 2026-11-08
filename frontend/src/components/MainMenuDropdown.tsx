@@ -776,6 +776,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
                   closeAllSubmenus();
                   if (window.confirm('Deseja realmente sair da sua conta no SQLEditor?')) {
                     await logout();
+                    onViewChange('landing');
                   }
                 }}
                 className="w-full px-3 py-2 text-left hover:bg-red-500/10 text-red-500 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-semibold"

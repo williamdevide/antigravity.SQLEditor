@@ -6,10 +6,26 @@ import { getFirebaseErrorMessage } from '../services/firebase';
 
 interface UserProfileViewProps {
   onBackToWorkspace: () => void;
+  onNavigateToLanding?: () => void;
 }
 
-export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorkspace }) => {
+export const UserProfileView: React.FC<UserProfileViewProps> = ({
+  onBackToWorkspace,
+  onNavigateToLanding,
+}) => {
   const { user, userProfile, isAdmin, isProfessor, isPendingTeacher, isEmailVerified, refreshUserProfile, logout } = useAuth();
+
+  useEffect(() => {
+    if (!user) {
+      if (onNavigateToLanding) onNavigateToLanding();
+      else onBackToWorkspace();
+    }
+  }, [user, onNavigateToLanding, onBackToWorkspace]);
+
+  // Se a sessão expirou ou o usuário deslogou, não renderiza a casca órfã
+  if (!user) {
+    return null;
+  }
 
   // Campos Editáveis
   const [displayName, setDisplayName] = useState('');
@@ -302,7 +318,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ onBackToWorksp
               onClick={async () => {
                 if (window.confirm('Deseja realmente encerrar a sessão no SQLEditor?')) {
                   await logout();
-                  onBackToWorkspace();
+                  if (onNavigateToLanding) {
+                    onNavigateToLanding();
+                  } else {
+                    onBackToWorkspace();
+                  }
                 }
               }}
               type="button"

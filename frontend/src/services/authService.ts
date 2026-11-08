@@ -100,6 +100,53 @@ export async function syncUserProfile(
         await setDoc(userDocRef, { role: 'admin', status: 'active' }, { merge: true });
         return updated;
       }
+
+      // Se o usuário já existia como 'aluno', mas está explicitamente se cadastrando como 'professor'
+      if (extraData?.requestedRole === 'professor' && data.role === 'aluno' && !isProfessorAdmin) {
+        const course = extraData.course || data.course || DEFAULT_COURSE;
+        const turma = extraData.turma || data.turma || '';
+        const updated: UserProfile = {
+          ...data,
+          role: 'professor',
+          status: 'pending_approval',
+          course,
+          turma,
+          courseOrClass: turma ? `${course} - ${turma}` : course,
+          registrationNumber: extraData.registrationNumber || data.registrationNumber || '',
+          phone: extraData.phone || data.phone || '',
+          updatedAt: new Date().toISOString(),
+        };
+
+        await setDoc(
+          userDocRef,
+          {
+            role: 'professor',
+            status: 'pending_approval',
+            course: updated.course,
+            turma: updated.turma,
+            courseOrClass: updated.courseOrClass,
+            registrationNumber: updated.registrationNumber,
+            phone: updated.phone,
+            updatedAt: updated.updatedAt,
+          },
+          { merge: true }
+        );
+
+        try {
+          await logSystemEvent({
+            type: 'USER_REGISTERED',
+            authorUid: user.uid,
+            authorName: data.displayName || 'Professor(a) SQLEditor',
+            authorEmail: user.email || '',
+            details: 'Cadastro/Solicitação de perfil de Professor(a) via Google realizada (Aguardando autorização de um Administrador).',
+          });
+        } catch (err) {
+          console.warn('Erro ao auditar solicitação de professor:', err);
+        }
+
+        return updated;
+      }
+
       return data;
     }
 
@@ -138,6 +185,35 @@ export async function syncUserProfile(
     };
 
     await setDoc(userDocRef, newProfile);
+
+    // Se aluno forneceu classCode válido, associa solicitação
+    if (newProfile.role === 'aluno' && extraData?.classCode && extraData.classCode.trim()) {
+      try {
+        const targetClass = await getClassByCode(extraData.classCode.trim());
+        if (targetClass) {
+          await requestJoinClass({ classItem: targetClass, student: newProfile });
+        }
+      } catch (err) {
+        console.warn('Erro ao associar código de turma no registro via Google/novo perfil:', err);
+      }
+    }
+
+    // Registra evento de auditoria para o novo perfil
+    try {
+      const isTeacher = newProfile.role === 'professor';
+      await logSystemEvent({
+        type: 'USER_REGISTERED',
+        authorUid: user.uid,
+        authorName: newProfile.displayName,
+        authorEmail: newProfile.email,
+        details: isTeacher
+          ? 'Cadastro de novo Professor(a) realizado com sucesso (Aguardando autorização de um Administrador).'
+          : `Cadastro de novo Aluno(a) realizado com sucesso${extraData?.classCode ? ` com solicitação para turma código [${extraData.classCode.toUpperCase()}].` : '.'}`,
+      });
+    } catch (err) {
+      console.warn('Erro ao auditar novo cadastro:', err);
+    }
+
     return newProfile;
   } catch (err: any) {
     console.warn('[syncUserProfile] Aviso: Falha ao sincronizar perfil no Firestore (verifique firestore.rules):', err);
@@ -217,9 +293,9 @@ export async function registerWithEmail(
 /**
  * Realiza login ou cadastro via Conta Google (Popup)
  */
-export async function loginWithGoogle(): Promise<UserProfile> {
+export async function loginWithGoogle(extraData?: ExtraRegistrationData): Promise<UserProfile> {
   const cred = await signInWithPopup(auth, googleProvider);
-  return syncUserProfile(cred.user);
+  return syncUserProfile(cred.user, extraData);
 }
 
 /**

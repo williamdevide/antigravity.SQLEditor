@@ -264,7 +264,8 @@ service cloud.firestore {
       // Atualização de perfil:
       // - Administrador pode atualizar qualquer perfil (aprovar/rejeitar docente ou alterar papéis)
       // - O próprio usuário pode atualizar seus dados cadastrais e solicitar entrada em turma (classStatus: 'pending' ou 'none')
-      //   (é estritamente proibido auto-elevação de papel, auto-aprovação de status de docente ou auto-aprovação de turma)
+      //   (é estritamente proibido auto-elevação para 'admin' ou auto-aprovação de status 'active' para docente)
+      // - Um usuário 'aluno' existente pode solicitar migração para perfil de Professor com status 'pending_approval'
       // - O professor da turma pode atualizar os campos de turma do aluno ao admitir, aprovar ou remover
       // - Campos estruturais imutáveis para integridade: uid e createdAt
       allow update: if isAuthenticated() &&
@@ -274,16 +275,27 @@ service cloud.firestore {
                        (
                          // 1. Administrador pleno
                          isAdmin() ||
-                         // 2. O próprio usuário atualizando seus dados de perfil
+                         // 2. O próprio usuário atualizando seus dados de perfil ou solicitando credenciamento docente
                          (
                            isOwner(userId) &&
-                           request.resource.data.role == resource.data.role &&
-                           request.resource.data.get('status', 'active') == resource.data.get('status', 'active') &&
                            request.resource.data.email == resource.data.email &&
                            request.resource.data.providerId == resource.data.providerId &&
                            (
                              request.resource.data.get('classStatus', 'none') == resource.data.get('classStatus', 'none') ||
                              request.resource.data.get('classStatus', 'none') in ['none', 'pending']
+                           ) &&
+                           (
+                             // 2a. Atualização cadastral padrão: mantém role e status inalterados
+                             (
+                               request.resource.data.role == resource.data.role &&
+                               request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
+                             ) ||
+                             // 2b. Transição de aluno para professor com status estritamente pendente de aprovação
+                             (
+                               resource.data.role == 'aluno' &&
+                               request.resource.data.role == 'professor' &&
+                               request.resource.data.get('status', '') == 'pending_approval'
+                             )
                            )
                          ) ||
                          // 3. Professor da turma atualizando campos de turma do aluno ao admitir, aprovar ou remover

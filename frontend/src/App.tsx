@@ -95,7 +95,7 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
 }
 
 export const App: React.FC = () => {
-  const { authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
+  const { user, authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
@@ -146,6 +146,13 @@ export const App: React.FC = () => {
       }
     } catch (_) {}
   }, []);
+
+  // Se o usuário deslogar enquanto estiver em telas restritas (perfil, admin, turmas), redireciona imediatamente para a landing page
+  useEffect(() => {
+    if (!user && (activeView === 'profile' || activeView === 'admin-panel' || activeView === 'teacher-panel')) {
+      setActiveView('landing');
+    }
+  }, [user, activeView, setActiveView]);
 
   const handleUpdatePreferences = useCallback((next: AppPreferences) => {
     setPreferencesState(next);
@@ -1442,7 +1449,10 @@ export const App: React.FC = () => {
           ) : activeView === 'about' ? (
             <AboutView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'profile' ? (
-            <UserProfileView onBackToWorkspace={() => setActiveView('workspace')} />
+            <UserProfileView
+              onBackToWorkspace={() => setActiveView('workspace')}
+              onNavigateToLanding={() => setActiveView('landing')}
+            />
           ) : activeView === 'admin-panel' ? (
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'teacher-panel' ? (

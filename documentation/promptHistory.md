@@ -3183,3 +3183,80 @@ Contexto e Requisitos Específicos:
    - Cláusula `match /{document=**} { allow read, write: if false; }` mantida na raiz.
 9. **Compilação e Verificação:**
    - `tsc -b && vite build` verificado com sucesso (**0 erros** de TypeScript e Vite).
+
+## 📌 Prompt 101 (Sessão: 07/11/2026 - Subagente firestore-rules-author)
+**Data:** 07/11/2026 - 21:35  
+**Agente Especialista:** `firestore-rules-author` (Firestore Security Rules & Security Architect)  
+**Solicitação:**
+```text
+Atualize as regras de segurança do Cloud Firestore no arquivo `firestore.rules`.
+
+Contexto:
+Um aluno pode ter criado uma conta (por exemplo via Google) e agora deseja se cadastrar/solicitar perfil de Professor. Quando ele seleciona "Professor" no cadastro, o backend atualiza o documento `users/{userId}` de `role == 'aluno'` para `role == 'professor'` com `status == 'pending_approval'`.
+
+Atualmente, na regra `allow update:` da coleção `users/{userId}` (linhas ~270-299), temos:
+(
+  isOwner(userId) &&
+  request.resource.data.role == resource.data.role &&
+  request.resource.data.get('status', 'active') == resource.data.get('status', 'active') &&
+  request.resource.data.email == resource.data.email &&
+  request.resource.data.providerId == resource.data.providerId &&
+  (
+    request.resource.data.get('classStatus', 'none') == resource.data.get('classStatus', 'none') ||
+    request.resource.data.get('classStatus', 'none') in ['none', 'pending']
+  )
+)
+
+Por favor, atualize esta cláusula para permitir que:
+1. O proprietário atualize seus dados cadastrais mantendo `role` e `status` iguais; OU
+2. Se o usuário atual for `role == 'aluno'`, ele possa transicionar para `role == 'professor'` desde que o novo status seja estritamente `'pending_approval'` (`request.resource.data.get('status', '') == 'pending_approval'`). Nenhuma auto-aprovação para `active` é permitida.
+
+Mantenha todas as outras regras rigorosamente intactas (validação `isValidUser`, imutabilidade de `uid`, `createdAt`, integridade de email e provedor, regras de admin e regras do professor da turma).
+Aplique a alteração diretamente no arquivo `firestore.rules`.
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Refatoração da Cláusula de Atualização do Proprietário (`allow update` em `users/{userId}`):**
+   - Mantida a obrigatoriedade de `isOwner(userId)`, validação de schema `isValidUser(request.resource.data)`, imutabilidade de `uid` e `createdAt`, além da integridade de `email` e `providerId`.
+   - Mantida a proteção contra auto-aprovação de turmas (`classStatus` restrito a `'none'`, `'pending'` ou inalterado).
+   - Implementada ramificação disjuntiva segura no perfil do proprietário:
+     - **Ramo A (Atualização Cadastral Padrão):** Permite atualização mantendo `role` e `status` estritamente idênticos aos persistidos (`request.resource.data.role == resource.data.role && request.resource.data.get('status', 'active') == resource.data.get('status', 'active')`).
+     - **Ramo B (Solicitação de Migração para Docente):** Permite transição exclusiva de `role == 'aluno'` para `role == 'professor'` com obrigatoriedade estrita de `status == 'pending_approval'` (`resource.data.role == 'aluno' && request.resource.data.role == 'professor' && request.resource.data.get('status', '') == 'pending_approval'`).
+   - Bloqueio adversarial garantido: qualquer tentativa de auto-aprovação direta (`status: 'active'`), auto-elevação para `'admin'` ou modificação indevida por terceiros é sumariamente rejeitada pelo motor de regras CEL.
+2. **Validação e Integridade do Ecossistema:**
+   - Regras de Administrador (`isAdmin()`) e de Professor da Turma (`isTeacherOfUserClass`) mantidas com isolamento total.
+   - Build do frontend validado com sucesso (`tsc -b && vite build`) com 0 erros.
+
+
+## 📌 Prompt 102 (Sessão: 07/11/2026 - Correção de Cadastro Google como Professor & Redirecionamento no Logout)
+**Data:** 07/11/2026 - 21:37  
+**Agente Especialista:** `agente-orquestrador` (Camada 2 - SENAI Edition)  
+**Solicitação:**
+```text
+/agente-orquestrador /grill-me /goal eu cliquei em criar conta, mudei para professor, dai cliquei em utilizar conta google, mas fui cadastrado como aluno. corrija isso.
+outra coisa, já no sqledditor, logado como aluno, cliquei em sair da conta e ele me manteve na tela de perfil com um Usuário Sem Nome, quando sair da conta ele volta para a pagina inicial.
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Propagação de Papel e Dados Cadastrais no Cadastro via Google (`AuthModal.tsx`):**
+   - No manipulador `handleGoogleAuth`, quando a aba ativa for `'register'`, os dados preenchidos e a intenção de papel (`requestedRole: selectedRole`, turma, matrícula, telefone, etc.) agora são passados para `loginWithGoogle(extraData)`.
+   - Executada a chamada `await refreshUserProfile()` logo após a autenticação via Google para atualização imediata do `userProfile` no contexto `AuthContext`.
+   - Atualizado o rótulo do botão Google para exibir `"Cadastrar como Professor(a) com Google"` dinamicamente quando a opção de Professor estiver ativada.
+
+2. **Suporte à Criação e Transição de Papel no Firestore (`authService.ts`):**
+   - Assinatura de `loginWithGoogle(extraData?: ExtraRegistrationData): Promise<UserProfile>` atualizada.
+   - Em `syncUserProfile`, adicionado tratamento para quando o usuário já possuía documento como `'aluno'` e submete cadastro como `'professor'`: o documento é atualizado para `role: 'professor'` com `status: 'pending_approval'`.
+   - Se for um novo usuário, o perfil é criado diretamente como `'professor'` e `status: 'pending_approval'`.
+   - Ambos os fluxos geram log de auditoria `USER_REGISTERED` na coleção `system_events`.
+   - Se for aluno com código de turma, o vínculo à turma é solicitado automaticamente.
+
+3. **Atualização das Regras de Segurança do Firestore (`firestore.rules`):**
+   - Executado via subagente especialista `firestore-rules-author`.
+   - Permite na coleção `users/{userId}` a transição disjuntiva de `role == 'aluno'` para `role == 'professor'`, exigindo estritamente `status == 'pending_approval'`.
+   - Bloqueio adversarial total contra auto-aprovação (`status: 'active'`) e elevação para administrador.
+
+4. **Redirecionamento Definitivo no Logout para a Página Inicial (`landing`):**
+   - **`UserProfileView.tsx`:** Adicionada guarda `if (!user) return null;` e callback `onNavigateToLanding()`. Ao clicar em "Sair da Conta", navega para a página inicial, eliminando qualquer exibição indesejada de "Usuário Sem Nome".
+   - **`Header.tsx`:** O botão de logout do cabeçalho agora chama `onViewChange('landing')`.
+   - **`MainMenuDropdown.tsx`:** O botão "Sair da Conta" no menu hambúrguer agora chama `onSelectView('landing')`.
+   - **`App.tsx`:** Implementado `useEffect` reativo que detecta logout (`!user`) em visões protegidas (`'profile'`, `'admin-panel'`, `'teacher-panel'`) e direciona imediatamente para a visão institucional `'landing'`.
