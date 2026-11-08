@@ -3737,3 +3737,24 @@ no laboratorio, sempre comece com todos os bancos que estiverem abertos minimiza
 - Arquivo `frontend/src/components/TeacherPanelView.tsx` modificado com sucesso.
 - Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
 
+### Prompt 19
+```text
+deixe a div com materiais e bds e entrega de provas com a mesma estetica da de modo operacional: escrito a esquerda e botões a direita (um ao lado do outro). para isso será necessário deixar a div que tem o card de cada turma um pouco mais estreita e a div da turma aberta um pouco mais larga
+```
+
+### Decisões e Implementações:
+1. **Ajuste de Larguras de Colunas e Container:**
+   - Container principal atualizado para `max-w-[1520px]`, oferecendo amplo espaço horizontal em monitores e desktops.
+   - Coluna da esquerda (Lista de Cards das Turmas): ajustada de `lg:col-span-4` para `lg:col-span-3` (25% de largura), ficando mais compacta e estreita.
+   - Coluna da direita (Turma Aberta / Detalhes): ajustada de `lg:col-span-8` para `lg:col-span-9` (75% de largura), tornando-a mais espaçosa e confortável.
+
+2. **Harmonização Estética da Div de Recursos Pedagógicos com o Modo Operacional:**
+   - **Escrito à Esquerda:** Ícone de destaque (`text-[22px] text-[#FF6B00]`) acompanhado do título (`text-xs font-bold`) e subtítulo explicativo (`text-[11px] text-[var(--text-secondary)]`).
+   - **Botões à Direita:** Envolvidos no mesmo container pill estilizado (`flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)]`), posicionados um ao lado do outro.
+   - Botões "Materiais & BDs" e "Entrega de Provas" compartilhando os mesmos padrões de dimensões, tipografia, badges com contadores dinâmicos e chevrons indicadores de expansão.
+
+### Status da Conclusão
+- Arquivo `frontend/src/components/TeacherPanelView.tsx` atualizado e testado.
+- Build verificado com sucesso absoluto via `npm --prefix frontend run build` (**0 erros** de compilação).
+
+

@@ -580,9 +580,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
       </header>
 
       {/* Conteúdo Principal */}
-      <div className="flex-1 p-6 max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Coluna Esquerda: Lista de Turmas (4 Colunas) */}
-        <div className="lg:col-span-4 space-y-4">
+      <div className="flex-1 p-6 max-w-[1520px] w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Coluna Esquerda: Lista de Turmas (Mais estreita - 3 Colunas) */}
+        <div className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
               <span className="material-symbols-outlined text-[#0288D1] text-[18px]">school</span>
@@ -672,8 +672,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
           )}
         </div>
 
-        {/* Coluna Direita: Detalhes, Modos e Materiais da Turma Selecionada (8 Colunas) */}
-        <div className="lg:col-span-8">
+        {/* Coluna Direita: Detalhes, Modos e Materiais da Turma Selecionada (Mais larga - 9 Colunas) */}
+        <div className="lg:col-span-9">
           {selectedClass ? (
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-xl space-y-6">
               {/* Header do Card da Turma Selecionada */}
@@ -816,65 +816,69 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               </div>
 
-              {/* DIV DE RECURSOS PEDAGÓGICOS E AVALIAÇÕES (Abaixo do Modo Operacional, Antes da Área de Alunos) */}
+              {/* DIV DE RECURSOS PEDAGÓGICOS E AVALIAÇÕES (Mesma estética de Modo Operacional: Escrito à Esquerda, Botões à Direita) */}
               <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[20px] text-[#FF6B00]">folder_special</span>
+                  {/* Escrito à Esquerda */}
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[22px] text-[#FF6B00]">folder_special</span>
                     <div>
                       <h3 className="text-xs font-bold text-[var(--text-primary)]">
-                        Materiais, BDs e Avaliações da Turma
+                        Materiais Didáticos &amp; Avaliações
                       </h3>
                       <p className="text-[11px] text-[var(--text-secondary)]">
-                        Acesse e gerencie os conteúdos disponibilizados e as entregas de provas
+                        Bancos de dados, exemplos, exercícios e entregas de avaliações da turma
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {/* Botão Materiais & BDs */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveResourcePanel((prev) => (prev === 'materials' ? null : 'materials'))}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeResourcePanel === 'materials'
-                          ? 'bg-[#FF6B00] text-black shadow font-extrabold'
-                          : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-                      <span>Materiais &amp; BDs</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                        activeResourcePanel === 'materials' ? 'bg-black/20 text-black' : 'bg-[#FF6B00]/20 text-[#FF6B00]'
-                      }`}>
-                        {filteredMaterials.length}
-                      </span>
-                      <span className="material-symbols-outlined text-[15px]">
-                        {activeResourcePanel === 'materials' ? 'expand_less' : 'expand_more'}
-                      </span>
-                    </button>
+                  {/* Botões à Direita (um ao lado do outro dentro do container pill idêntico ao do Modo Operacional) */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                      {/* Botão Materiais & BDs */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveResourcePanel((prev) => (prev === 'materials' ? null : 'materials'))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeResourcePanel === 'materials'
+                            ? 'bg-[#FF6B00] text-black shadow font-bold'
+                            : 'text-[var(--text-muted)] hover:text-[#FF6B00]'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">inventory_2</span>
+                        <span>Materiais &amp; BDs</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          activeResourcePanel === 'materials' ? 'bg-black/20 text-black' : 'bg-[#FF6B00]/15 text-[#FF6B00]'
+                        }`}>
+                          {filteredMaterials.length}
+                        </span>
+                        <span className="material-symbols-outlined text-[14px]">
+                          {activeResourcePanel === 'materials' ? 'expand_less' : 'expand_more'}
+                        </span>
+                      </button>
 
-                    {/* Botão Entrega de Provas */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveResourcePanel((prev) => (prev === 'submissions' ? null : 'submissions'))}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeResourcePanel === 'submissions'
-                          ? 'bg-purple-600 text-white shadow font-extrabold'
-                          : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
-                      <span>Entrega de Provas</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                        activeResourcePanel === 'submissions' ? 'bg-white/20 text-white' : 'bg-purple-500/20 text-purple-400'
-                      }`}>
-                        {submissions.length}
-                      </span>
-                      <span className="material-symbols-outlined text-[15px]">
-                        {activeResourcePanel === 'submissions' ? 'expand_less' : 'expand_more'}
-                      </span>
-                    </button>
+                      {/* Botão Entrega de Provas */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveResourcePanel((prev) => (prev === 'submissions' ? null : 'submissions'))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeResourcePanel === 'submissions'
+                            ? 'bg-purple-600 text-white shadow font-bold'
+                            : 'text-[var(--text-muted)] hover:text-purple-400'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">assignment_turned_in</span>
+                        <span>Entrega de Provas</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          activeResourcePanel === 'submissions' ? 'bg-white/20 text-white' : 'bg-purple-500/15 text-purple-400'
+                        }`}>
+                          {submissions.length}
+                        </span>
+                        <span className="material-symbols-outlined text-[14px]">
+                          {activeResourcePanel === 'submissions' ? 'expand_less' : 'expand_more'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
