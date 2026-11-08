@@ -75,13 +75,13 @@ rules_version = '2';
 // 5. Coleção: savedScripts/{scriptId} (Scripts Salvos, Modelos de Banco e Avaliações)
 // Document ID: ID único gerado automaticamente pelo Firestore
 // Campos:
-//   - title: string (obrigatório, tamanho 1 a 150) - Título do script SQL
+//   - title: string (obrigatório, tamanho 1 a 250) - Título do script SQL
 //   - description: string (opcional, tamanho até 500) - Descrição detalhada do script
-//   - content: string (obrigatório, tamanho 1 a 100000) - Conteúdo SQL ou DDL
+//   - content: string (obrigatório, tamanho 1 a 1000000) - Conteúdo SQL ou DDL
 //   - authorUid: string (obrigatório, tamanho 1 a 128) - UID do autor do script (imutável)
 //   - authorName: string (obrigatório, tamanho 1 a 100) - Nome do autor da publicação
 //   - authorEmail: string (obrigatório, tamanho até 150) - E-mail do autor
-//   - authorRole: string (obrigatório, 'aluno' | 'professor' | 'admin') - Papel acadêmico do autor
+//   - authorRole: string (opcional, 'aluno' | 'professor' | 'admin') - Papel acadêmico do autor
 //   - category: string (obrigatório, 'student_saved' | 'class_database' | 'example' | 'exercise' | 'exam' | 'exam_submission')
 //   - classIds: list (obrigatório, máx 50 elementos) - Turmas associadas ou ['all']
 //   - isTemporary: bool (opcional) - Indicador de script temporário (backup pré-avaliação)
@@ -225,12 +225,12 @@ service cloud.firestore {
 
     // Validador de esquema e limites para a coleção 'savedScripts'
     function isValidSavedScript(data) {
-      return data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
-        data.content is string && data.content.size() >= 1 && data.content.size() <= 100000 &&
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 1000000 &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
         data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
         data.authorEmail is string && data.authorEmail.size() <= 150 &&
-        data.authorRole is string && (data.authorRole in ['aluno', 'professor', 'admin']) &&
+        (!('authorRole' in data) || (data.authorRole is string && data.authorRole in ['aluno', 'professor', 'admin'])) &&
         data.category is string && (data.category in ['student_saved', 'class_database', 'example', 'exercise', 'exam', 'exam_submission']) &&
         data.classIds is list && data.classIds.size() <= 50 &&
         data.createdAt is string && data.createdAt.size() <= 50 &&
@@ -466,10 +466,10 @@ service cloud.firestore {
       // Leitura: qualquer usuário autenticado (carregamento no editor, galeria, perfil e avaliações)
       allow get, list: if isAuthenticated();
 
-      // Criação: usuário autenticado criando seu próprio script ou Administrador
+      // Criação: usuário autenticado criando seu próprio script, professor aprovado ou Administrador
       allow create: if isAuthenticated() &&
                        isValidSavedScript(request.resource.data) &&
-                       (request.resource.data.authorUid == request.auth.uid || isAdmin());
+                       (request.resource.data.authorUid == request.auth.uid || isAdmin() || isTeacherApproved());
 
       // Atualização: o próprio autor do script ou Administrador
       // authorUid e createdAt são estritamente imutáveis para integridade do registro

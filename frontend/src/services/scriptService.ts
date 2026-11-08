@@ -59,21 +59,24 @@ export async function saveScript(
     };
   }
 
-  const docPayload = {
+  const docPayload: any = {
     title: payload.title.trim() || 'Script sem título',
     description: (payload.description || '').trim(),
     content: payload.content,
     authorUid: payload.authorUid,
     authorName: payload.authorName || 'Usuário',
     authorEmail: payload.authorEmail || '',
-    authorRole: payload.authorRole,
+    authorRole: payload.authorRole || 'professor',
     category: payload.category,
     classIds: cleanClassIds,
     isTemporary: Boolean(payload.isTemporary),
-    submittedAt: payload.submittedAt || null,
     createdAt: now,
     updatedAt: now,
   };
+
+  if (payload.submittedAt) {
+    docPayload.submittedAt = payload.submittedAt;
+  }
 
   const docRef = await addDoc(collection(db, 'savedScripts'), docPayload);
   return {

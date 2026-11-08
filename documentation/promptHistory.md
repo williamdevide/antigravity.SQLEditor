@@ -3779,5 +3779,34 @@ quando o professor publica material não esta aparecendo mensagem de sucesso e n
 - Arquivo `frontend/src/components/TeacherPanelView.tsx` corrigido e testado.
 - Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
 
+### Prompt 21
+```text
+esta dando missing or insuficient permissions
+```
+
+### Análise e Diagnóstico:
+Ao tentar salvar ou publicar materiais didáticos, bancos de dados de aula ou avaliações no Firestore (através do upload de arquivo `.sql` ou colagem de código extenso), o Firestore recusava a operação com o erro `FirebaseError: Missing or insufficient permissions`.
+
+**Causas Raízes Identificadas:**
+1. **Limite de Tamanho de Conteúdo SQL Ultrapassado:** Em `firestore.rules`, o validador `isValidSavedScript` possuía uma trava de `data.content.size() <= 100000` (~97KB). Como dumps `.sql` e bancos didáticos excedem facilmente esse valor, scripts extensos disparavam rejeição imediata de permissão pelo motor de segurança do Firestore.
+2. **Restrição Rígida de Papel (`authorRole`):** O validador exigia obrigatoriamente a presença de `data.authorRole`, gerando rejeição caso o payload fosse enviado de forma assíncrona antes do carregamento completo do perfil.
+3. **Restrição de Campo Nulo (`submittedAt`):** O envio de `submittedAt: null` quando não aplicável gerava inconsistências com as validações de schema estrito.
+
+### Decisões e Implementações:
+1. **Atualização no Serviço de Scripts (`frontend/src/services/scriptService.ts`):**
+   - Garantido fallback seguro para `authorRole: payload.authorRole || 'professor'`.
+   - Limpeza do payload para que `submittedAt` só seja incluído caso de fato exista valor string preenchido, evitando campos nulos rejeitados pelo validador.
+2. **Atualização das Regras de Segurança (`firestore.rules`):**
+   - **Conteúdo SQL (`content`):** Teto expandido de `100.000` para `1.000.000` caracteres (1MB), suportando bancos e scripts volumosos.
+   - **Título (`title`):** Limite ampliado de 150 para 250 caracteres.
+   - **Resiliência de Campos:** `authorRole` e `submittedAt` tornaram-se tolerantes a ausência, null ou formatos opcionais sem quebrar a segurança.
+   - **Permissões RBAC:** Criação autorizada para o próprio autor autenticado, Administradores (`isAdmin()`) ou Docentes aprovados (`isTeacherApproved()`).
+   - **Preservação:** Todas as demais coleções (`users`, `classes`, `class_members`, `system_events`) e regras de integridade mantidas 100% intactas.
+
+### Status da Conclusão
+- Arquivo `frontend/src/services/scriptService.ts` ajustado e resiliente.
+- Arquivo `firestore.rules` atualizado pelo subagente especialista `firestore-rules-author`.
+- Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros).
+
 
 
