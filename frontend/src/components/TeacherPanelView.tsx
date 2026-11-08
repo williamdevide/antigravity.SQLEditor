@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   createClass,
+  updateClass,
+  deleteClass,
   getClassesByTeacher,
   getAllClasses,
   getClassMembers,
@@ -31,6 +33,15 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [newClassCourse, setNewClassCourse] = useState('Técnico em Desenvolvimento de Sistemas');
   const [newClassDesc, setNewClassDesc] = useState('');
   const [isCreatingClass, setIsCreatingClass] = useState(false);
+
+  // Modal / Formulário de Edição de Turma
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editClassName, setEditClassName] = useState('');
+  const [editClassCourse, setEditClassCourse] = useState('');
+  const [editClassDesc, setEditClassDesc] = useState('');
+  const [editClassActive, setEditClassActive] = useState(true);
+  const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+  const [isDeletingClass, setIsDeletingClass] = useState(false);
 
   // Admissão por E-mail
   const [admitEmail, setAdmitEmail] = useState('');
@@ -141,6 +152,95 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
       showFeedback('error', 'Erro ao criar turma: ' + (err?.message || 'Tente novamente.'));
     } finally {
       setIsCreatingClass(false);
+    }
+  };
+
+  // Abrir Modal de Edição de Turma
+  const handleOpenEditModal = (cls: ClassItem) => {
+    setEditClassName(cls.name);
+    setEditClassCourse(cls.course);
+    setEditClassDesc(cls.description || '');
+    setEditClassActive(cls.active !== undefined ? cls.active : true);
+    setIsEditModalOpen(true);
+  };
+
+  // Salvar Edição da Turma
+  const handleUpdateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClass || !userProfile) return;
+
+    if (!editClassName.trim()) {
+      showFeedback('error', 'Informe o nome da turma.');
+      return;
+    }
+    if (!editClassCourse.trim()) {
+      showFeedback('error', 'Informe o curso da turma.');
+      return;
+    }
+
+    try {
+      setIsUpdatingClass(true);
+      await updateClass({
+        classId: selectedClass.id,
+        name: editClassName.trim(),
+        course: editClassCourse.trim(),
+        description: editClassDesc.trim(),
+        active: editClassActive,
+        teacher: userProfile,
+      });
+
+      const updated: ClassItem = {
+        ...selectedClass,
+        name: editClassName.trim(),
+        course: editClassCourse.trim(),
+        description: editClassDesc.trim(),
+        active: editClassActive,
+      };
+
+      setSelectedClass(updated);
+      setClasses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setIsEditModalOpen(false);
+      showFeedback('success', `Turma "${updated.name}" atualizada com sucesso!`);
+      loadTeacherClasses();
+    } catch (err: any) {
+      console.error('[TeacherPanel] Erro ao atualizar turma:', err);
+      showFeedback('error', 'Falha ao atualizar turma: ' + (err?.message || ''));
+    } finally {
+      setIsUpdatingClass(false);
+    }
+  };
+
+  // Excluir Turma com Confirmação Rigorosa (Alunos nunca são excluídos da plataforma)
+  const handleDeleteClass = async (cls: ClassItem) => {
+    if (!userProfile) return;
+
+    const confirmDelete = window.confirm(
+      `ATENÇÃO: Deseja realmente excluir permanentemente a turma "${cls.name}" (${cls.code})?\n\n` +
+      `• Esta ação é irreversível.\n` +
+      `• Todos os alunos matriculados serão desvinculados desta classe.\n` +
+      `• IMPORTANTE: Os alunos NÃO serão excluídos da plataforma SQLEditor (mantêm seus perfis e acessos normais ao laboratório).\n\n` +
+      `Clique em OK para confirmar a exclusão definitiva.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setIsDeletingClass(true);
+      await deleteClass({
+        classItem: cls,
+        teacher: userProfile,
+      });
+
+      showFeedback('success', `Turma "${cls.name}" excluída com sucesso. Alunos desvinculados mantidos na plataforma.`);
+
+      const remaining = classes.filter((c) => c.id !== cls.id);
+      setClasses(remaining);
+      setSelectedClass(remaining.length > 0 ? remaining[0] : null);
+      loadTeacherClasses();
+    } catch (err: any) {
+      console.error('[TeacherPanel] Erro ao excluir turma:', err);
+      showFeedback('error', 'Erro ao excluir turma: ' + (err?.message || ''));
+    } finally {
+      setIsDeletingClass(false);
     }
   };
 
@@ -366,7 +466,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-bold text-sm text-[var(--text-primary)]">{cls.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-bold text-sm text-[var(--text-primary)]">{cls.name}</h3>
+                          {cls.active === false && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
+                              Inativa
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 line-clamp-1">
                           {cls.course}
                         </p>
@@ -403,8 +510,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     <h2 className="text-lg font-bold text-[var(--text-primary)]">
                       {selectedClass.name}
                     </h2>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
-                      Ativa
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedClass.active !== false
+                          ? 'bg-emerald-500/15 text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-400'
+                      }`}
+                    >
+                      {selectedClass.active !== false ? 'Ativa' : 'Inativa'}
                     </span>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
@@ -412,25 +525,54 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   </p>
                 </div>
 
-                {/* Card de Código de Acesso com botão de cópia */}
-                <div className="flex items-center gap-2 p-2 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
-                  <div className="px-2">
-                    <p className="text-[10px] uppercase font-bold text-[var(--text-muted)]">
-                      Código de Acesso
-                    </p>
-                    <p className="text-base font-mono font-bold text-[#FF6B00] tracking-wider">
-                      {selectedClass.code}
-                    </p>
+                {/* Ações da Turma: Código de Acesso + Editar e Excluir */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {/* Card de Código de Acesso com botão de cópia */}
+                  <div className="flex items-center gap-2 p-1.5 px-2.5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] leading-none">
+                        Código
+                      </p>
+                      <p className="text-sm font-mono font-bold text-[#FF6B00] tracking-wider leading-tight">
+                        {selectedClass.code}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleCopyCode(selectedClass.code)}
+                      type="button"
+                      className="p-1.5 rounded-xl bg-[#FF6B00]/15 hover:bg-[#FF6B00]/25 text-[#FF6B00] transition-colors cursor-pointer"
+                      title="Copiar código de acesso para enviar aos alunos"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">
+                        {copiedCode === selectedClass.code ? 'check' : 'content_copy'}
+                      </span>
+                    </button>
                   </div>
+
+                  {/* Botões de Ação da Turma */}
                   <button
-                    onClick={() => handleCopyCode(selectedClass.code)}
+                    onClick={() => handleOpenEditModal(selectedClass)}
                     type="button"
-                    className="p-2 rounded-xl bg-[#FF6B00]/15 hover:bg-[#FF6B00]/25 text-[#FF6B00] transition-colors cursor-pointer"
-                    title="Copiar código de acesso para enviar aos alunos"
+                    className="px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] hover:border-[#0288D1] hover:bg-[#0288D1]/10 text-xs font-semibold text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    title="Editar informações da turma"
                   >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {copiedCode === selectedClass.code ? 'check' : 'content_copy'}
-                    </span>
+                    <span className="material-symbols-outlined text-[16px] text-[#0288D1]">edit</span>
+                    <span>Editar</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteClass(selectedClass)}
+                    type="button"
+                    disabled={isDeletingClass}
+                    className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Excluir turma (pede confirmação)"
+                  >
+                    {isDeletingClass ? (
+                      <span className="w-3.5 h-3.5 border-2 border-rose-400/30 border-t-rose-400 rounded-full animate-spin" />
+                    ) : (
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                    )}
+                    <span>Excluir</span>
                   </button>
                 </div>
               </div>
@@ -759,6 +901,121 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     <span className="material-symbols-outlined text-[16px]">check</span>
                   )}
                   <span>Criar Turma</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Turma */}
+      {isEditModalOpen && selectedClass && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#0288D1] text-[22px]">
+                  edit_note
+                </span>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">Editar Turma</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateClass} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Nome da Turma *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editClassName}
+                  onChange={(e) => setEditClassName(e.target.value)}
+                  placeholder="Ex: TDS-01 / Noite"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Curso SENAI *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editClassCourse}
+                  onChange={(e) => setEditClassCourse(e.target.value)}
+                  placeholder="Ex: Técnico em Desenvolvimento de Sistemas"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                  Descrição ou Observações (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editClassDesc}
+                  onChange={(e) => setEditClassDesc(e.target.value)}
+                  placeholder="Ex: Aulas às terças e quintas-feiras"
+                  className="w-full px-3.5 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                <div>
+                  <span className="text-xs font-semibold text-[var(--text-primary)] block">
+                    Status da Turma
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {editClassActive ? 'Turma ativa e aceitando novos ingressos' : 'Turma desativada temporariamente'}
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editClassActive}
+                    onChange={(e) => setEditClassActive(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-[var(--border-color)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0288D1]"></div>
+                </label>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-between text-xs">
+                <span className="text-[var(--text-muted)]">Código de Acesso (inalterável):</span>
+                <span className="font-mono font-bold text-[#FF6B00] tracking-wider">
+                  {selectedClass.code}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingClass}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#0288D1] to-[#29B6F6] text-white text-xs font-bold shadow hover:brightness-110 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-2"
+                >
+                  {isUpdatingClass ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[16px]">save</span>
+                  )}
+                  <span>Salvar Alterações</span>
                 </button>
               </div>
             </form>

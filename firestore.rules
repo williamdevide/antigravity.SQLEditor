@@ -223,6 +223,8 @@ service cloud.firestore {
           'PROFESSOR_APPROVED',
           'PROFESSOR_REJECTED',
           'CLASS_CREATED',
+          'CLASS_UPDATED',
+          'CLASS_DELETED',
           'CLASS_STUDENT_REQUESTED',
           'CLASS_STUDENT_APPROVED',
           'CLASS_STUDENT_REMOVED',

@@ -347,6 +347,110 @@ export async function removeStudentFromClass(params: {
 }
 
 /**
+ * Atualiza os dados de uma turma existente (nome, curso, descrição, status ativo)
+ */
+export async function updateClass(params: {
+  classId: string;
+  name: string;
+  course: string;
+  description?: string;
+  active?: boolean;
+  teacher: UserProfile;
+}): Promise<void> {
+  const cleanName = params.name.trim();
+  const cleanCourse = params.course.trim();
+  const cleanDescription = (params.description || '').trim();
+  const active = params.active !== undefined ? params.active : true;
+
+  if (!cleanName) {
+    throw new Error('O nome da turma não pode ficar em branco.');
+  }
+  if (!cleanCourse) {
+    throw new Error('O curso da turma não pode ficar em branco.');
+  }
+
+  // 1. Atualiza documento da turma no Firestore
+  await updateDoc(doc(db, 'classes', params.classId), {
+    name: cleanName,
+    course: cleanCourse,
+    description: cleanDescription,
+    active,
+  });
+
+  // 2. Auditoria
+  try {
+    await logSystemEvent({
+      type: 'CLASS_UPDATED',
+      authorUid: params.teacher.uid,
+      authorName: params.teacher.displayName,
+      authorEmail: params.teacher.email,
+      targetUid: params.classId,
+      targetName: cleanName,
+      details: `Professor(a) ${params.teacher.displayName} atualizou os dados da turma "${cleanName}" (${cleanCourse}).`,
+    });
+  } catch (auditErr) {
+    console.warn('[ClassService] Aviso ao registrar auditoria de turma atualizada:', auditErr);
+  }
+}
+
+/**
+ * Exclui uma turma permanentemente do Firestore.
+ * Conforme diretrizes acadêmicas SENAI:
+ * - Todos os vínculos em class_members são removidos.
+ * - Os perfis dos alunos vinculados têm os campos de turma resetados (classId, className, classCode, classStatus, turma).
+ * - Os alunos NUNCA são excluídos da plataforma (apenas o Administrador pode excluir usuários).
+ * - O documento da turma é excluído ao final.
+ */
+export async function deleteClass(params: {
+  classItem: ClassItem;
+  teacher: UserProfile;
+}): Promise<void> {
+  // 1. Busca todos os membros vinculados à turma
+  const members = await getClassMembers(params.classItem.id);
+
+  // 2. Para cada aluno, reseta os campos no perfil de usuário e remove o vínculo em class_members
+  // IMPORTANTE: isso é feito ANTES de excluir a turma para que as regras do Firestore (isTeacherOfUserClass / isClassTeacher) continuem válidas
+  for (const member of members) {
+    try {
+      await updateDoc(doc(db, 'users', member.studentUid), {
+        classId: '',
+        className: '',
+        classCode: '',
+        classStatus: 'none',
+        turma: '',
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (userErr) {
+      console.warn(`[ClassService] Aviso ao desvincular aluno ${member.studentUid} do perfil:`, userErr);
+    }
+
+    try {
+      await deleteDoc(doc(db, 'class_members', member.id));
+    } catch (memberErr) {
+      console.warn(`[ClassService] Aviso ao remover documento do membro ${member.id}:`, memberErr);
+    }
+  }
+
+  // 3. Exclui o documento da turma
+  await deleteDoc(doc(db, 'classes', params.classItem.id));
+
+  // 4. Registra no log de auditoria
+  try {
+    await logSystemEvent({
+      type: 'CLASS_DELETED',
+      authorUid: params.teacher.uid,
+      authorName: params.teacher.displayName,
+      authorEmail: params.teacher.email,
+      targetUid: params.classItem.id,
+      targetName: params.classItem.name,
+      details: `Turma "${params.classItem.name}" [${params.classItem.code}] excluída por ${params.teacher.displayName}. ${members.length} aluno(s) desvinculados com sucesso e mantidos na plataforma.`,
+    });
+  } catch (auditErr) {
+    console.warn('[ClassService] Aviso ao registrar auditoria de turma excluída:', auditErr);
+  }
+}
+
+/**
  * Retorna todos os membros (aprovados e pendentes) de uma turma
  * Ordenação em memória para não depender de índices compostos no Firestore
  */

@@ -3510,3 +3510,33 @@ outra coisa, quando um professor ou admin cria uma turma ele não esta já salva
    - Em `MainMenuDropdown.tsx` (Menu Hambúrguer), a opção "Central de Início (Hub)" foi promovida para a posição de destaque no topo do menu, estilizada com gradiente temático, ícone e chamada clara para acessar todos os módulos do SQLEditor a qualquer momento.
 3. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 111 (Sessão: 08/11/2026 - Edição e Exclusão de Turmas pelo Professor com Confirmação e Desvinculação Segura de Alunos)
+**Data:** 08/11/2026 - 00:18  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal o professor pode editar ou excluir suas turmas. o excluir pede confirmação
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Regras de Segurança do Firestore (`firestore.rules`):**
+   - Delegada alteração ao subagente especialista `firestore-rules-author`.
+   - Adicionados os tipos `'CLASS_UPDATED'` e `'CLASS_DELETED'` na validação `isValidSystemEvent(data)`.
+   - Preservadas as regras de propriedade da turma e integridade imutável para `classes` e `class_members`.
+2. **Camada de Serviços e Tipos (`frontend/src/services/classService.ts`, `auditService.ts`, `types/index.ts`):**
+   - Implementada a função `updateClass(params)` para atualizar com segurança nome, curso, descrição e status ativo/inativo da turma no Firestore.
+   - Implementada a função `deleteClass(params)` para exclusão permanente da turma:
+     - Busca os membros da classe em `class_members`.
+     - Reseta os campos de vínculo dos alunos em seus documentos `users` (`classId`, `className`, `classCode`, `classStatus`, `turma`) e remove os registros de `class_members` ANTES da exclusão da turma (mantendo válidas as regras de permissão de docência).
+     - **Diretriz Acadêmica SENAI:** Os alunos são estritamente mantidos na plataforma (apenas o Administrador pode excluir contas de usuário).
+     - Exclui o documento da turma em `classes`.
+     - Registra eventos de auditoria imutáveis `CLASS_UPDATED` e `CLASS_DELETED` com autor, turma e quantidade de alunos desvinculados.
+3. **Interface do Painel do Professor (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Adicionados botões "Editar" e "Excluir" no cabeçalho de detalhes da turma selecionada.
+   - Implementada caixa de diálogo de confirmação rigorosa antes da exclusão (`window.confirm`), alertando sobre o caráter irreversível e a desvinculação dos alunos sem remoção da plataforma.
+   - Criado modal completo de "Editar Turma", permitindo alteração de nome, curso, descrição e alternância de status da turma (Ativa/Inativa com badge visual).
+   - Atualização reativa de estados em tempo real sem necessidade de recarregar a página.
+4. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).

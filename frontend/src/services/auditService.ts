@@ -65,6 +65,10 @@ export function getEventTypeLabel(type: SystemEventType): string {
       return 'Professor Recusado';
     case 'CLASS_CREATED':
       return 'Turma Criada';
+    case 'CLASS_UPDATED':
+      return 'Turma Atualizada';
+    case 'CLASS_DELETED':
+      return 'Turma Excluída';
     case 'CLASS_STUDENT_REQUESTED':
       return 'Entrada em Turma Solicitada';
     case 'CLASS_STUDENT_APPROVED':
