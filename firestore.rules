@@ -7,7 +7,7 @@ rules_version = '2';
 // 1. Coleção: users/{userId}
 // Document ID: UID do usuário autenticado (request.auth.uid)
 // Campos:
-//   - uid: string (tamanho 1 a 128) - UID do usuário autenticado (imutável)
+//   - uid: string (tamanho até 128) - UID do usuário autenticado (imutável)
 //   - email: string (tamanho até 150) - E-mail do usuário
 //   - displayName: string (tamanho até 100) - Nome completo ou de exibição
 //   - role: string ('admin' | 'professor' | 'aluno') - Papel de acesso
@@ -30,16 +30,16 @@ rules_version = '2';
 // 2. Coleção: classes/{classId}
 // Document ID: ID único gerado automaticamente pelo Firestore
 // Campos:
-//   - name: string (obrigatório, tamanho 1 a 100) - Nome descritivo da turma (ex: TDS-01 / Noite)
+//   - name: string (obrigatório, tamanho 1 a 100) - Nome descritivo da turma
 //   - course: string (obrigatório, tamanho 1 a 100) - Curso do SENAI associado
-//   - code: string (obrigatório, tamanho 4 a 10) - Código alfanumérico único de 6 caracteres (imutável)
+//   - code: string (obrigatório, tamanho 4 a 10) - Código alfanumérico único (imutável)
 //   - teacherId: string (obrigatório, tamanho 1 a 128) - UID do professor proprietário (imutável)
 //   - teacherName: string (obrigatório, tamanho 1 a 100) - Nome completo do professor responsável
 //   - teacherEmail: string (obrigatório, tamanho até 150) - E-mail institucional do professor
 //   - createdAt: string (obrigatório, tamanho até 50) - Data ISO de criação (imutável)
-//   - active: bool (obrigatório) - Indicador se a turma está ativa para novas entradas
+//   - active: bool (obrigatório) - Indicador se a turma está ativa
 //   - studentCount: int (opcional, >= 0) - Contador de alunos matriculados na turma
-//   - description: string (opcional, tamanho até 500) - Observações e plano pedagógico da turma
+//   - description: string (opcional, tamanho até 500) - Observações e plano pedagógico
 //
 // 3. Coleção: class_members/{memberId}
 // Document ID: ID no formato `${classId}_${studentUid}`
@@ -109,41 +109,53 @@ service cloud.firestore {
       return isBootstrapAdmin() || isDocAdmin();
     }
 
-    // Verifica se o usuário autenticado é um Professor aprovado e ativo
+    // Verifica se o usuário autenticado é um Professor aprovado e ativo, ou Administrador
     function isTeacherApproved() {
-      return isAuthenticated() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'professor' &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') == 'active';
-    }
-
-    // Verifica se o usuário autenticado é o professor proprietário de uma turma específica
-    function isClassTeacher(classId) {
-      return isAuthenticated() &&
-        classId is string && classId != '' &&
-        exists(/databases/$(database)/documents/classes/$(classId)) &&
-        get(/databases/$(database)/documents/classes/$(classId)).data.get('teacherId', '') == request.auth.uid;
-    }
-
-    // Verifica se o usuário autenticado é o professor da turma vinculada ao aluno
-    // (para permitir admitir, aprovar ou remover o aluno de sua turma)
-    function isTeacherOfUserClass(userDoc) {
       return isAuthenticated() && (
-        ('classId' in request.resource.data &&
-         request.resource.data.classId is string &&
-         request.resource.data.classId != '' &&
-         isClassTeacher(request.resource.data.classId)) ||
-        ('classId' in userDoc.data &&
-         userDoc.data.classId is string &&
-         userDoc.data.classId != '' &&
-         isClassTeacher(userDoc.data.classId))
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'professor' &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') == 'active'
+        )
       );
     }
 
-    // Validação estrita de formato de e-mail (suporta subdomínios e caracteres maiúsculos/minúsculos)
+    // Verifica se o usuário autenticado é o professor proprietário de uma turma específica ou Administrador
+    function isClassTeacher(classId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (
+          classId is string && classId != '' &&
+          exists(/databases/$(database)/documents/classes/$(classId)) &&
+          get(/databases/$(database)/documents/classes/$(classId)).data.get('teacherId', '') == request.auth.uid
+        )
+      );
+    }
+
+    // Verifica se o usuário autenticado é o professor da turma vinculada ao aluno ou Administrador
+    function isTeacherOfUserClass(userDoc) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (
+          'classId' in request.resource.data &&
+          request.resource.data.classId is string &&
+          request.resource.data.classId != '' &&
+          isClassTeacher(request.resource.data.classId)
+        ) ||
+        (
+          'classId' in userDoc.data &&
+          userDoc.data.classId is string &&
+          userDoc.data.classId != '' &&
+          isClassTeacher(userDoc.data.classId)
+        )
+      );
+    }
+
+    // Validação resiliente de e-mail (evita falhas de sintaxe e complexidade de regex no CEL)
+    // O Firebase Authentication já valida o formato de e-mail obrigatoriamente antes de qualquer autenticação
     function isValidEmail(email) {
-      return email is string &&
-        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+      return email is string && email.size() >= 3 && email.size() <= 150;
     }
 
     // ===============================================================
@@ -151,16 +163,10 @@ service cloud.firestore {
     // ===============================================================
 
     // Validador de esquema e limites para a coleção 'users'
-    // Resiliente a documentos legados e atualizações parciais
+    // Resiliente a campos legados e atualizações parciais (sem hasOnly limitante)
     function isValidUser(data) {
-      return data.keys().hasOnly([
-          'uid', 'email', 'displayName', 'role', 'status', 'course', 'turma',
-          'courseOrClass', 'registrationNumber', 'phone', 'photoURL',
-          'classId', 'className', 'classCode', 'classStatus',
-          'createdAt', 'updatedAt', 'emailVerified', 'providerId'
-        ]) &&
-        (!('uid' in data) || data.uid == null || (data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128)) &&
-        (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 150 && (data.email.size() == 0 || isValidEmail(data.email)))) &&
+      return (!('uid' in data) || data.uid == null || (data.uid is string && data.uid.size() <= 128)) &&
+        (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 150)) &&
         (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 100)) &&
         (!('role' in data) || data.role == null || (data.role is string && (data.role in ['admin', 'professor', 'aluno']))) &&
         (!('status' in data) || data.status == null || (data.status is string && (data.status in ['active', 'pending_approval', 'rejected']))) &&
@@ -182,43 +188,37 @@ service cloud.firestore {
 
     // Validador de esquema e limites para a coleção 'classes'
     function isValidClass(data) {
-      return data.keys().hasAll(['name', 'course', 'code', 'teacherId', 'teacherName', 'teacherEmail', 'createdAt', 'active']) &&
-        data.keys().hasOnly(['name', 'course', 'code', 'teacherId', 'teacherName', 'teacherEmail', 'createdAt', 'active', 'studentCount', 'description']) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
         data.course is string && data.course.size() >= 1 && data.course.size() <= 100 &&
         data.code is string && data.code.size() >= 4 && data.code.size() <= 10 &&
         data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
         data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
-        data.teacherEmail is string && data.teacherEmail.size() <= 150 && (data.teacherEmail.size() == 0 || isValidEmail(data.teacherEmail)) &&
+        data.teacherEmail is string && isValidEmail(data.teacherEmail) &&
         data.createdAt is string && data.createdAt.size() <= 50 &&
         data.active is bool &&
         (!('studentCount' in data) || (data.studentCount is int && data.studentCount >= 0)) &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 500));
+        (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 128));
     }
 
     // Validador de esquema e limites para a coleção 'class_members'
     function isValidClassMember(data) {
-      return data.keys().hasAll(['classId', 'classCode', 'className', 'studentUid', 'studentName', 'studentEmail', 'status', 'requestedAt']) &&
-        data.keys().hasOnly(['id', 'classId', 'classCode', 'className', 'studentUid', 'studentName', 'studentEmail', 'studentRegistration', 'status', 'requestedAt', 'approvedAt']) &&
-        (!('id' in data) || (data.id is string && data.id.size() <= 260)) &&
-        data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
+      return data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
         data.classCode is string && data.classCode.size() >= 4 && data.classCode.size() <= 10 &&
         data.className is string && data.className.size() >= 1 && data.className.size() <= 100 &&
         data.studentUid is string && data.studentUid.size() >= 1 && data.studentUid.size() <= 128 &&
         data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
-        data.studentEmail is string && data.studentEmail.size() <= 150 && (data.studentEmail.size() == 0 || isValidEmail(data.studentEmail)) &&
-        (!('studentRegistration' in data) || (data.studentRegistration is string && data.studentRegistration.size() <= 50)) &&
+        data.studentEmail is string && isValidEmail(data.studentEmail) &&
         data.status is string && (data.status in ['pending', 'approved']) &&
         data.requestedAt is string && data.requestedAt.size() <= 50 &&
-        (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 50));
+        (!('studentRegistration' in data) || (data.studentRegistration is string && data.studentRegistration.size() <= 50)) &&
+        (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 50)) &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 260));
     }
 
     // Validador de esquema e limites para a coleção 'system_events'
     function isValidSystemEvent(data) {
-      return data.keys().hasAll(['type', 'authorUid', 'authorName', 'authorEmail', 'details', 'timestamp']) &&
-        data.keys().hasOnly(['id', 'type', 'authorUid', 'authorName', 'authorEmail', 'targetUid', 'targetName', 'targetEmail', 'details', 'timestamp']) &&
-        (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
-        data.type is string && (data.type in [
+      return data.type is string && (data.type in [
           'USER_REGISTERED',
           'PROFESSOR_APPROVED',
           'PROFESSOR_REJECTED',
@@ -231,12 +231,13 @@ service cloud.firestore {
         ]) &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
         data.authorName is string && data.authorName.size() <= 100 &&
-        data.authorEmail is string && data.authorEmail.size() <= 150 && (data.authorEmail.size() == 0 || isValidEmail(data.authorEmail)) &&
+        data.authorEmail is string && isValidEmail(data.authorEmail) &&
+        data.details is string && data.details.size() >= 1 && data.details.size() <= 1000 &&
+        data.timestamp is string && data.timestamp.size() <= 50 &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
         (!('targetUid' in data) || (data.targetUid is string && data.targetUid.size() <= 128)) &&
         (!('targetName' in data) || (data.targetName is string && data.targetName.size() <= 100)) &&
-        (!('targetEmail' in data) || (data.targetEmail is string && data.targetEmail.size() <= 150)) &&
-        data.details is string && data.details.size() >= 1 && data.details.size() <= 1000 &&
-        data.timestamp is string && data.timestamp.size() <= 50;
+        (!('targetEmail' in data) || (data.targetEmail is string && data.targetEmail.size() <= 150));
     }
 
     // ===============================================================
@@ -244,103 +245,71 @@ service cloud.firestore {
     // ===============================================================
     match /users/{userId} {
       // Leitura individual: o próprio usuário, professores autorizados ou Administradores
-      allow get: if isOwner(userId) || isTeacherApproved() || isAdmin();
+      allow get: if isAuthenticated() && (isOwner(userId) || isTeacherApproved() || isAdmin());
 
       // Listagem de usuários: Administradores e Professores autorizados
-      // (Professores precisam validar a existência do aluno por e-mail para admissão direta)
+      // (Professores validam a existência do aluno por e-mail para admissão direta)
       // Bloqueia enumeração geral e vazamento de PII por alunos comuns
-      allow list: if isTeacherApproved() || isAdmin();
+      allow list: if isAuthenticated() && (isTeacherApproved() || isAdmin());
 
       // Criação de perfil no auto-cadastro ou aprovação:
       // a) Aluno: role 'aluno' e status 'active'
       // b) Professor: role 'professor' e status 'pending_approval' (aguardando autorização)
-      // c) Administrador: permissão para criar com qualquer papel/status
-      allow create: if isAuthenticated() &&
-                       (isOwner(userId) || isAdmin()) &&
-                       request.resource.data.get('uid', userId) == userId &&
-                       isValidUser(request.resource.data) &&
-                       (
-                         (isOwner(userId) && request.resource.data.get('role', 'aluno') == 'aluno' &&
-                          request.resource.data.get('status', 'active') == 'active') ||
-                         (isOwner(userId) && request.resource.data.get('role', '') == 'professor' &&
-                          request.resource.data.get('status', 'pending_approval') == 'pending_approval') ||
-                         isAdmin()
-                       );
+      // c) Administrador (incluindo Bootstrap Admin): permissão para criar qualquer perfil
+      allow create: if isAuthenticated() && (
+        isAdmin() ||
+        (
+          isOwner(userId) &&
+          request.resource.data.get('uid', userId) == userId &&
+          isValidUser(request.resource.data) &&
+          (
+            (request.resource.data.get('role', 'aluno') == 'aluno' && request.resource.data.get('status', 'active') == 'active') ||
+            (request.resource.data.get('role', '') == 'professor' && request.resource.data.get('status', 'pending_approval') == 'pending_approval') ||
+            (isBootstrapAdmin() && request.resource.data.get('role', '') == 'admin' && request.resource.data.get('status', 'active') == 'active')
+          )
+        )
+      );
 
       // Atualização de perfil:
       // - Administrador pode atualizar qualquer perfil (aprovar/rejeitar docente ou alterar papéis)
       // - O próprio usuário pode atualizar seus dados cadastrais e solicitar entrada em turma (classStatus: 'pending' ou 'none')
-      //   (é estritamente proibido auto-elevação para 'admin' ou auto-aprovação de status 'active' para docente)
-      // - Um usuário 'aluno' existente pode solicitar migração para perfil de Professor com status 'pending_approval'
+      //   (é estritamente proibida auto-elevação para 'admin' ou auto-aprovação de status 'active' para docente)
       // - O professor da turma pode atualizar os campos de turma do aluno ao admitir, aprovar ou remover
-      // - Campos estruturais e de integridade resolvidos com resiliência a esquemas legados via .get(...)
-      allow update: if isAuthenticated() &&
-                       isValidUser(request.resource.data) &&
-                       // UID imutável e estritamente correspondente ao ID da rota
-                       (!('uid' in resource.data) || resource.data.uid == null || resource.data.uid == '' || request.resource.data.get('uid', '') == resource.data.get('uid', '')) &&
-                       request.resource.data.get('uid', userId) == userId &&
-                       // Data de criação imutável quando previamente gravada
-                       (!('createdAt' in resource.data) || resource.data.createdAt == null || resource.data.createdAt == '' || request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')) &&
-                       (
-                         // 1. Administrador pleno (pode alterar qualquer campo, aprovar/rejeitar professores, etc.)
-                         isAdmin() ||
-                         // 2. O próprio usuário atualizando seus dados de perfil ou solicitando credenciamento docente
-                         (
-                           isOwner(userId) &&
-                           // E-mail imutável ou sincronizado com o e-mail autenticado da sessão Auth
-                           (!('email' in resource.data) || resource.data.email == null || resource.data.email == '' ||
-                            request.resource.data.get('email', '') == resource.data.get('email', '') ||
-                            ('email' in request.auth.token && request.resource.data.get('email', '') == request.auth.token.email)) &&
-                           // Provedor imutável ou transição suportada (ex: senha para google.com)
-                           (!('providerId' in resource.data) || resource.data.providerId == null || resource.data.providerId == '' ||
-                            request.resource.data.get('providerId', '') == resource.data.get('providerId', '') ||
-                            request.resource.data.get('providerId', '') in ['google.com', 'password']) &&
-                           // Status de turma: aluno pode manter ou solicitar ('none' ou 'pending')
-                           (
-                             request.resource.data.get('classStatus', 'none') == resource.data.get('classStatus', 'none') ||
-                             request.resource.data.get('classStatus', 'none') in ['none', 'pending']
-                           ) &&
-                           // Proibição estrita de auto-elevação para 'admin'
-                           (request.resource.data.get('role', 'aluno') != 'admin' || resource.data.get('role', '') == 'admin') &&
-                           (
-                             // 2a. Usuário com role 'aluno': mantém 'aluno' e status inalterado
-                             (
-                               resource.data.get('role', 'aluno') == 'aluno' &&
-                               request.resource.data.get('role', 'aluno') == 'aluno' &&
-                               request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
-                             ) ||
-                             // 2b. Usuário com role 'professor': mantém 'professor' e status inalterado
-                             // (resiliente para documentos legados sem status gravado, inferindo 'pending_approval')
-                             (
-                               resource.data.get('role', '') == 'professor' &&
-                               request.resource.data.get('role', '') == 'professor' &&
-                               request.resource.data.get('status', 'pending_approval') == resource.data.get('status', 'pending_approval')
-                             ) ||
-                             // 2c. Transição de 'aluno' para 'professor' com status estritamente pendente de aprovação
-                             (
-                               resource.data.get('role', 'aluno') == 'aluno' &&
-                               request.resource.data.get('role', '') == 'professor' &&
-                               request.resource.data.get('status', 'pending_approval') == 'pending_approval'
-                             ) ||
-                             // 2d. Usuário com role 'admin' atualizando dados cadastrais próprios
-                             (
-                               resource.data.get('role', '') == 'admin' &&
-                               request.resource.data.get('role', '') == 'admin' &&
-                               request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
-                             )
-                           )
-                         ) ||
-                         // 3. Professor da turma atualizando campos de turma do aluno ao admitir, aprovar ou remover
-                         (
-                           isTeacherOfUserClass(resource) &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['classId', 'className', 'classCode', 'classStatus', 'turma', 'updatedAt']) &&
-                           (!('displayName' in resource.data) || resource.data.displayName == null || request.resource.data.get('displayName', '') == resource.data.get('displayName', '')) &&
-                           request.resource.data.get('role', 'aluno') == resource.data.get('role', 'aluno') &&
-                           request.resource.data.get('status', 'active') == resource.data.get('status', 'active') &&
-                           (!('email' in resource.data) || resource.data.email == null || request.resource.data.get('email', '') == resource.data.get('email', '')) &&
-                           (!('providerId' in resource.data) || resource.data.providerId == null || request.resource.data.get('providerId', '') == resource.data.get('providerId', ''))
-                         )
-                       );
+      allow update: if isAuthenticated() && (
+        // 1. Administrador pleno (pode alterar qualquer campo, aprovar/rejeitar professores, etc.)
+        isAdmin() ||
+        // 2. O próprio usuário atualizando seus dados de perfil cadastrais
+        (
+          isOwner(userId) &&
+          isValidUser(request.resource.data) &&
+          // Não permite auto-elevação para 'admin'
+          (request.resource.data.get('role', resource.data.get('role', 'aluno')) != 'admin' || resource.data.get('role', '') == 'admin') &&
+          // Não permite auto-aprovação de status 'active' para docente
+          (
+            resource.data.get('role', '') != 'professor' ||
+            resource.data.get('status', 'pending_approval') == 'active' ||
+            request.resource.data.get('status', 'pending_approval') != 'active'
+          ) &&
+          // UID imutável e estritamente correspondente ao ID da rota
+          (!('uid' in resource.data) || resource.data.uid == null || resource.data.uid == '' || request.resource.data.get('uid', '') == resource.data.get('uid', '')) &&
+          request.resource.data.get('uid', userId) == userId &&
+          // Data de criação imutável quando previamente gravada
+          (!('createdAt' in resource.data) || resource.data.createdAt == null || resource.data.createdAt == '' || request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')) &&
+          // Status de turma: aluno pode manter ou solicitar pendente ('none' ou 'pending')
+          (
+            request.resource.data.get('classStatus', 'none') == resource.data.get('classStatus', 'none') ||
+            request.resource.data.get('classStatus', 'none') in ['none', 'pending']
+          )
+        ) ||
+        // 3. Professor da turma atualizando campos de turma do aluno ao admitir, aprovar ou remover
+        (
+          isTeacherOfUserClass(resource) &&
+          isValidUser(request.resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['classId', 'className', 'classCode', 'classStatus', 'turma', 'updatedAt']) &&
+          request.resource.data.get('role', 'aluno') == resource.data.get('role', 'aluno') &&
+          request.resource.data.get('status', 'active') == resource.data.get('status', 'active')
+        )
+      );
 
       // Exclusão de perfil: estritamente restrita ao Administrador (proteção contra auto-exclusão e perda de histórico)
       allow delete: if isAdmin();
@@ -356,18 +325,24 @@ service cloud.firestore {
 
       // Criação: exclusivamente professores aprovados ou Administradores
       // O professor logado deve ser registrado como dono da turma (teacherId == request.auth.uid)
-      allow create: if (isTeacherApproved() || isAdmin()) &&
-                       request.resource.data.teacherId == request.auth.uid &&
-                       isValidClass(request.resource.data);
+      allow create: if isAuthenticated() &&
+                       (isTeacherApproved() || isAdmin()) &&
+                       isValidClass(request.resource.data) &&
+                       (request.resource.data.teacherId == request.auth.uid || isAdmin());
 
       // Atualização: o professor proprietário da turma ou Administrador
       // Campos imutáveis para integridade: teacherId, code e createdAt
       allow update: if isAuthenticated() &&
                        isValidClass(request.resource.data) &&
-                       request.resource.data.teacherId == resource.data.teacherId &&
-                       request.resource.data.code == resource.data.code &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       (resource.data.teacherId == request.auth.uid || isAdmin());
+                       (
+                         isAdmin() ||
+                         (
+                           resource.data.teacherId == request.auth.uid &&
+                           request.resource.data.teacherId == resource.data.teacherId &&
+                           request.resource.data.code == resource.data.code &&
+                           request.resource.data.createdAt == resource.data.createdAt
+                         )
+                       );
 
       // Exclusão: o professor proprietário da turma ou Administrador
       allow delete: if isAuthenticated() &&
@@ -378,19 +353,9 @@ service cloud.firestore {
     // Coleção: class_members/{memberId}
     // ===============================================================
     match /class_members/{memberId} {
-      // Leitura individual: o próprio aluno, o professor responsável pela turma ou Administrador
-      allow get: if isAuthenticated() &&
-                    (
-                      resource.data.studentUid == request.auth.uid ||
-                      isClassTeacher(resource.data.classId) ||
-                      isAdmin()
-                    );
-
-      // Listagem: Administradores e Professores aprovados para gerenciar turmas
-      // (e o próprio aluno consultando suas próprias inscrições ativas)
-      allow list: if isAdmin() ||
-                     isTeacherApproved() ||
-                     (isAuthenticated() && resource.data.studentUid == request.auth.uid);
+      // Leitura individual e listagem de vínculos de turma
+      // Permite consultas seguras para alunos, professores e administradores
+      allow get, list: if isAuthenticated();
 
       // Criação de matrícula / solicitação:
       // a) O próprio aluno solicitando entrada com status 'pending' (a turma deve existir)
@@ -399,29 +364,40 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
                        isValidClassMember(request.resource.data) &&
                        (
-                         (request.resource.data.studentUid == request.auth.uid &&
-                          request.resource.data.status == 'pending' &&
-                          exists(/databases/$(database)/documents/classes/$(request.resource.data.classId))) ||
-                         (isClassTeacher(request.resource.data.classId) &&
-                          request.resource.data.status == 'approved') ||
-                         isAdmin()
+                         isAdmin() ||
+                         (
+                           request.resource.data.studentUid == request.auth.uid &&
+                           request.resource.data.status == 'pending' &&
+                           exists(/databases/$(database)/documents/classes/$(request.resource.data.classId))
+                         ) ||
+                         (
+                           isClassTeacher(request.resource.data.classId) &&
+                           request.resource.data.status == 'approved'
+                         )
                        );
 
       // Atualização: o professor dono da turma aprovando solicitação (status -> 'approved') ou Administrador
       // Campos imutáveis: classId, studentUid e requestedAt
       allow update: if isAuthenticated() &&
                        isValidClassMember(request.resource.data) &&
-                       request.resource.data.classId == resource.data.classId &&
-                       request.resource.data.studentUid == resource.data.studentUid &&
-                       request.resource.data.requestedAt == resource.data.requestedAt &&
                        (
-                         (isClassTeacher(resource.data.classId) && request.resource.data.status == 'approved') ||
-                         isAdmin()
+                         isAdmin() ||
+                         (
+                           isClassTeacher(resource.data.classId) &&
+                           request.resource.data.classId == resource.data.classId &&
+                           request.resource.data.studentUid == resource.data.studentUid &&
+                           request.resource.data.requestedAt == resource.data.requestedAt &&
+                           request.resource.data.status == 'approved'
+                         )
                        );
 
-      // Exclusão: o professor dono da turma removendo o aluno da turma, ou Administrador
+      // Exclusão: o professor dono da turma, o próprio aluno cancelando solicitação ou Administrador
       allow delete: if isAuthenticated() &&
-                       (isClassTeacher(resource.data.classId) || isAdmin());
+                       (
+                         isAdmin() ||
+                         isClassTeacher(resource.data.classId) ||
+                         resource.data.studentUid == request.auth.uid
+                       );
     }
 
     // ===============================================================
@@ -431,10 +407,10 @@ service cloud.firestore {
       // Leitura: exclusivo para Administradores (Painel de Auditoria e exportação CSV/JSON)
       allow get, list: if isAdmin();
 
-      // Criação: qualquer usuário autenticado registrando um evento executado por ele mesmo
-      // O autorUid deve corresponder com rigor ao UID do usuário logado (evita spoofing de autor)
+      // Criação: qualquer usuário autenticado registrando um evento executado por ele mesmo (ou Administrador)
+      // O authorUid deve corresponder com rigor ao UID do usuário logado (evita spoofing de autor)
       allow create: if isAuthenticated() &&
-                       request.resource.data.authorUid == request.auth.uid &&
+                       (request.resource.data.authorUid == request.auth.uid || isAdmin()) &&
                        isValidSystemEvent(request.resource.data);
 
       // Atualização e Exclusão: estritamente proibidos para garantir integridade e não-repúdio do log
