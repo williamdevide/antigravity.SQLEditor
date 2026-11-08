@@ -3595,3 +3595,24 @@ no header tambem pode fazer a mesma coisa
    - Exibe a foto do perfil (`user.photoURL` / `userProfile?.photoURL`) quando disponível ou a letra inicial com fundo em degradê SENAI quando não houver foto, preservando o tooltip completo com nome e permissão no hover (`title`).
 2. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 115 (Sessão: 08/11/2026 - Inicialização Padrão de Bancos de Dados Minimizados no Schema Explorer)
+**Data:** 08/11/2026 - 01:03  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+no laboratorio, sempre comece com todos os bancos que estiverem abertos minimizado (digo, com o detalhe das tabelas escondidos
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Schema Explorer do Laboratório (`frontend/src/components/Sidebar.tsx`):**
+   - Invertido o modelo de expansão padrão de bancos de dados: migrado de `collapsedDbs` (onde todos iniciavam abertos por padrão) para `expandedDbs` (iniciando vazio `{}`).
+   - **Inicialização Minimizada:** Ao abrir ou recarregar o Laboratório SQL, todos os bancos de dados carregados iniciam minimizados por padrão, mantendo seus detalhes e listas de tabelas recolhidos.
+   - **Navegação Ergonômica:**
+     - O ícone inicial de cada banco exibe a seta de expansão para a direita (`arrow_right`) e o contador total de tabelas criadas.
+     - Clicar na linha do banco de dados ativa o banco e alterna a sua expansão (revelando ou recolhendo suas tabelas).
+     - Clicar diretamente no ícone da seta alterna a expansão/recolhimento isoladamente.
+     - Quando o usuário digita um termo no campo de busca/filtro, os bancos correspondentes continuam se expandindo automaticamente para facilitar a localização das tabelas.
+2. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).

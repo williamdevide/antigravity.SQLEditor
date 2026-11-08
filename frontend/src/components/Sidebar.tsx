@@ -39,7 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isClassLoading,
 }) => {
   const [filterText, setFilterText] = useState('');
-  const [collapsedDbs, setCollapsedDbs] = useState<Record<string, boolean>>({});
+  // Todos os bancos iniciam minimizados por padrão no laboratório (tabelas recolhidas)
+  const [expandedDbs, setExpandedDbs] = useState<Record<string, boolean>>({});
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
   const [isCreatingDb, setIsCreatingDb] = useState(false);
   const [newDbName, setNewDbName] = useState('');
@@ -62,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const toggleDb = (dbName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setCollapsedDbs(prev => ({ ...prev, [dbName]: !prev[dbName] }));
+    setExpandedDbs(prev => ({ ...prev, [dbName]: !prev[dbName] }));
   };
 
   const toggleTable = (key: string) => {
@@ -300,7 +301,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ) : (
           displayDbs.map((db) => {
-            const isCollapsed = collapsedDbs[db.name];
+            const isExpanded = filterText.trim() ? true : !!expandedDbs[db.name];
             const isActive = db.name === activeDatabase;
             const prog = loadingProgress ? loadingProgress[db.name] : undefined;
             const isDbLoading = prog && prog.status === 'loading';
@@ -318,7 +319,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 {/* Nó do Banco de Dados */}
                 <div
-                  onClick={() => onSelectDatabase(db.name)}
+                  onClick={() => {
+                    onSelectDatabase(db.name);
+                    setExpandedDbs(prev => ({ ...prev, [db.name]: !prev[db.name] }));
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     onContextMenu({
@@ -333,15 +337,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       ? 'bg-[var(--bg-hover)] text-[var(--accent-yellow)] font-bold'
                       : 'hover:bg-[var(--bg-hover)] text-[var(--text-primary)]'
                   }`}
-                  title={`Banco: ${db.name} (Clique para selecionar como ativo • Botão direito para opções)`}
+                  title={`Banco: ${db.name} (Clique para selecionar e expandir/recolher • Botão direito para opções)`}
                 >
                   <div className="flex items-center gap-1.5 truncate">
                     <span
                       onClick={(e) => toggleDb(db.name, e)}
                       className="material-symbols-outlined text-[15px] text-[var(--text-secondary)] hover:text-[var(--accent-yellow)]"
-                      title="Expandir/Recolher"
+                      title={isExpanded ? "Recolher detalhes das tabelas" : "Expandir detalhes das tabelas"}
                     >
-                      {isCollapsed ? 'arrow_right' : 'arrow_drop_down'}
+                      {isExpanded ? 'arrow_drop_down' : 'arrow_right'}
                     </span>
                     <span className="material-symbols-outlined text-[15px] text-[var(--status-success)] drop-shadow-[0_0_6px_var(--glow-success)]">
                       database
@@ -415,8 +419,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 )}
 
-                {/* Lista de Tabelas do Banco */}
-                {!isCollapsed && (
+                {/* Lista de Tabelas do Banco (exibida apenas quando expandido) */}
+                {isExpanded && (
                   <div className="pl-3 pr-1 py-1 space-y-0.5 bg-[var(--bg-secondary)]/80 border-t border-[var(--border-color)]/40">
                     {db.tables.length === 0 ? (
                       <div className="text-[11px] text-[var(--text-muted)] italic py-1 pl-2 font-sans">
