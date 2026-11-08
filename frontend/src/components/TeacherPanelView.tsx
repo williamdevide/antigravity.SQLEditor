@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   createClass,
@@ -26,6 +26,7 @@ import type {
   ClassroomMode,
   SavedScriptItem,
   SavedScriptCategory,
+  UserRole,
 } from '../types';
 
 interface TeacherPanelViewProps {
@@ -96,9 +97,15 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [viewingSubmission, setViewingSubmission] = useState<SavedScriptItem | null>(null);
 
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const showFeedback = (type: 'success' | 'error', message: string) => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     setFeedback({ type, message });
-    setTimeout(() => setFeedback(null), 4500);
+    feedbackTimerRef.current = setTimeout(() => {
+      setFeedback(null);
+      feedbackTimerRef.current = null;
+    }, 4500);
   };
 
   // Carrega as turmas do professor (ou todas as turmas para Administrador)
@@ -399,7 +406,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   };
 
   // Gestão de Materiais Pedagógicos
-  const handleOpenNewMaterialModal = () => {
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // Zera e reseta todos os campos do modal de material didático
+  const resetMaterialModal = () => {
     setEditingMaterial(null);
     setMatTitle('');
     setMatDesc('');
@@ -407,6 +417,12 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     setMatCategory('class_database');
     setMatClassIds(selectedClass ? [selectedClass.id] : ['all']);
     setMatAllClasses(false);
+    setModalError(null);
+    setIsMaterialModalOpen(false);
+  };
+
+  const handleOpenNewMaterialModal = () => {
+    resetMaterialModal();
     setIsMaterialModalOpen(true);
   };
 
@@ -419,6 +435,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     const isAll = (item.classIds || []).includes('all');
     setMatAllClasses(isAll);
     setMatClassIds(isAll ? ['all'] : item.classIds || []);
+    setModalError(null);
     setIsMaterialModalOpen(true);
   };
 
@@ -448,19 +465,31 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
   const handleSaveMaterialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !userProfile) return;
+    if (!user) {
+      const msg = 'Você precisa estar autenticado para publicar materiais.';
+      setModalError(msg);
+      showFeedback('error', msg);
+      return;
+    }
     if (!matTitle.trim() || !matContent.trim()) {
-      showFeedback('error', 'Título e código SQL são obrigatórios.');
+      const msg = 'Título e código SQL são obrigatórios.';
+      setModalError(msg);
+      showFeedback('error', msg);
       return;
     }
 
     try {
       setIsSavingMaterial(true);
+      setModalError(null);
       const cleanClassIds = matAllClasses
         ? ['all']
         : matClassIds.length > 0
         ? matClassIds
         : (selectedClass ? [selectedClass.id] : ['all']);
+
+      const authorRole: UserRole = userProfile?.role || (isAdmin ? 'admin' : 'professor');
+      const authorName = userProfile?.displayName || user.displayName || 'Professor';
+      const authorEmail = userProfile?.email || user.email || '';
 
       if (editingMaterial) {
         await updateScript(editingMaterial.id, {
@@ -477,19 +506,23 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
           description: matDesc.trim(),
           content: matContent,
           authorUid: user.uid,
-          authorName: userProfile.displayName || user.displayName || 'Professor',
-          authorEmail: userProfile.email || user.email || '',
-          authorRole: userProfile.role,
+          authorName,
+          authorEmail,
+          authorRole,
           category: matCategory,
           classIds: cleanClassIds,
         });
-        showFeedback('success', `Material "${matTitle.trim()}" publicado para a turma!`);
+        showFeedback('success', `Material "${matTitle.trim()}" publicado com sucesso para a turma!`);
       }
-      setIsMaterialModalOpen(false);
+
+      // Zera a janela e fecha o modal
+      resetMaterialModal();
       loadClassMaterials();
     } catch (err: any) {
       console.error('[handleSaveMaterialSubmit Error]', err);
-      showFeedback('error', 'Erro ao salvar material: ' + (err?.message || 'Erro'));
+      const errMsg = 'Erro ao salvar material: ' + (err?.message || 'Erro inesperado');
+      setModalError(errMsg);
+      showFeedback('error', errMsg);
     } finally {
       setIsSavingMaterial(false);
     }
@@ -521,13 +554,13 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--bg-primary)] overflow-y-auto">
-      {/* Toast Feedback */}
+      {/* Toast Feedback - z-[999999] para sobrepor modais e backdrops */}
       {feedback && (
         <div
-          className={`fixed bottom-6 right-6 z-50 p-4 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-semibold animate-fadeIn border ${
+          className={`fixed bottom-6 right-6 z-[999999] p-4 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-semibold animate-in fade-in slide-in-from-bottom-2 duration-200 border ${
             feedback.type === 'success'
-              ? 'bg-[var(--bg-surface)] text-[var(--status-success)] border-[var(--status-success)]/40'
-              : 'bg-[var(--bg-surface)] text-red-500 border-red-500/40'
+              ? 'bg-[var(--bg-surface)] text-emerald-400 border-emerald-500/40 shadow-emerald-950/40'
+              : 'bg-[var(--bg-surface)] text-red-500 border-red-500/40 shadow-red-950/40'
           }`}
         >
           <span className="material-symbols-outlined text-[20px]">
@@ -1504,13 +1537,20 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 <span>{editingMaterial ? 'Editar Material' : 'Novo Material Didático / Prova'}</span>
               </h3>
               <button
-                onClick={() => setIsMaterialModalOpen(false)}
+                onClick={resetMaterialModal}
                 type="button"
                 className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
+
+            {modalError && (
+              <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">error</span>
+                <span>{modalError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSaveMaterialSubmit} className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1623,7 +1663,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-color)]">
                 <button
                   type="button"
-                  onClick={() => setIsMaterialModalOpen(false)}
+                  onClick={resetMaterialModal}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
                 >
                   Cancelar

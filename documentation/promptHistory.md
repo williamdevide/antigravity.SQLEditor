@@ -3757,4 +3757,27 @@ deixe a div com materiais e bds e entrega de provas com a mesma estetica da de m
 - Arquivo `frontend/src/components/TeacherPanelView.tsx` atualizado e testado.
 - Build verificado com sucesso absoluto via `npm --prefix frontend run build` (**0 erros** de compilação).
 
+### Prompt 20
+```text
+quando o professor publica material não esta aparecendo mensagem de sucesso e nem zerando a janela
+```
+
+### Diagnóstico e Resolução Técnica:
+1. **Identificação da Causa Raiz:**
+   - **Retorno silencioso sem feedback:** `handleSaveMaterialSubmit` possuía uma verificação estrita `if (!user || !userProfile) return;`. Quando `userProfile` ainda estava sincronizando de forma assíncrona do Firestore, o formulário abortava silenciosamente sem emitir erro, sem fechar e sem zerar o modal.
+   - **Z-Index do Toast inferior ao Modal:** O feedback toast utilizava `z-50`, enquanto o modal de materiais utiliza `z-[99999]`. Quaisquer mensagens de sucesso ou erro disparadas eram renderizadas atrás do backdrop preto do modal.
+   - **Ausência de reset explícito dos campos:** O modal apenas alternava `isMaterialModalOpen(false)` sem zerar os estados `matTitle`, `matDesc`, `matContent`, `editingMaterial`, etc.
+
+2. **Implementações e Correções:**
+   - Criação da função centralizada `resetMaterialModal()`, responsável por fechar o modal e zerar todos os campos (`matTitle`, `matDesc`, `matContent`, `matCategory`, `matClassIds`, `editingMaterial` e `modalError`).
+   - Associação do `resetMaterialModal()` tanto no sucesso da submissão quanto nos botões "Cancelar" e "Fechar (X)".
+   - Resolução robusta de autor: se `userProfile` estiver atrasado, realiza fallback seguro para `(userProfile?.role as UserRole) || (isAdmin ? 'admin' : 'professor')`, `displayName` e `email`, garantindo que a publicação nunca seja bloqueada silenciosamente.
+   - Elevação do z-index do toast para `z-[999999]`, garantindo visibilidade absoluta sobre quaisquer camadas, com animações suaves e banner de alerta contextual também dentro do corpo do modal.
+   - Gerenciamento de temporizador de feedback com `feedbackTimerRef` evitando que timeouts concorrentes apaguem mensagens antecipadamente.
+
+### Status da Conclusão
+- Arquivo `frontend/src/components/TeacherPanelView.tsx` corrigido e testado.
+- Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
+
+
 
