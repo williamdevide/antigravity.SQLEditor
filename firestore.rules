@@ -94,10 +94,7 @@ service cloud.firestore {
       return isAuthenticated() &&
         'email' in request.auth.token &&
         request.auth.token.email is string &&
-        (
-          request.auth.token.email == 'williamdevide@gmail.com' ||
-          request.auth.token.email.matches('(?i)^williamdevide@gmail\\.com$')
-        );
+        request.auth.token.email.lower() == 'williamdevide@gmail.com';
     }
 
     // Administrador com role 'admin' persistida no Firestore
@@ -143,10 +140,10 @@ service cloud.firestore {
       );
     }
 
-    // Validação estrita de formato de e-mail (suporta subdomínios e é insensível a maiúsculas/minúsculas)
+    // Validação estrita de formato de e-mail (suporta subdomínios e caracteres maiúsculos/minúsculos)
     function isValidEmail(email) {
       return email is string &&
-        email.matches('(?i)^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$');
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
     }
 
     // ===============================================================

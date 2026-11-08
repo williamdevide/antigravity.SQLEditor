@@ -26,12 +26,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.2.6',
+    date: '07/11/2026',
+    title:
+      'Sistema Multiusuário SENAI (Aluno, Professor e Administrador), Gestão Pedagógica de Turmas, Trilha de Auditoria e Segurança Robusta no Firestore',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco v3.2.6',
+    items: [
+      'Gestão Multiusuário & RBAC Completo: Separação de papéis de Aluno, Professor Docente e Administrador no Cloud Firestore e Firebase Auth com sincronização segura.',
+      'Fluxo Docente & Turmas: Cadastro de docentes com fluxo de autorização administrativa, criação de turmas com código único de 6 caracteres, admissão de alunos por e-mail e aprovação de solicitações.',
+      'Painel Administrativo & Trilha de Auditoria: Visualização e filtragem de usuários cadastrados por curso, turma e matrícula, alteração de permissões, moderação de docentes e histórico auditável com exportação CSV/JSON.',
+      'Acessibilidade & Alto Contraste: Alertas acadêmicos com contraste WCAG AAA nos temas claros e escuros, resiliência na transição de autenticação Google / Email e eliminação de falhas de permissão.',
+    ],
+  },
+  {
     version: 'v3.2.5',
     date: '02/11/2026',
     title:
       'Navegação Institucional na Raiz, Módulos Especializados (Guia Rápido & Feedback), 10 Backgrounds Futuristas, Desafios com Filtros e Split-View Compacto',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2.5',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Roteamento Raiz & Inicialização Institucional: Acesso à raiz (/) agora abre sempre a Página Inicial Institucional com changelogs recolhidos por padrão.',
       'Módulos Independentes: Separação de Guia Rápido (#guia) com tutoriais em vídeo legendados a 60 FPS e canal direto de Feedback & Suporte (#feedback) com envio via email.',
