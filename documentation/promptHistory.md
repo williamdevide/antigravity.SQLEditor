@@ -3287,7 +3287,10 @@ outra coisa, já no sqledditor, logado como aluno, cliquei em sair da conta e el
 
 3. **Robustecimento das Regras no Cloud Firestore (`firestore.rules`):**
    - Delegado ao subagente especialista `firestore-rules-author`.
-   - Na regra `allow update:` da coleção `users/{userId}`, refinadas as comparações de `createdAt`, `email` e `providerId` para utilização de `.get(...)` e verificação defensiva de presença (`!('providerId' in resource.data) || ...`), evitando erros de tempo de execução CEL caso o documento prévio tenha sido criado sem estes campos.
+   - Na função de validação `isValidUser(data)`, ajustado `hasAll(['uid', 'role'])` e adicionadas verificações seguras contra `null` e ausência em campos opcionais ou adicionados em versões posteriores (`email`, `displayName`, `createdAt`, `providerId`, `emailVerified`, `status`, etc.), eliminando falhas de validação em documentos de esquemas pré-existentes.
+   - Em `allow create:`, assegurado o uso de `.get(...)` para `uid`, `role` e `status`, permitindo explicitamente novos cadastros de professor com `role: 'professor'` e `status: 'pending_approval'`.
+   - Em `allow update:`, refinadas as comparações estruturais e de integridade (`uid`, `createdAt`, `email`, `providerId`, `role`, `status`) para utilizar verificações defensivas (`!('campo' in resource.data) || resource.data.campo == null || request.resource.data.get('campo', '') == resource.data.get('campo', '')`), eliminando qualquer erro de avaliação no CEL (`Property not found on object`) e permitindo a transição segura de aluno para professor com status obrigatoriamente `pending_approval` e bloqueio total contra auto-aprovação.
+   - Preservadas integralmente as permissões de administrador (`isAdmin()`) e o isolamento seguro por turma para docentes.
 
 4. **Validação de Compilação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com **0 erros**.
