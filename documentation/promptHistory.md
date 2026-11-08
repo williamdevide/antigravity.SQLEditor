@@ -3540,3 +3540,23 @@ outra coisa, quando um professor ou admin cria uma turma ele não esta já salva
    - Atualização reativa de estados em tempo real sem necessidade de recarregar a página.
 4. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 112 (Sessão: 08/11/2026 - Remoção do Botão "Minhas Turmas" do Cabeçalho Superior)
+**Data:** 08/11/2026 - 00:21  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal o minhas turmas sai do header
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Remoção do Botão de Atalho no Cabeçalho (`frontend/src/components/Header.tsx`):**
+   - Removido o botão "Minhas Turmas" da barra de ações do cabeçalho superior (`Header.tsx`), despoluindo a barra de navegação e mantendo foco no fluxo de trabalho do editor.
+   - Limpa a dependência não utilizada de `isTeacherApproved` no componente `Header`.
+2. **Preservação e Acessibilidade do Painel do Professor:**
+   - O acesso a **"Minhas Turmas"** permanece totalmente acessível e em destaque através de:
+     - **Central de Início / Navigation Hub** (`NavigationHubModal.tsx`): botão de governança dedicado para Professores e Administradores.
+     - **Menu Hambúrguer** (`MainMenuDropdown.tsx`): opção dedicada na categoria "👤 Conta & Acesso".
+3. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
