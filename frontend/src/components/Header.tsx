@@ -434,8 +434,16 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'Aluno'
                 })`}
               >
-                <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center text-black font-bold text-[10px] shrink-0">
-                  {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
+                <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] flex items-center justify-center text-black font-bold text-[10px] shrink-0 overflow-hidden">
+                  {user.photoURL || userProfile?.photoURL ? (
+                    <img
+                      src={(userProfile?.photoURL || user.photoURL) || undefined}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    (userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()
+                  )}
                 </div>
                 <span className="hidden xl:inline font-semibold text-[11px] max-w-[85px] truncate">
                   {userProfile?.displayName?.split(' ')[0] || 'Perfil'}

@@ -3560,3 +3560,21 @@ outra coisa, quando um professor ou admin cria uma turma ele não esta já salva
      - **Menu Hambúrguer** (`MainMenuDropdown.tsx`): opção dedicada na categoria "👤 Conta & Acesso".
 3. **Compilação e Verificação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).
+
+## 📌 Prompt 113 (Sessão: 08/11/2026 - Reposicionamento e Estilização do Botão de Perfil na Página Inicial)
+**Data:** 08/11/2026 - 00:53  
+**Agente:** `agente-orquestrador`  
+**Skills Ativadas:** `@agente-orquestrador` + `@clean-code` + `@frontend-design`  
+**Solicitação do Usuário:**
+```text
+/agente-orquestrador /grill-me /goal na pagina inicial deixe o botão do meu perfil sem o nome do usuário, somente a foto de perfil ou letra do nome quando não tem foto, e coloque esse icone a direita do botão laboratorio
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Página Inicial (`frontend/src/components/LandingPageView.tsx`):**
+   - Removido o rótulo de texto com o nome do usuário do botão de perfil no cabeçalho da landing page.
+   - O botão do perfil foi transformado em um ícone circular responsivo de avatar (`w-9 h-9 rounded-full`), exibindo a foto de perfil (`user.photoURL` / `userProfile?.photoURL`) quando disponível ou a letra inicial em caixa alta com fundo em degradê temático SENAI quando não houver foto.
+   - **Inversão de Ordem no Cabeçalho:** O botão "Laboratório" agora é exibido primeiro e o ícone de perfil foi posicionado estritamente à sua direita.
+   - Melhorada a consistência de exibição de foto de perfil no menu móvel da Landing Page e no cabeçalho do editor (`Header.tsx`).
+2. **Compilação e Verificação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com êxito total (**0 erros de compilação**).

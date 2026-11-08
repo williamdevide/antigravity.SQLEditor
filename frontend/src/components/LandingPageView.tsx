@@ -503,26 +503,33 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
             {user ? (
               <div className="flex items-center gap-2">
                 <button
-                  type="button"
-                  onClick={() => onOpenView('profile')}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] transition-all cursor-pointer"
-                  title="Acessar Meu Perfil"
-                >
-                  <span className="w-5 h-5 rounded-full bg-[#FF6B00] text-white text-[10px] font-bold flex items-center justify-center">
-                    {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
-                  </span>
-                  <span className="max-w-[100px] truncate hidden sm:inline">
-                    {userProfile?.displayName || user.displayName || 'Aluno'}
-                  </span>
-                </button>
-
-                <button
                   onClick={onOpenEditor}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#FF6B00] hover:from-[#FF8533] to-[#FFA726] text-white text-xs font-bold shadow-[0_0_18px_rgba(255,107,0,0.4)] hover:shadow-[0_0_24px_rgba(255,107,0,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
                   type="button"
                 >
                   <span>Laboratório</span>
                   <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                </button>
+
+                {/* Botão de Perfil: apenas foto ou letra inicial à direita do botão Laboratório */}
+                <button
+                  type="button"
+                  onClick={() => onOpenView('profile')}
+                  className="w-9 h-9 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] flex items-center justify-center p-0.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0 overflow-hidden"
+                  title={`Meu Perfil: ${userProfile?.displayName || user.displayName || user.email || ''}`}
+                  aria-label="Acessar Meu Perfil"
+                >
+                  {user.photoURL || userProfile?.photoURL ? (
+                    <img
+                      src={(userProfile?.photoURL || user.photoURL) || undefined}
+                      alt={userProfile?.displayName || user.displayName || 'Foto de perfil'}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="w-full h-full rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] text-black text-xs font-black flex items-center justify-center shadow-inner">
+                      {(userProfile?.displayName || user.displayName || user.email || 'U')[0].toUpperCase()}
+                    </span>
+                  )}
                 </button>
               </div>
             ) : (
@@ -564,8 +571,16 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
             {user ? (
               <div className="flex items-center justify-between pb-2 mb-1 border-b border-[var(--border-color)]">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-[#FF6B00] text-white text-xs font-bold flex items-center justify-center">
-                    {(userProfile?.displayName || user.displayName || 'U')[0].toUpperCase()}
+                  <div className="w-8 h-8 rounded-full bg-[#FF6B00] text-white text-xs font-bold flex items-center justify-center overflow-hidden shrink-0 border border-[var(--border-color)]">
+                    {user.photoURL || userProfile?.photoURL ? (
+                      <img
+                        src={(userProfile?.photoURL || user.photoURL) || undefined}
+                        alt="Foto de perfil"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      (userProfile?.displayName || user.displayName || user.email || 'U')[0].toUpperCase()
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-bold text-[var(--text-primary)]">
