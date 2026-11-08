@@ -3294,3 +3294,35 @@ outra coisa, já no sqledditor, logado como aluno, cliquei em sair da conta e el
 
 4. **Validação de Compilação:**
    - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com **0 erros**.
+
+
+## 📌 Prompt 104 (Sessão: 07/11/2026 - Acessibilidade e Alto Contraste em Temas Claros para Alertas Acadêmicos)
+**Data:** 07/11/2026 - 22:10  
+**Agente Especialista:** `agente-orquestrador` (Camada 2 - SENAI Edition)  
+**Solicitação:**
+```text
+/agente-orquestrador /grill-me /goal a mensagem de complete seu cadastro academico senai esta escrita em amarelo e nos temas claros fica ruim de ler, nos temas claros deixe o texto com uma cor escura
+```
+
+### 🎯 Processamento e Ações Executadas:
+1. **Padronização de Tokens Temáticos no CSS Global (`frontend/src/index.css`):**
+   - Criadas variáveis temáticas reativas para avisos, pendências e alertas acadêmicos:
+     - `--alert-notice-warning-bg`, `--alert-notice-warning-border`, `--alert-notice-warning-icon`, `--alert-notice-warning-title`, `--alert-notice-warning-text`, `--alert-notice-warning-badge-bg`.
+   - **Temas Claros (`html.light` e `html.beige`):** Substituídos tons amarelos claros (`amber-200` / `amber-300`) por tons de alto contraste WCAG AAA:
+     - Títulos em Âmbar Escuro / Marrom Profundo (`#78350F` / `#6C3507`).
+     - Textos e parágrafos em Âmbar Escuro (`#92400E` / `#7C3A0A`).
+     - Ícones em Âmbar Contrastante (`#B45309`).
+     - Fundos suaves (`#FEF3C7` / `#FDF4E7`) com bordas bem delineadas (`#F59E0B` / `#D97706`).
+   - **Temas Escuros (`:root` Dark Padrão e `html.graphite`):** Mantidos os tons quentes de alta luminosidade (`#FDE68A` / `#FBBF24` / `rgba(245, 158, 11, 0.15)`).
+   - Criadas classes utilitárias semânticas `.alert-academic-notice`, `.alert-academic-icon`, `.alert-academic-title`, `.alert-academic-text` e `.alert-academic-badge` com precedência explícita.
+
+2. **Aplicação na Interface de Perfil do Aluno e Docente (`UserProfileView.tsx`):**
+   - Atualizado o banner "Complete seu cadastro acadêmico SENAI" para utilizar `.alert-academic-notice`, `.alert-academic-icon`, `.alert-academic-title` e `.alert-academic-text`.
+   - Refinada a condição de exibição do alerta de cadastro para `(!userProfile?.turma || userProfile.turma.trim() === '') && !isAdmin && !isProfessor`, garantindo que professores não sejam indevidamente orientados a preencher turma.
+   - Atualizados os alertas de professor pendente (`isPendingTeacher`) e solicitação de vínculo a turma pendente (`classStatus === 'pending'`) para usarem os tokens de alto contraste.
+
+3. **Harmonização do Painel Administrativo (`AdminPanelView.tsx`):**
+   - Atualizado o card de "Professores Aguardando Autorização" e suas respectivas tags de status para os utilitários semânticos temáticos, assegurando leitura perfeita em modo claro e sépia/bege.
+
+4. **Validação de Compilação:**
+   - Executado `npm --prefix frontend run build` (`tsc -b && vite build`) com sucesso (**0 erros**).

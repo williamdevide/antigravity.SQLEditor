@@ -256,7 +256,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                     isPendingTeacher
-                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      ? 'alert-academic-badge'
                       : 'bg-[#0288D1]/15 border-[#0288D1]/30 text-[#29B6F6]'
                   }`}
                 >
@@ -341,15 +341,15 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 
         {/* Alerta de Professor Pendente */}
         {isPendingTeacher && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-200 flex items-start gap-3.5 shadow-lg animate-fadeIn">
-            <span className="material-symbols-outlined text-amber-400 text-[28px] shrink-0 mt-0.5">
+          <div className="p-4 sm:p-5 rounded-2xl border alert-academic-notice flex items-start gap-3.5 shadow-lg animate-fadeIn">
+            <span className="material-symbols-outlined alert-academic-icon text-[28px] shrink-0 mt-0.5">
               hourglass_top
             </span>
             <div className="space-y-1">
-              <h3 className="font-bold text-sm text-amber-300">
+              <h3 className="font-bold text-sm alert-academic-title">
                 Cadastro de Professor(a) em Análise pelo Administrador
               </h3>
-              <p className="text-xs text-amber-200/90 leading-relaxed">
+              <p className="text-xs alert-academic-text leading-relaxed">
                 Seu cadastro docente foi registrado com sucesso e está aguardando liberação de um administrador do SENAI. Enquanto isso, seu acesso ao laboratório SQL e às ferramentas de consulta está totalmente liberado. Assim que autorizado, o acesso ao <strong>Painel do Professor</strong> será liberado.
               </p>
             </div>
@@ -374,16 +374,16 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </div>
             </div>
 
-            {(!userProfile?.turma || userProfile.turma.trim() === '') && !isAdmin && (
-              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-start gap-3 animate-fadeIn">
-                <span className="material-symbols-outlined text-amber-400 text-[24px] shrink-0 mt-0.5">
+            {(!userProfile?.turma || userProfile.turma.trim() === '') && !isAdmin && !isProfessor && (
+              <div className="p-4 rounded-2xl border alert-academic-notice flex items-start gap-3 animate-fadeIn">
+                <span className="material-symbols-outlined alert-academic-icon text-[24px] shrink-0 mt-0.5">
                   info
                 </span>
                 <div className="space-y-1">
-                  <h3 className="font-bold text-sm text-amber-200">
+                  <h3 className="font-bold text-sm alert-academic-title">
                     Complete seu cadastro acadêmico SENAI
                   </h3>
-                  <p className="text-xs text-amber-300/90 leading-relaxed">
+                  <p className="text-xs alert-academic-text leading-relaxed">
                     Você se autenticou via Google! Para que seus professores possam acompanhar seus desafios práticos e vinculá-lo à sua turma, por favor preencha os campos <strong>Curso</strong>, <strong>Turma</strong> e <strong>Matrícula</strong> abaixo e clique em <em>Salvar Alterações</em>.
                   </p>
                 </div>
@@ -552,7 +552,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     </span>
                   )}
                   {userProfile.classStatus === 'pending' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold flex items-center gap-1">
+                    <span className="px-2.5 py-0.5 rounded-full border alert-academic-badge text-[11px] font-bold flex items-center gap-1">
                       <span className="material-symbols-outlined text-[13px]">schedule</span>
                       <span>Aguardando Aprovação do Docente</span>
                     </span>
@@ -577,11 +577,11 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                     </span>
                   </div>
                 ) : userProfile.classStatus === 'pending' ? (
-                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs space-y-1">
-                    <p className="font-bold text-amber-300">
+                  <div className="p-3.5 rounded-xl border alert-academic-notice text-xs space-y-1">
+                    <p className="font-bold alert-academic-title">
                       Solicitação enviada para a turma {userProfile.className ? `"${userProfile.className}"` : ''} [{userProfile.classCode}]
                     </p>
-                    <p className="text-[11px] text-amber-200/80">
+                    <p className="text-[11px] alert-academic-text">
                       Seu pedido de entrada está aguardando aprovação do professor responsável pela turma. O laboratório SQL continua 100% liberado para seus estudos.
                     </p>
                   </div>

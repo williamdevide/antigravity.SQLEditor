@@ -440,16 +440,16 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBackToWorkspac
           <div className="space-y-6">
             {/* Bloco de Professores Pendentes de Autorização */}
             {pendingTeachers.length > 0 && (
-              <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-3xl p-6 shadow-xl space-y-4 animate-fadeIn">
+              <div className="border-2 alert-academic-notice rounded-3xl p-6 shadow-xl space-y-4 animate-fadeIn">
                 <div className="flex items-center gap-2.5">
-                  <span className="material-symbols-outlined text-amber-400 text-[24px]">
+                  <span className="material-symbols-outlined alert-academic-icon text-[24px]">
                     notification_important
                   </span>
                   <div>
-                    <h3 className="text-base font-bold text-amber-200">
+                    <h3 className="text-base font-bold alert-academic-title">
                       Professores Aguardando Autorização ({pendingTeachers.length})
                     </h3>
-                    <p className="text-xs text-amber-300/80">
+                    <p className="text-xs alert-academic-text">
                       Estes docentes criaram uma conta com perfil de Professor e precisam da sua aprovação para criar turmas e emitir códigos.
                     </p>
                   </div>
@@ -466,7 +466,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBackToWorkspac
                           <h4 className="font-bold text-sm text-[var(--text-primary)]">
                             {t.displayName}
                           </h4>
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded-full border alert-academic-badge text-[10px] font-bold">
                             Pendente
                           </span>
                         </div>
@@ -772,7 +772,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBackToWorkspac
                                   </span>
                                 </span>
                                 {isPending && (
-                                  <span className="text-[10px] text-amber-400 font-semibold">
+                                  <span className="text-[10px] alert-academic-text font-semibold">
                                     ⏳ Pendente autorização
                                   </span>
                                 )}
@@ -945,7 +945,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBackToWorkspac
                                 : ev.type === 'PROFESSOR_APPROVED'
                                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                                 : ev.type === 'PROFESSOR_REJECTED'
-                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                                ? 'border alert-academic-badge'
                                 : ev.type === 'ROLE_CHANGED'
                                 ? 'bg-purple-500/15 border-purple-500/30 text-purple-400'
                                 : ev.type === 'CLASS_CREATED'

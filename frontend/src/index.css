@@ -31,6 +31,14 @@
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
 
+  /* Alertas e Avisos Acadêmicos / Pendências (Theme-Aware) */
+  --alert-notice-warning-bg: rgba(245, 158, 11, 0.15);
+  --alert-notice-warning-border: rgba(245, 158, 11, 0.35);
+  --alert-notice-warning-icon: #FBBF24;
+  --alert-notice-warning-title: #FDE68A;
+  --alert-notice-warning-text: rgba(253, 230, 138, 0.95);
+  --alert-notice-warning-badge-bg: rgba(245, 158, 11, 0.20);
+
   /* Ícones de campos e chaves estrangeiras no Schema Explorer */
   --schema-icon-color: #FFFFFF;
   --schema-icon-muted: rgba(255, 255, 255, 0.90);
@@ -53,6 +61,14 @@ html.light {
   --text-primary: #111827;
   --text-secondary: #374151;
   --text-muted: #6B7280;
+
+  /* Alertas e Avisos Acadêmicos nos Temas Claros (Alto Contraste WCAG AAA) */
+  --alert-notice-warning-bg: #FEF3C7;
+  --alert-notice-warning-border: #F59E0B;
+  --alert-notice-warning-icon: #B45309;
+  --alert-notice-warning-title: #78350F;
+  --alert-notice-warning-text: #92400E;
+  --alert-notice-warning-badge-bg: #FDE68A;
 
   /* Cinza escuro para ícones de campos e FK nos temas claros */
   --schema-icon-color: #374151;
@@ -83,6 +99,14 @@ html.beige {
   --text-secondary: #5F524C;
   --text-muted: #8C7D75;
 
+  /* Alertas e Avisos no Tema Sépia/Bege Conforto */
+  --alert-notice-warning-bg: #FDF4E7;
+  --alert-notice-warning-border: #D97706;
+  --alert-notice-warning-icon: #B45309;
+  --alert-notice-warning-title: #6C3507;
+  --alert-notice-warning-text: #7C3A0A;
+  --alert-notice-warning-badge-bg: #FDE0B6;
+
   /* Cinza escuro quente para ícones de campos e FK no tema claro sépia/bege */
   --schema-icon-color: #3F3733;
   --schema-icon-muted: #524742;
@@ -111,6 +135,14 @@ html.graphite {
   --text-primary: #E2E8F0;
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
+
+  /* Alertas no Grafite */
+  --alert-notice-warning-bg: rgba(245, 158, 11, 0.15);
+  --alert-notice-warning-border: rgba(245, 158, 11, 0.35);
+  --alert-notice-warning-icon: #FBBF24;
+  --alert-notice-warning-title: #FDE68A;
+  --alert-notice-warning-text: rgba(253, 230, 138, 0.95);
+  --alert-notice-warning-badge-bg: rgba(245, 158, 11, 0.20);
 
   --schema-icon-color: #FFFFFF;
   --schema-icon-muted: rgba(255, 255, 255, 0.90);
@@ -427,3 +459,29 @@ html[data-reduced-motion="true"] .animate-pulse-glow {
     print-color-adjust: exact;
   }
 }
+
+/* Classes Utilitárias para Avisos e Alertas Acadêmicos com Alto Contraste */
+.alert-academic-notice {
+  background-color: var(--alert-notice-warning-bg) !important;
+  border-color: var(--alert-notice-warning-border) !important;
+  color: var(--alert-notice-warning-text) !important;
+}
+
+.alert-academic-icon {
+  color: var(--alert-notice-warning-icon) !important;
+}
+
+.alert-academic-title {
+  color: var(--alert-notice-warning-title) !important;
+}
+
+.alert-academic-text {
+  color: var(--alert-notice-warning-text) !important;
+}
+
+.alert-academic-badge {
+  background-color: var(--alert-notice-warning-badge-bg) !important;
+  border-color: var(--alert-notice-warning-border) !important;
+  color: var(--alert-notice-warning-title) !important;
+}
+
