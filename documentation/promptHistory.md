@@ -3808,5 +3808,34 @@ Ao tentar salvar ou publicar materiais didáticos, bancos de dados de aula ou av
 - Arquivo `firestore.rules` atualizado pelo subagente especialista `firestore-rules-author`.
 - Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código 0, zero erros).
 
+### Prompt 22
+```text
+/agente-orquestrador /grill-me /goal na div que exibe os materiais e bds exiba os cards em uma linha, tire o texto editar e excluir de todos botões
+```
+
+### Decisões e Alinhamento Técnico (Grill-Me):
+1. **Formato de Linha para Materiais & BDs:**
+   - Escolha validada via Grill-Me: **Lista compacta de itens** em linha única horizontal (`space-y-2` com itens flex-row `flex-col sm:flex-row sm:items-center justify-between`), contendo a tag da categoria, título com truncamento inteligente, descrição resumida, contagem de linhas, turmas vinculadas e botões de ação à direita.
+2. **Remoção de Texto "Editar" e "Excluir":**
+   - Escolha validada via Grill-Me: Aplicado em **todos os botões do Painel do Professor**, incluindo:
+     - **Cards/Itens de Materiais:** Botão Editar (`edit`) e Excluir (`delete`) sem rótulo de texto, estilizados como botões de ícone com `title` e `aria-label`.
+     - **Ações do Topo da Turma:** Botões "Editar Turma" e "Excluir Turma" convertidos para botões de ícone minimalistas com `title` e `aria-label`.
+
+### Implementações Realizadas:
+1. **[`frontend/src/components/TeacherPanelView.tsx`](file:///g:/antigravity/projetos/antigravity.SQLEditor/frontend/src/components/TeacherPanelView.tsx):**
+   - No cabeçalho da turma ativa:
+     - Botão Editar Turma transformado em ícone clean (`edit`), `title="Editar Turma"` e `aria-label="Editar Turma"`.
+     - Botão Excluir Turma transformado em ícone clean (`delete`), `title="Excluir Turma"` e `aria-label="Excluir Turma"`.
+   - Na listagem de Materiais & BDs Pedagógicos:
+     - Substituição do grid de duas colunas por lista compacta de itens em linha (`space-y-2`).
+     - Alinhamento horizontal de tag de categoria, título, descrição, estatísticas de linhas/turmas e botões de ação.
+     - Botão de edição de material: apenas ícone `edit` com `title="Editar Material"`.
+     - Botão de exclusão de material: apenas ícone `delete` com `title="Excluir Material"`.
+
+### Status da Conclusão
+- Arquivo `frontend/src/components/TeacherPanelView.tsx` atualizado e testado.
+- Build de produção verificado com sucesso via `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
+
+
 
 

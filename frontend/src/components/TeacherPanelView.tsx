@@ -757,20 +757,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   <button
                     onClick={() => handleOpenEditModal(selectedClass)}
                     type="button"
-                    className="px-3 py-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] hover:border-[#0288D1] hover:bg-[#0288D1]/10 text-xs font-semibold text-[var(--text-primary)] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    title="Editar Turma"
+                    aria-label="Editar Turma"
+                    className="p-2 sm:px-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] hover:border-[#0288D1] hover:bg-[#0288D1]/10 text-xs font-semibold text-[var(--text-primary)] transition-all flex items-center justify-center cursor-pointer shadow-sm"
                   >
                     <span className="material-symbols-outlined text-[16px] text-[#0288D1]">edit</span>
-                    <span>Editar</span>
                   </button>
 
                   <button
                     onClick={() => handleDeleteClass(selectedClass)}
                     type="button"
                     disabled={isDeletingClass}
-                    className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Excluir Turma"
+                    aria-label="Excluir Turma"
+                    className="p-2 sm:px-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-semibold text-rose-400 hover:text-rose-300 transition-all flex items-center justify-center cursor-pointer shadow-sm disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[16px]">delete</span>
-                    <span>Excluir</span>
                   </button>
                 </div>
               </div>
@@ -970,35 +972,44 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-2">
                         {filteredMaterials.map((mat) => (
                           <div
                             key={mat.id}
-                            className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex flex-col justify-between space-y-3"
+                            className="p-2.5 px-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6B00]/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                           >
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className="font-bold text-xs text-[var(--text-primary)] truncate">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {/* Tag da categoria */}
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)] shrink-0 flex items-center gap-1">
+                                {mat.category === 'class_database'
+                                  ? '🗄️ BD Aula'
+                                  : mat.category === 'example'
+                                  ? '💡 Exemplo'
+                                  : mat.category === 'exercise'
+                                  ? '📝 Exercício'
+                                  : '🎯 Avaliação'}
+                              </span>
+
+                              {/* Título e descrição resumida */}
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                <h4
+                                  className="font-bold text-xs text-[var(--text-primary)] truncate"
+                                  title={mat.title}
+                                >
                                   {mat.title}
                                 </h4>
-                                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)]">
-                                  {mat.category === 'class_database'
-                                    ? '🗄️ BD Aula'
-                                    : mat.category === 'example'
-                                    ? '💡 Exemplo'
-                                    : mat.category === 'exercise'
-                                    ? '📝 Exercício'
-                                    : '🎯 Avaliação'}
-                                </span>
+                                {mat.description && (
+                                  <span
+                                    className="text-[11px] text-[var(--text-secondary)] truncate hidden md:inline max-w-[320px]"
+                                    title={mat.description}
+                                  >
+                                    — {mat.description}
+                                  </span>
+                                )}
                               </div>
 
-                              {mat.description && (
-                                <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2">
-                                  {mat.description}
-                                </p>
-                              )}
-
-                              <div className="flex items-center gap-2 mt-2 text-[10px] text-[var(--text-muted)] font-mono">
+                              {/* Metadados: linhas e turmas */}
+                              <div className="hidden sm:flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono shrink-0">
                                 <span>{mat.content.split('\n').length} linhas</span>
                                 <span>•</span>
                                 <span>
@@ -1009,23 +1020,26 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]/60">
+                            {/* Ações: apenas os ícones (sem texto) */}
+                            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                               <button
                                 onClick={() => handleOpenEditMaterialModal(mat)}
                                 type="button"
-                                className="px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer flex items-center gap-1"
+                                title="Editar Material"
+                                aria-label="Editar Material"
+                                className="p-1.5 px-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] hover:text-[#0288D1] hover:border-[#0288D1]/40 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
                               >
-                                <span className="material-symbols-outlined text-[14px]">edit</span>
-                                <span>Editar</span>
+                                <span className="material-symbols-outlined text-[15px]">edit</span>
                               </button>
 
                               <button
                                 onClick={() => handleDeleteMaterial(mat)}
                                 type="button"
-                                className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-400 cursor-pointer flex items-center gap-1"
+                                title="Excluir Material"
+                                aria-label="Excluir Material"
+                                className="p-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
                               >
-                                <span className="material-symbols-outlined text-[14px]">delete</span>
-                                <span>Excluir</span>
+                                <span className="material-symbols-outlined text-[15px]">delete</span>
                               </button>
                             </div>
                           </div>
