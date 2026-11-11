@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { SolutionItem } from '../services/scriptsLoader';
 import type { SavedScriptItem } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface NewTabDropdownProps {
   onNewBlankTab: () => void;
@@ -35,12 +36,15 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
   triggerButton,
   align = 'left',
 }) => {
+  const { user, openAuthModal } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<SubmenuType>(null);
   const [menuCoords, setMenuCoords] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openSubmenuLeft = menuCoords ? (menuCoords.left + 230 + 320 > window.innerWidth) : false;
 
   const updatePosition = () => {
     if (dropdownRef.current) {
@@ -131,7 +135,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
   const handleMouseLeaveSubmenu = () => {
     closeTimeoutRef.current = setTimeout(() => {
       setActiveSubmenu(null);
-    }, 250);
+    }, 350);
   };
 
   return (
@@ -221,8 +225,9 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                         Carregar Scripts Salvos
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)]">
-                        {savedScripts.length}{' '}
-                        {savedScripts.length === 1 ? 'script no perfil' : 'scripts no perfil'}
+                        {!user
+                          ? 'Requer login'
+                          : `${savedScripts.length} ${savedScripts.length === 1 ? 'script no perfil' : 'scripts no perfil'}`}
                       </span>
                     </div>
                   </div>
@@ -234,7 +239,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                 {/* Submenu: Scripts Salvos */}
                 {activeSubmenu === 'saved' && (
                   <div
-                    className="absolute left-full top-0 ml-1 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                    className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}
                     onMouseEnter={() => handleMouseEnterSubmenu('saved')}
                     onMouseLeave={handleMouseLeaveSubmenu}
                   >
@@ -242,9 +247,38 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       Meus Scripts Salvos
                     </div>
 
-                    {savedScripts.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
-                        Nenhum script salvo ainda. Use o botão salvar (Ctrl+S) na barra de ferramentas.
+                    {!user ? (
+                      <div className="p-3 text-center space-y-2">
+                        <span className="material-symbols-outlined text-[24px] text-[var(--accent-yellow)] block mx-auto">
+                          account_circle
+                        </span>
+                        <p className="font-semibold text-xs text-[var(--text-primary)]">
+                          Login Necessário
+                        </p>
+                        <p className="text-[10px] text-[var(--text-muted)] leading-tight">
+                          Faça login para salvar e carregar seus scripts na nuvem em qualquer dispositivo.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setIsOpen(false);
+                            setActiveSubmenu(null);
+                            openAuthModal('login');
+                          }}
+                          type="button"
+                          className="w-full py-1.5 px-3 rounded-lg bg-[var(--accent-yellow)] text-black font-bold text-xs hover:opacity-90 transition-opacity cursor-pointer mt-1"
+                        >
+                          Entrar na Conta
+                        </button>
+                      </div>
+                    ) : savedScripts.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px] space-y-1">
+                        <span className="material-symbols-outlined text-[20px] text-[var(--text-muted)]/60 block mx-auto">
+                          bookmark_border
+                        </span>
+                        <p className="font-medium text-[var(--text-primary)]">Nenhum script salvo ainda</p>
+                        <p className="text-[10px]">
+                          Abra uma guia e use o botão <strong className="text-[var(--accent-yellow)]">Salvar no Perfil (Ctrl+S)</strong>.
+                        </p>
                       </div>
                     ) : (
                       savedScripts.map((sc) => (
@@ -258,9 +292,16 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                             description
                           </span>
                           <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-[#FF6B00] transition-colors">
-                              {sc.title}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-[#FF6B00] transition-colors">
+                                {sc.title}
+                              </span>
+                              {sc.category && sc.category !== 'student_saved' && (
+                                <span className="text-[8px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)]">
+                                  {sc.category === 'example' ? 'Exemplo' : sc.category === 'exercise' ? 'Exercício' : sc.category === 'class_database' ? 'BD' : sc.category === 'exam' ? 'Prova' : sc.category}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[9px] text-[var(--text-muted)]">
                               {new Date(sc.updatedAt || sc.createdAt).toLocaleDateString('pt-BR')}
                             </span>
@@ -305,7 +346,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
 
                   {activeSubmenu === 'examples' && (
                     <div
-                      className="absolute left-full top-0 ml-1 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                      className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}
                       onMouseEnter={() => handleMouseEnterSubmenu('examples')}
                       onMouseLeave={handleMouseLeaveSubmenu}
                     >
@@ -372,7 +413,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
 
                   {activeSubmenu === 'exercises' && (
                     <div
-                      className="absolute left-full top-0 ml-1 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                      className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}
                       onMouseEnter={() => handleMouseEnterSubmenu('exercises')}
                       onMouseLeave={handleMouseLeaveSubmenu}
                     >
@@ -438,7 +479,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                 {/* Submenu de Soluções */}
                 {activeSubmenu === 'solutions' && (
                   <div
-                    className="absolute left-full top-0 ml-1 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                    className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}
                     onMouseEnter={() => handleMouseEnterSubmenu('solutions')}
                     onMouseLeave={handleMouseLeaveSubmenu}
                   >

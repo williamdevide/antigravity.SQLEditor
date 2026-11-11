@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { UserProfile, SavedScriptCategory, ClassItem } from '../types';
+import type { UserProfile, SavedScriptCategory, ClassItem, UserRole } from '../types';
 import { saveScript } from '../services/scriptService';
 
 interface SaveScriptModalProps {
@@ -94,7 +94,10 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !userProfile) return;
+    if (!user) {
+      setErrorMessage('Você precisa estar conectado para salvar scripts no seu perfil.');
+      return;
+    }
     setErrorMessage(null);
 
     if (!title.trim()) {
@@ -114,14 +117,18 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
         ? selectedClassIds
         : (currentClassId ? [currentClassId] : ['all']);
 
+      const authorName = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Usuário';
+      const authorEmail = userProfile?.email || user.email || '';
+      const authorRole: UserRole = userProfile?.role || 'aluno';
+
       const saved = await saveScript({
         title: title.trim(),
         description: description.trim(),
         content: activeTabContent,
         authorUid: user.uid,
-        authorName: userProfile.displayName || user.displayName || 'Usuário',
-        authorEmail: userProfile.email || user.email || '',
-        authorRole: userProfile.role,
+        authorName,
+        authorEmail,
+        authorRole,
         category: finalCategory,
         classIds: finalClassIds,
         isTemporary: false,
@@ -217,7 +224,28 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
                 <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1.5">
                   Finalidade do Script
                 </label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  <label
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      category === 'student_saved'
+                        ? 'border-[#FF6B00] bg-[#FF6B00]/10 text-[var(--text-primary)] font-bold'
+                        : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="scriptCategory"
+                      value="student_saved"
+                      checked={category === 'student_saved'}
+                      onChange={() => setCategory('student_saved')}
+                      className="hidden"
+                    />
+                    <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">
+                      bookmark
+                    </span>
+                    <span className="text-[11px]">Rascunho Pessoal</span>
+                  </label>
+
                   <label
                     className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
                       category === 'class_database'

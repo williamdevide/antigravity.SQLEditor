@@ -3,6 +3,7 @@ import {
   type ActiveView,
   type ThemeMode,
   type FontTheme,
+  type SavedScriptItem,
   THEME_OPTIONS,
 } from '../types';
 import { NewTabDropdown } from './NewTabDropdown';
@@ -21,6 +22,12 @@ interface HeaderProps {
   onNewBlankTab: () => void;
   onOpenSolution: (solution: SolutionItem) => void;
   solutions: SolutionItem[];
+  savedScripts?: SavedScriptItem[];
+  onSelectSavedScript?: (script: SavedScriptItem) => void;
+  classExamples?: SavedScriptItem[];
+  classExercises?: SavedScriptItem[];
+  classExams?: SavedScriptItem[];
+  isExamModeActive?: boolean;
   onClearEditor: () => void;
   onCloseAllTabs: () => void;
   onResetDb: () => void;
@@ -46,6 +53,12 @@ export const Header: React.FC<HeaderProps> = ({
   onNewBlankTab,
   onOpenSolution,
   solutions,
+  savedScripts = [],
+  onSelectSavedScript,
+  classExamples = [],
+  classExercises = [],
+  classExams = [],
+  isExamModeActive = false,
   onClearEditor,
   onCloseAllTabs,
   onResetDb,
@@ -294,6 +307,12 @@ export const Header: React.FC<HeaderProps> = ({
                 onNewBlankTab={onNewBlankTab}
                 onSelectSolution={onOpenSolution}
                 solutions={solutions}
+                savedScripts={savedScripts}
+                onSelectSavedScript={onSelectSavedScript}
+                classExamples={classExamples}
+                classExercises={classExercises}
+                classExams={classExams}
+                isExamModeActive={isExamModeActive}
                 align="left"
                 triggerButton={({ isOpen, toggle }) => (
                   <button

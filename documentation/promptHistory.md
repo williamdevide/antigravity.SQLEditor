@@ -3836,6 +3836,66 @@ Ao tentar salvar ou publicar materiais didáticos, bancos de dados de aula ou av
 - Arquivo `frontend/src/components/TeacherPanelView.tsx` atualizado e testado.
 - Build de produção verificado com sucesso via `npm --prefix frontend run build` (código 0, zero erros de tipagem TypeScript e Vite).
 
+### Prompt 23
+```text
+/agente-orquestrador /grill-me /goal quando estou logado e salvando um script, se clico em carregar scripts salvos não aparece esses scripts
+```
+
+### Diagnóstico da Causa Raiz:
+1. **Omissão de Props no `Header.tsx`:** O componente `<NewTabDropdown>` localizado junto ao botão principal "+ Nova Aba" no cabeçalho superior não recebia `savedScripts` nem `onSelectSavedScript` via props. Com isso, `savedScripts` assumia o valor padrão `[]`, exibindo sempre "0 scripts no perfil" e "Nenhum script salvo ainda".
+2. **Omissão de Props no Layout Unificado do `App.tsx`:** No branch de renderização do `App.tsx` onde apenas o painel de scripts está visível (console de informações oculto), o `<EditorWorkspace>` estava com props manuais defasadas que omitiam `savedScripts`, `onSelectSavedScript` e `user`.
+3. **Retorno Silencioso no `SaveScriptModal.tsx`:** O formulário continha `if (!user || !userProfile) return;`. Quando `userProfile` demorava para resolver assincronamente ou estava nulo em cache, a ação de salvar era abortada silenciosamente sem feedback e sem salvar no Firestore.
+4. **Atualização Otimista Ausente:** Ao salvar o script com sucesso, o estado `savedScripts` dependia exclusivamente da reconsulta ao Firestore (`reloadAllScripts`), gerando um atraso perceptual de sincronização.
+5. **Posicionamento e Timeout do Submenu em Telas Menores (`NewTabDropdown.tsx`):** O submenu de "Carregar Scripts Salvos" utilizava fixamente `left-full top-0 ml-1`, o que fazia com que a janela voasse para fora da tela (overflow horizontal) caso estivesse posicionada próximo à borda direita, além de fechar prematuramente devido a um timeout de 250ms no mouse-leave.
+
+### Decisões e Implementações:
+1. **Sincronização Completa do Cabeçalho (`frontend/src/components/Header.tsx` e `App.tsx`):**
+   - Atualizada a interface `HeaderProps` para receber `savedScripts`, `onSelectSavedScript`, `classExamples`, `classExercises`, `classExams` e `isExamModeActive`.
+   - Passadas todas as propriedades para a instância `<NewTabDropdown>` do Header.
+2. **Padronização no `frontend/src/App.tsx`:**
+   - O branch de layout individual (linha 1928) foi unificado para consumir `{...editorWorkspaceSharedProps}`, garantindo que todos os estados de usuário e scripts salvos estejam sempre presentes.
+   - Implementado o callback `handleScriptSaved` com atualização otimista imediata no array `savedScripts` em memória antes de sincronizar com o Firestore.
+3. **Resiliência e Opção Pessoal no `SaveScriptModal.tsx`:**
+   - Adicionada verificação clara de autenticação: caso o usuário não esteja logado, exibe mensagem clara instruindo o login.
+   - Fallback tolerante para `userProfile` (usando `user.displayName`, `user.email` e `userProfile?.role || 'aluno'`).
+   - Adicionada a opção "Rascunho Pessoal" (`student_saved`) no seletor de finalidade para professores e administradores.
+   - Passagem do script recém-salvo para o callback `onSaveSuccess`.
+4. **Melhorias de Usabilidade e Posicionamento no `NewTabDropdown.tsx`:**
+   - Detecção dinâmica de espaço horizontal (`openSubmenuLeft`): se a tela não comportar abertura à direita, o submenu abre à esquerda (`right-full mr-1`), evitando que fique fora do viewport.
+   - Feedback rico quando o usuário não estiver logado ("Requer login" com botão de acesso direto ao modal de login).
+   - Aumento da tolerância de hover (timeout de 350ms) e inclusão de badges por categoria de script (`Pessoal`, `Exemplo`, `Exercício`, `BD`, `Prova`).
+
+### Status da Conclusão
+- Arquivos modificados:
+  - `frontend/src/components/Header.tsx`
+  - `frontend/src/App.tsx`
+  - `frontend/src/components/EditorWorkspace.tsx`
+  - `frontend/src/components/SaveScriptModal.tsx`
+  - `frontend/src/components/NewTabDropdown.tsx`
+- Compilação do frontend validada sem erros: `npm --prefix frontend run build` (código de saída 0).
+
+### Prompt 24
+```text
+atualize o github e o vercel
+```
+
+### Ações Executadas:
+1. **Verificação de Integridade e Build:**
+   - Validada a compilação do frontend com `npm --prefix frontend run build` (código de saída 0).
+2. **Sincronização e Commit no Repositório Git:**
+   - Staging de todos os arquivos modificados relativos à correção de carregamento e salvamento de scripts (`Header.tsx`, `App.tsx`, `EditorWorkspace.tsx`, `SaveScriptModal.tsx`, `NewTabDropdown.tsx` e `documentation/promptHistory.md`).
+   - Criação de commit semântico estruturado.
+   - Envio do branch `main` para o repositório remoto no GitHub (`https://github.com/williamdevide/antigravity.SQLEditor`).
+3. **Disparo do Deploy no Vercel:**
+   - Com o push realizado para a branch principal `main`, a integração nativa com o GitHub na plataforma Vercel inicia automaticamente o pipeline de build e implantação em produção.
+   - Verificado o status da implantação e configurações do projeto.
+
+### Status da Conclusão
+- Repositório GitHub atualizado com sucesso.
+- Deploy acionado no Vercel.
+
+
+
 
 
 

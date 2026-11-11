@@ -334,7 +334,7 @@ interface EditorWorkspaceProps {
   classExercises?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
   onDeliverExam?: () => void;
-  onScriptSaved?: () => void;
+  onScriptSaved?: (savedScript?: SavedScriptItem) => void;
 }
 
 // Registro global de provedores de autocompletar do Monaco para evitar duplicação em re-renderizações e troca de abas
@@ -2093,9 +2093,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         teacherClasses={teacherClasses}
         currentClassId={userProfile?.classId}
         isExamModeActive={isExamModeActive}
-        onSaveSuccess={() => {
+        onSaveSuccess={(savedScript) => {
           setIsSaveScriptModalOpen(false);
-          onScriptSaved?.();
+          onScriptSaved?.(savedScript);
         }}
       />
     </div>

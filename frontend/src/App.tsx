@@ -998,6 +998,17 @@ export const App: React.FC = () => {
     reloadAllScripts();
   }, [reloadAllScripts]);
 
+  // Atualização otimista e sincronizada de scripts salvos pelo usuário
+  const handleScriptSaved = useCallback((savedScript?: SavedScriptItem) => {
+    if (savedScript) {
+      setSavedScripts((prev) => [
+        savedScript,
+        ...prev.filter((s) => s.id !== savedScript.id),
+      ]);
+    }
+    reloadAllScripts();
+  }, [reloadAllScripts]);
+
   // 2. Ouve alterações da turma do aluno em tempo real (Modo Sala de Aula / Modo Avaliação)
   useEffect(() => {
     const classId = userProfile?.classId;
@@ -1584,7 +1595,7 @@ export const App: React.FC = () => {
     classExercises,
     classExams,
     onDeliverExam: handleDeliverExam,
-    onScriptSaved: reloadAllScripts,
+    onScriptSaved: handleScriptSaved,
   };
 
   return (
@@ -1623,6 +1634,12 @@ export const App: React.FC = () => {
             onNewBlankTab={handleNewBlankTab}
             onOpenSolution={handleOpenSolution}
             solutions={solutions}
+            savedScripts={savedScripts}
+            onSelectSavedScript={(script: SavedScriptItem) => handleNewTab(script.content, script.title)}
+            classExamples={classExamples}
+            classExercises={classExercises}
+            classExams={classExams}
+            isExamModeActive={isExamModeActive}
             onClearEditor={handleClearEditor}
             onCloseAllTabs={handleCloseAllTabs}
             onResetDb={handleResetDb}
@@ -1925,49 +1942,7 @@ export const App: React.FC = () => {
                           style={{ width: `${preferences.editor.defaultSplitRatio}%` }}
                           className="h-full flex flex-col border-r border-[var(--border-color)] shrink-0"
                         >
-                          <EditorWorkspace
-                            tabs={tabs}
-                            activeTabId={activeTabId}
-                            onSelectTab={handleSelectTab}
-                            onCloseTab={handleCloseTab}
-                            onNewBlankTab={handleNewBlankTab}
-                            onOpenSolution={handleOpenSolution}
-                            solutions={solutions}
-                            onUpdateContent={handleUpdateTabContent}
-                            onRunQuery={handleRunQuery}
-                            onRunSnippet={handleRunSnippet}
-                            onReviewSnippet={handleReviewSnippet}
-                            zoomLevel={zoomLevels.editor}
-                            onZoomIn={() =>
-                              setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) }))
-                            }
-                            onZoomOut={() =>
-                              setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) }))
-                            }
-                            onZoomReset={() =>
-                              setZoomLevels(p => ({ ...p, editor: 100 }))
-                            }
-                            onCloseAllTabs={handleCloseAllTabs}
-                            onCloseOtherTabs={handleCloseOtherTabs}
-                            theme={theme}
-                            fontTheme={fontTheme}
-                            onRenameTab={handleRenameTab}
-                            onExportScript={handleExportScript}
-                            onToggleTheme={handleToggleTheme}
-                            onToggleFontTheme={handleToggleFontTheme}
-                            schemas={schemas}
-                            activeDatabase={activeDatabase}
-                            editorRefOut={editorRef}
-                            onSelectDatabase={(db) => {
-                              dbEngine.setActiveDatabase(db);
-                              setActiveDatabase(db);
-                            }}
-                            results={results}
-                            executedTabId={executedTabId}
-                            selectedResultIndex={selectedResultIndex}
-                            onSelectResultIndex={handleEditorSelectResultIndex}
-                            preferences={preferences}
-                          />
+                          <EditorWorkspace {...editorWorkspaceSharedProps} />
                         </div>
                         <div className="flex-1 h-full flex flex-col overflow-hidden">
                           <ERStudioWorkspace
