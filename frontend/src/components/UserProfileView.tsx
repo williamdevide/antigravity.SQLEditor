@@ -6,6 +6,7 @@ import {
   getUserSavedScripts,
   updateScript,
   deleteScript,
+  formatScriptFileName,
 } from '../services/scriptService';
 import { getFirebaseErrorMessage } from '../services/firebase';
 import type { SavedScriptItem, SavedScriptCategory } from '../types';
@@ -353,14 +354,15 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     if (!editingScript) return;
     try {
       setIsUpdatingScript(true);
+      const formattedTitle = formatScriptFileName(editTitle);
       await updateScript(editingScript.id, {
-        title: editTitle.trim(),
+        title: formattedTitle,
         description: editDesc.trim(),
       });
       setSavedScripts((prev) =>
         prev.map((s) =>
           s.id === editingScript.id
-            ? { ...s, title: editTitle.trim(), description: editDesc.trim(), updatedAt: new Date().toISOString() }
+            ? { ...s, title: formattedTitle, description: editDesc.trim(), updatedAt: new Date().toISOString() }
             : s
         )
       );

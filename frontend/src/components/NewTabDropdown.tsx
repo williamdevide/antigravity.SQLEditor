@@ -291,18 +291,23 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                           <span className="material-symbols-outlined text-[15px] text-[#FF6B00] shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
                             description
                           </span>
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col min-w-0 w-full">
+                            <div className="flex items-center justify-between gap-1.5">
                               <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-[#FF6B00] transition-colors">
                                 {sc.title}
                               </span>
                               {sc.category && sc.category !== 'student_saved' && (
-                                <span className="text-[8px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)]">
+                                <span className="text-[8px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)] shrink-0">
                                   {sc.category === 'example' ? 'Exemplo' : sc.category === 'exercise' ? 'Exercício' : sc.category === 'class_database' ? 'BD' : sc.category === 'exam' ? 'Prova' : sc.category}
                                 </span>
                               )}
                             </div>
-                            <span className="text-[9px] text-[var(--text-muted)]">
+                            {sc.description && (
+                              <p className="text-[9.5px] text-[var(--text-muted)] line-clamp-2 leading-tight mt-0.5 group-hover:text-[var(--text-secondary)] transition-colors">
+                                {sc.description}
+                              </p>
+                            )}
+                            <span className="text-[8.5px] text-[var(--text-muted)]/80 mt-0.5">
                               {new Date(sc.updatedAt || sc.createdAt).toLocaleDateString('pt-BR')}
                             </span>
                           </div>

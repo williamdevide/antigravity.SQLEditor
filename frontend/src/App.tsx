@@ -1563,7 +1563,7 @@ export const App: React.FC = () => {
     onRunSnippet: handleRunSnippet,
     onReviewSnippet: handleReviewSnippet,
     zoomLevel: zoomLevels.editor,
-    onZoomIn: () => setZoomLevels(p => ({ ...p, editor: Math.min(250, p.editor + 10) })),
+    onZoomIn: () => setZoomLevels(p => ({ ...p, editor: Math.min(400, p.editor + 10) })),
     onZoomOut: () => setZoomLevels(p => ({ ...p, editor: Math.max(50, p.editor - 10) })),
     onZoomReset: () => setZoomLevels(p => ({ ...p, editor: 100 })),
     theme,
@@ -1786,7 +1786,7 @@ export const App: React.FC = () => {
                       onRefreshSchemas={handleReloadAllDatabases}
                       zoomLevel={zoomLevels.sidebar}
                       onZoomIn={() =>
-                        setZoomLevels(p => ({ ...p, sidebar: Math.min(250, p.sidebar + 10) }))
+                        setZoomLevels(p => ({ ...p, sidebar: Math.min(400, p.sidebar + 10) }))
                       }
                       onZoomOut={() =>
                         setZoomLevels(p => ({ ...p, sidebar: Math.max(50, p.sidebar - 10) }))
@@ -1909,7 +1909,7 @@ export const App: React.FC = () => {
                         isExecuting={isExecuting}
                         zoomLevel={zoomLevels.console}
                         onZoomIn={() =>
-                          setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
+                          setZoomLevels(p => ({ ...p, console: Math.min(400, p.console + 10) }))
                         }
                         onZoomOut={() =>
                           setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))
@@ -2002,7 +2002,7 @@ export const App: React.FC = () => {
                       isExecuting={isExecuting}
                       zoomLevel={zoomLevels.console}
                       onZoomIn={() =>
-                        setZoomLevels(p => ({ ...p, console: Math.min(250, p.console + 10) }))
+                        setZoomLevels(p => ({ ...p, console: Math.min(400, p.console + 10) }))
                       }
                       onZoomOut={() =>
                         setZoomLevels(p => ({ ...p, console: Math.max(50, p.console - 10) }))

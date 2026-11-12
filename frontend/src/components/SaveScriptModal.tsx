@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { UserProfile, SavedScriptCategory, ClassItem, UserRole } from '../types';
-import { saveScript } from '../services/scriptService';
+import { saveScript, formatScriptFileName } from '../services/scriptService';
 
 interface SaveScriptModalProps {
   isOpen: boolean;
@@ -121,8 +121,12 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
       const authorEmail = userProfile?.email || user.email || '';
       const authorRole: UserRole = userProfile?.role || 'aluno';
 
+      // Formata automaticamente o título para nome de arquivo .sql em formato kebab-case
+      // (ex: 'teste' -> 'teste.sql', 'meu teste' -> 'meu-teste.sql')
+      const formattedTitle = formatScriptFileName(title);
+
       const saved = await saveScript({
-        title: title.trim(),
+        title: formattedTitle,
         description: description.trim(),
         content: activeTabContent,
         authorUid: user.uid,
@@ -184,15 +188,22 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
 
           {/* Título */}
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-              Título do Script <span className="text-red-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-[var(--text-secondary)]">
+                Título do Script <span className="text-red-400">*</span>
+              </label>
+              {title.trim() && (
+                <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                  Salvará como: <strong className="text-[var(--accent-yellow)]">{formatScriptFileName(title)}</strong>
+                </span>
+              )}
+            </div>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: aula_03_joins.sql ou exercicio_consultas"
+              placeholder="Ex: teste ou meu teste"
               className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-xs focus:outline-none focus:border-[#FF6B00] transition-colors"
             />
           </div>

@@ -35,7 +35,7 @@ export const ZoomControl: React.FC<ZoomControlProps> = ({
       <button
         onClick={onZoomIn}
         title="Aumentar Zoom (+10%)"
-        disabled={level >= 250}
+        disabled={level >= 400}
         className="w-4 h-4 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent-yellow)] hover:bg-[var(--bg-hover)] rounded text-[11px] font-mono leading-none transition-colors disabled:opacity-30 disabled:pointer-events-none"
         type="button"
       >

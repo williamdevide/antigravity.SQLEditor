@@ -12,6 +12,35 @@ import { db } from './firebase';
 import type { SavedScriptItem, SavedScriptCategory, UserRole } from '../types';
 
 /**
+ * Normaliza o título de um script para o formato de arquivo kebab-case com extensão .sql.
+ * Exemplos:
+ *  - "teste" -> "teste.sql"
+ *  - "meu teste" -> "meu-teste.sql"
+ *  - "meu teste.sql" -> "meu-teste.sql"
+ *  - "Aula 03 - Joins & Views!" -> "aula-03-joins-views.sql"
+ */
+export function formatScriptFileName(input: string): string {
+  if (!input) return 'script.sql';
+  let val = input.trim();
+  // Remove extensão .sql caso já tenha sido informada
+  if (val.toLowerCase().endsWith('.sql')) {
+    val = val.slice(0, -4).trim();
+  }
+  // Normaliza caracteres acentuados (remove acentuação)
+  val = val.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Converte para minúsculas
+  val = val.toLowerCase();
+  // Substitui sequências de espaços, underscores ou pontuações por um único hífen
+  val = val.replace(/[^a-z0-9]+/g, '-');
+  // Remove hifens nas pontas
+  val = val.replace(/^-+|-+$/g, '');
+  if (!val) {
+    val = 'script';
+  }
+  return val + '.sql';
+}
+
+/**
  * Salva um novo script ou atualiza um script existente no Firestore
  */
 export async function saveScript(

@@ -26,12 +26,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.2.8',
+    date: '12/11/2026',
+    title:
+      'Padronização de Nomes de Scripts (.sql kebab-case), Descrição Compacta na Lista de Carregamento e Zoom de 400% no Laboratório',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco v3.2.8',
+    items: [
+      'Normalização Automática de Nomes de Scripts: Conversão inteligente do título para formato kebab-case com terminação .sql (ex: "teste" -> "teste.sql", "meu teste" -> "meu-teste.sql") tanto ao salvar quanto ao editar no perfil.',
+      'Descrição Compacta em Scripts Salvos: Exibição da descrição/observações em tipografia reduzida e com suporte a múltiplas linhas no submenu de carregamento de scripts.',
+      'Limite Máximo de Zoom Expandido para 400%: Controles de zoom do Schema Explorer, Editor Monaco e Console de Resultados agora alcançam até 400% de ampliação.',
+      'Preservação Integral de Closures do AlaSQL: Wrapper transparente de compilação eliminando qualquer inconsistência de escopo em consultas agrupadas e analíticas.',
+    ],
+  },
+  {
     version: 'v3.2.7',
     date: '12/11/2026',
     title:
       'Patch de Agregação MIN/MAX para Datas e Strings, Sincronização Otimista de Scripts Salvos e Melhorias no Submenu de Sessão',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2.7',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Compatibilidade Total com Agregações em Datas (MIN / MAX): Patch nativo no compilador de agrupamento do AlaSQL permitindo avaliar campos de data (formato ISO YYYY-MM-DD e strings) com ordenação cronológica e alfanumérica idêntica ao MySQL.',
       'Sincronização Imediata e Resiliência em Scripts Salvos: Atualização otimista no estado local ao salvar scripts no perfil e desacoplamento de dependências assíncronas do perfil de usuário.',

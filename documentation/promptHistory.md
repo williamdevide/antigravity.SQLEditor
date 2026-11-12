@@ -3972,6 +3972,54 @@ atualize o github e o vercel
 - Arquivo `frontend/src/services/mysqlFunctions.ts` corrigido com o wrapper transparente de compilação.
 - Build verificado com sucesso via `npm --prefix frontend run build` (código de saída 0).
 
+### Prompt 28
+```text
+/agente-orquestrador /grill-me /goal quando salvo um script no perfil se alterar o titulo e deixar por exemplo 'teste' deve salvar como teste.sql, se deixar 'meu teste' deve salvar como meu-teste.sql. e na hora de aparecer a lista para carregar alem de exibir o titulo e a data e o tipo, deve exibir tambem com fonte pequena a descrição que foi dada.
+aumente o limite maximo de zoom das areas do laboratorio para 400%
+```
+
+### Ações Executadas:
+1. **Normalização do Nome do Script em Formato Arquivo (`formatScriptFileName`):**
+   - Criada a função utilitária `formatScriptFileName` em `frontend/src/services/scriptService.ts`.
+   - Converte qualquer título fornecido em formato kebab-case limpo com terminação `.sql` (ex: `'teste'` -> `'teste.sql'`, `'meu teste'` -> `'meu-teste.sql'`, remove acentos e caracteres especiais, remove duplicidade de `.sql`).
+   - Integrada tanto no salvamento inicial do script (`SaveScriptModal.tsx`) quanto na edição posterior do script no perfil do usuário (`UserProfileView.tsx`).
+   - Adicionado no modal de salvamento feedback visual em tempo real mostrando ao usuário exatamente como o arquivo será salvo (ex: "Salvará como: meu-teste.sql").
+2. **Exibição da Descrição com Fonte Pequena na Lista de Carregamento:**
+   - Atualizado o componente `<NewTabDropdown.tsx>` no submenu "Carregar Scripts Salvos".
+   - Agora exibe o título formatado, badge de tipo/finalidade, data formatada e, caso tenha sido preenchida, a descrição com fonte reduzida (`text-[9.5px]`), em duas linhas (`line-clamp-2`), melhorando a identificação imediata do propósito do script.
+3. **Aumento do Limite Máximo de Zoom do Laboratório para 400%:**
+   - Atualizado o componente `<ZoomControl.tsx>`: o botão `+` agora permanece ativo até o limite de `400%` (anteriormente `250%`).
+   - Atualizados todos os manipuladores de zoom em `frontend/src/App.tsx` para as três áreas do laboratório (Schema Explorer/Sidebar, Editor Monaco e Console/Grade de Dados):
+     - `sidebar: Math.min(400, p.sidebar + 10)`
+     - `editor: Math.min(400, p.editor + 10)`
+     - `console: Math.min(400, p.console + 10)`
+
+### Status da Conclusão:
+- Modificações aplicadas em `scriptService.ts`, `SaveScriptModal.tsx`, `UserProfileView.tsx`, `NewTabDropdown.tsx`, `ZoomControl.tsx` e `App.tsx`.
+- Compilação validada com sucesso via `npm --prefix frontend run build` (código de saída 0).
+
+### Prompt 29
+```text
+atualize a versão e o github
+```
+
+### Ações Executadas:
+1. **Incremento Semântico de Versão (`v3.2.8`):**
+   - Atualizado `APP_VERSION = '3.2.8'` em `frontend/src/config/version.ts`.
+   - Sincronizado `"version": "3.2.8"` em `frontend/package.json`.
+   - Atualizado badge de versão para `v3.2.8` no `README.md`.
+   - Inserida nova entrada oficial `v3.2.8` como lançamento atual (`isLatest: true`) no `CHANGELOG_HISTORY` de `frontend/src/components/LandingPageView.tsx`, documentando a normalização de títulos `.sql` em kebab-case, descrições compactas na listagem e expansão do zoom do laboratório para 400%.
+2. **Build de Produção:**
+   - Executado `npm --prefix frontend run build` com sucesso absoluto (código 0, zero erros de tipagem TypeScript e empacotamento Vite concluído em 1.34s).
+3. **Sincronização com o GitHub:**
+   - Realizado commit semântico com todas as alterações e push para a branch `main` no repositório remoto oficial `williamdevide/antigravity.SQLEditor`.
+   - Pipeline de deploy da Vercel disparado automaticamente.
+
+### Status da Conclusão:
+- Versão v3.2.8 publicada no GitHub e deploy acionado na Vercel.
+
+
+
 
 
 
