@@ -3,6 +3,8 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
 import { SaveScriptModal } from './SaveScriptModal';
+import { saveScript, formatScriptFileName } from '../services/scriptService';
+import { useAuth } from '../context/AuthContext';
 import type {
   TabItem,
   ThemeMode,
@@ -419,8 +421,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [editingTitle, setEditingTitle] = useState<string>('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Modal de salvar script no perfil (Ctrl+S)
+  // Modal de salvar script no perfil ("Salvar Como no Perfil")
   const [isSaveScriptModalOpen, setIsSaveScriptModalOpen] = useState<boolean>(false);
+  const [saveToastMessage, setSaveToastMessage] = useState<string | null>(null);
+
+  const { openAuthModal } = useAuth();
 
   // Menu de contexto suspenso customizado do Editor de Script (elimina 100% de itens indesejados)
   const [editorContextMenu, setEditorContextMenu] = useState<{
@@ -636,6 +641,86 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       } catch (_) {}
     }
   }, [activeTab?.id, activeTab?.content]);
+
+  // Dispara toast temporário de confirmação de salvamento
+  const triggerSaveToast = useCallback((msg: string) => {
+    setSaveToastMessage(msg);
+    setTimeout(() => {
+      setSaveToastMessage(null);
+    }, 3000);
+  }, []);
+
+  // Salvar no Perfil (Ctrl+S):
+  // - Se já for uma guia salva: atualiza diretamente a versão no Firestore e notifica.
+  // - Se for uma guia não salva: salva diretamente com o nome da guia formatado como exemplo, sem descrição e com a data de hoje.
+  const handleDirectSaveToProfile = useCallback(async (tabToSaveOverride?: TabItem) => {
+    flushPendingContent();
+    const tabToSave = tabToSaveOverride || tabs.find(t => t.id === currentTabIdRef.current) || activeTab;
+    if (!tabToSave) return;
+
+    if (!user) {
+      if (window.confirm('Você precisa estar conectado à sua conta para salvar scripts no seu perfil. Deseja entrar agora?')) {
+        openAuthModal('login');
+      }
+      return;
+    }
+
+    const content = editorRef.current && tabToSave.id === currentTabIdRef.current
+      ? editorRef.current.getValue()
+      : tabToSave.content;
+
+    const isTeacherOrAdmin = userProfile?.role === 'professor' || userProfile?.role === 'admin';
+    const authorName = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Usuário';
+    const authorEmail = userProfile?.email || user.email || '';
+    const authorRole = userProfile?.role || 'aluno';
+    const defaultCategory = isTeacherOrAdmin ? 'example' : 'student_saved';
+
+    try {
+      if (tabToSave.savedScriptId) {
+        // Guia já salva: atualiza o script existente
+        const updated = await saveScript(
+          {
+            title: formatScriptFileName(tabToSave.title),
+            content: content || '',
+            authorUid: user.uid,
+            authorName,
+            authorEmail,
+            authorRole,
+            category: defaultCategory,
+          },
+          tabToSave.savedScriptId
+        );
+        onScriptSaved?.(updated);
+        triggerSaveToast(`Script "${updated.title}" atualizado com sucesso!`);
+      } else {
+        // Guia nova/não salva: salva diretamente com o nome da guia (.sql), sem descrição e com a data de hoje
+        const cleanTitle = formatScriptFileName(tabToSave.title || 'script.sql');
+        const saved = await saveScript({
+          title: cleanTitle,
+          description: '',
+          content: content || '',
+          authorUid: user.uid,
+          authorName,
+          authorEmail,
+          authorRole,
+          category: defaultCategory,
+          classIds: ['all'],
+          isTemporary: false,
+        });
+
+        // Vincula o savedScriptId à aba ativa para que próximos Ctrl+S atualizem
+        tabToSave.savedScriptId = saved.id;
+        if (tabToSave.title !== cleanTitle) {
+          onRenameTab(tabToSave.id, cleanTitle);
+        }
+        onScriptSaved?.(saved);
+        triggerSaveToast(`Script "${cleanTitle}" salvo no seu perfil!`);
+      }
+    } catch (err: any) {
+      console.error('[handleDirectSaveToProfile error]', err);
+      alert('Erro ao salvar script no perfil: ' + (err?.message || 'Tente novamente.'));
+    }
+  }, [flushPendingContent, tabs, activeTab, user, userProfile, openAuthModal, onScriptSaved, onRenameTab, triggerSaveToast]);
 
   // Exportar script da aba ativa como arquivo .sql para download
   const handleExportCurrentScript = useCallback(() => {
@@ -1242,17 +1327,29 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       contextMenuGroupId: '1_sql_actions',
       contextMenuOrder: 3,
       run: () => {
+        handleDirectSaveToProfile();
+      },
+    });
+
+    // 4. Salvar Como no Perfil (Ctrl+Shift+P)
+    editor.addAction({
+      id: 'sql-save-as-profile',
+      label: 'Salvar Como no Perfil...',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS],
+      contextMenuGroupId: '1_sql_actions',
+      contextMenuOrder: 4,
+      run: () => {
         setIsSaveScriptModalOpen(true);
       },
     });
 
-    // 4. Exportar Script .sql (Ctrl+Shift+S)
+    // 5. Exportar Script .sql (Ctrl+Shift+S)
     editor.addAction({
       id: 'sql-export-script',
       label: 'Exportar Script .sql (Ctrl+Shift+S)',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS],
       contextMenuGroupId: '1_sql_actions',
-      contextMenuOrder: 4,
+      contextMenuOrder: 5,
       run: () => {
         if (onExportScriptRef.current) {
           onExportScriptRef.current();
@@ -1692,19 +1789,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             />
           </div>
 
-          {/* Botão Salvar Aba no Perfil (Ctrl+S) */}
-          {activeTab && (
-            <button
-              onClick={() => setIsSaveScriptModalOpen(true)}
-              title="Salvar Aba Ativa no Perfil (Ctrl+S)"
-              className="ml-1 px-2 h-6 flex items-center gap-1 text-[11px] font-mono text-[var(--accent-yellow)] hover:bg-[var(--accent-yellow)]/15 rounded transition-colors cursor-pointer shrink-0 border border-[var(--accent-yellow)]/30 hover:border-[var(--accent-yellow)]/60"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[13px]">save</span>
-              <span className="hidden sm:inline">Salvar no Perfil</span>
-            </button>
-          )}
-
           {/* Botão Fechar Todas as Abas se houver abas abertas */}
           {tabs.length > 0 && onCloseAllTabs && (
             <button
@@ -1894,7 +1978,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             <button
               onClick={() => {
                 handleCloseContextMenu();
-                setIsSaveScriptModalOpen(true);
+                handleDirectSaveToProfile();
               }}
               className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
               type="button"
@@ -1910,7 +1994,28 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               </kbd>
             </button>
 
-            {/* 4. Exportar Script .sql (Ctrl+Shift+S) */}
+            {/* 4. Salvar Como no Perfil... */}
+            <button
+              onClick={() => {
+                handleCloseContextMenu();
+                setIsSaveScriptModalOpen(true);
+              }}
+              className="w-full px-3 py-2 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[#FF6B00] group-hover:scale-110 transition-transform">
+                  save_as
+                </span>
+                <span className="font-medium">Salvar Como no Perfil...</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">Novo</span>
+            </button>
+
+            {/* Linha separadora obrigatória após os 2 itens de salvamento */}
+            <div className="h-px bg-[var(--border-color)] my-1" />
+
+            {/* 5. Exportar Script .sql (Ctrl+Shift+S) */}
             <button
               onClick={() => {
                 handleCloseContextMenu();
@@ -1976,8 +2081,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             {/* Salvar no Perfil */}
             <button
               onClick={() => {
+                const targetId = tabContextMenu.tabId;
+                const tabTarget = tabs.find(t => t.id === targetId);
                 setTabContextMenu(prev => ({ ...prev, visible: false }));
-                setIsSaveScriptModalOpen(true);
+                handleDirectSaveToProfile(tabTarget);
               }}
               className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
               type="button"
@@ -1988,6 +2095,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               </div>
               <kbd className="text-[10px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--accent-yellow)]">Ctrl+S</kbd>
             </button>
+
+            {/* Salvar Como no Perfil... */}
+            <button
+              onClick={() => {
+                setTabContextMenu(prev => ({ ...prev, visible: false }));
+                setIsSaveScriptModalOpen(true);
+              }}
+              className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+              type="button"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">save_as</span>
+                <span>Salvar Como no Perfil...</span>
+              </div>
+              <span className="text-[9px] text-[var(--text-muted)] font-mono">Novo</span>
+            </button>
+
+            {/* Linha separadora após os 2 itens de salvamento */}
+            <div className="h-px bg-[var(--border-color)] my-1" />
 
             {/* Renomear Aba */}
             <button
@@ -2095,9 +2221,24 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         isExamModeActive={isExamModeActive}
         onSaveSuccess={(savedScript) => {
           setIsSaveScriptModalOpen(false);
+          if (activeTab && savedScript) {
+            activeTab.savedScriptId = savedScript.id;
+            if (activeTab.title !== savedScript.title) {
+              onRenameTab(activeTab.id, savedScript.title);
+            }
+          }
           onScriptSaved?.(savedScript);
+          triggerSaveToast(`Script "${savedScript?.title || 'script.sql'}" salvo com sucesso!`);
         }}
       />
+
+      {/* Toast de Notificação de Salvamento */}
+      {saveToastMessage && (
+        <div className="fixed bottom-6 right-6 z-[999999] flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[#00E676]/50 text-[#00E676] shadow-2xl backdrop-blur-md text-xs font-medium animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <span className="material-symbols-outlined text-[18px]">check_circle</span>
+          <span className="text-[var(--text-primary)]">{saveToastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };

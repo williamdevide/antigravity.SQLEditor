@@ -26,12 +26,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.2.9',
+    date: '12/11/2026',
+    title:
+      'Salvar Direto no Perfil (Ctrl+S), "Salvar Como no Perfil..." no Menu Suspenso e Limpeza da Barra de Abas',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco v3.2.9',
+    items: [
+      'Remoção do Botão Fixo na Barra de Abas: O botão redundante "Salvar no Perfil" foi removido da barra superior de abas, mantendo o workspace limpo e minimalista.',
+      'Ações Contextuais de Salvamento: Disponibilização das opções "Salvar no Perfil" (Ctrl+S) e "Salvar Como no Perfil..." no menu suspenso do editor e no clique com botão direito da aba.',
+      'Fluxo de Salvamento Inteligente: Guias não salvas são persistidas diretamente com o nome da aba (.sql), sem descrição e com a data atual; guias já salvas são atualizadas diretamente em seu registro existente sem abrir modais.',
+      'Modal Especializado para "Salvar Como": Opção dedicada para novos salvamentos com customização completa de título, observações/descrição e configurações de turma/finalidade.',
+    ],
+  },
+  {
     version: 'v3.2.8',
     date: '12/11/2026',
     title:
       'Padronização de Nomes de Scripts (.sql kebab-case), Descrição Compacta na Lista de Carregamento e Zoom de 400% no Laboratório',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2.8',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Normalização Automática de Nomes de Scripts: Conversão inteligente do título para formato kebab-case com terminação .sql (ex: "teste" -> "teste.sql", "meu teste" -> "meu-teste.sql") tanto ao salvar quanto ao editar no perfil.',
       'Descrição Compacta em Scripts Salvos: Exibição da descrição/observações em tipografia reduzida e com suporte a múltiplas linhas no submenu de carregamento de scripts.',

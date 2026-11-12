@@ -8,7 +8,7 @@
 ![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![Storage](https://img.shields.io/badge/Storage-IndexedDB%20%2B%20Dexie%20%2B%20AlaSQL-FF6B00?style=for-the-badge&logo=mysql&logoColor=white)
-![Version](https://img.shields.io/badge/Version-v3.2.8-00E676?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v3.2.9-00E676?style=for-the-badge)
 ![SENAI](https://img.shields.io/badge/Parceria-SENAI%20Ourinhos-D32F2F?style=for-the-badge)
 ![Milkfed](https://img.shields.io/badge/Empresa-Milkfed%20Devs%20%26%26%20Reqs%20Lords-6A1B9A?style=for-the-badge)
 ![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white)

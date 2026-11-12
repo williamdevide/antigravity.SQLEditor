@@ -827,7 +827,7 @@ export const App: React.FC = () => {
   }, [sqlReview, activeTabId, tabs, handleUpdateTabContent]);
 
   // Nova Aba
-  const handleNewTab = useCallback((initialContent?: string, tabName?: string) => {
+  const handleNewTab = useCallback((initialContent?: string, tabName?: string, savedScriptId?: string) => {
     const newId = `tab-${Date.now()}`;
     const nextNum = tabs.length + 1;
     const defaultContent = activeDatabase
@@ -837,6 +837,7 @@ export const App: React.FC = () => {
       id: newId,
       title: tabName || `script_${nextNum}.sql`,
       content: initialContent !== undefined ? initialContent : defaultContent,
+      savedScriptId,
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
@@ -1590,7 +1591,7 @@ export const App: React.FC = () => {
     isExamModeActive,
     classroomName: activeClassName,
     savedScripts,
-    onSelectSavedScript: (script: SavedScriptItem) => handleNewTab(script.content, script.title),
+    onSelectSavedScript: (script: SavedScriptItem) => handleNewTab(script.content, script.title, script.id),
     classExamples,
     classExercises,
     classExams,
@@ -1635,7 +1636,7 @@ export const App: React.FC = () => {
             onOpenSolution={handleOpenSolution}
             solutions={solutions}
             savedScripts={savedScripts}
-            onSelectSavedScript={(script: SavedScriptItem) => handleNewTab(script.content, script.title)}
+            onSelectSavedScript={(script: SavedScriptItem) => handleNewTab(script.content, script.title, script.id)}
             classExamples={classExamples}
             classExercises={classExercises}
             classExams={classExams}
@@ -1760,7 +1761,7 @@ export const App: React.FC = () => {
                 setIsHubModalOpen(true);
               }}
               onOpenSavedScript={(script) => {
-                handleNewTab(script.content, script.title);
+                handleNewTab(script.content, script.title, script.id);
                 setActiveView('workspace');
               }}
             />

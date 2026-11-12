@@ -27,6 +27,7 @@ export interface TabItem {
   title: string;
   content: string;
   isDirty?: boolean;
+  savedScriptId?: string;
 }
 
 export interface QueryResult {

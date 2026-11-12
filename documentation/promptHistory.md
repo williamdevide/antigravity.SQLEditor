@@ -4018,6 +4018,42 @@ atualize a versão e o github
 ### Status da Conclusão:
 - Versão v3.2.8 publicada no GitHub e deploy acionado na Vercel.
 
+### Prompt 30
+```text
+/agente-orquestrador /grill-me /goal importante, retire o botão Salvar no Perfil que esta na guia de abas dos scripts, vamos manter somente no botão direito (menu suspenso). agora no menu suspenso irá virar uma novo opção: teremos o Salvar Como no Perfil.
+Se clicar no Salvar no Perfil e for uma guia não salva ele salva diretamente com o nome da guia, como exemplo, sem descrição e com a data de hoje. se for uma guia já salva ele só atualiza ela (salva a versão atualizada). Já o Salvar como no Perfil abre a janela atual para criar um novo salvamento, informando todos os dados.
+no menu suspenso, coloque uma linha separadora após esses 2 itens.
+crie esse recurso e já publique com a versão atualizada
+```
+
+### Ações Executadas:
+1. **Remoção do Botão Redundante na Barra de Abas:**
+   - Removido o botão fixo "Salvar no Perfil" localizado ao lado do split-button de novas abas em `frontend/src/components/EditorWorkspace.tsx`.
+2. **Implementação de "Salvar no Perfil" e "Salvar Como no Perfil..." nos Menus Suspensos:**
+   - Menu de Contexto do Editor (clique direito no Monaco Editor) e Menu de Contexto da Aba (clique direito na guia):
+     - **Opção 1: "Salvar no Perfil" (Ctrl+S):**
+       - Se for uma guia **não salva**, salva instantaneamente com o nome da guia formatado em `.sql` (kebab-case), sem descrição e com data atual, vinculando o `savedScriptId` à guia.
+       - Se for uma guia **já salva**, atualiza diretamente o registro existente no Firestore sem abrir janelas/modais intermediários.
+       - Dispara toast visual discreto de confirmação no canto inferior.
+     - **Opção 2: "Salvar Como no Perfil...":**
+       - Abre o modal completo `<SaveScriptModal>`, permitindo customizar título, observações, turma e categoria do script para criar um novo salvamento.
+     - **Divisor:** Adicionada uma linha separadora (`<div className="h-px bg-[var(--border-color)] my-1" />`) logo após esses dois itens de salvamento.
+3. **Persistência de ID de Script Salvo nas Abas (`savedScriptId`):**
+   - Estendida a interface `TabItem` em `frontend/src/types/index.ts` com o campo opcional `savedScriptId?: string`.
+   - Atualizados os seletores de carregamento de scripts no `App.tsx` para passar `script.id` no `handleNewTab`, garantindo que guias abertas a partir de scripts salvos já iniciem associadas.
+4. **Atualização Semântica de Versão (`v3.2.9`):**
+   - Atualizado `APP_VERSION = '3.2.9'` em `frontend/src/config/version.ts`.
+   - Sincronizado `"version": "3.2.9"` em `frontend/package.json`.
+   - Atualizado badge de versão no `README.md`.
+   - Atualizado `CHANGELOG_HISTORY` em `LandingPageView.tsx` com as novidades da `v3.2.9`.
+5. **Compilação e Deploy no GitHub:**
+   - Executado build de produção com sucesso (`npm --prefix frontend run build` - código 0).
+   - Realizado commit e push para a branch `main` no GitHub.
+
+### Status da Conclusão:
+- Versão v3.2.9 gerada e publicada com sucesso no GitHub e Vercel.
+
+
 
 
 
