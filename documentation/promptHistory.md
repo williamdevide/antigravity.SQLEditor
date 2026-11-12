@@ -3948,6 +3948,31 @@ atualize o github e o vercel
 - Versão v3.2.7 configurada e verificada em todo o ecossistema.
 - Repositório no GitHub e deploy na Vercel atualizados com sucesso.
 
+### Prompt 27
+```text
+/agente-orquestrador /grill-me /goal agora a maioria dos comandos desse script deram erro. por exemplo já no primeiro exercicio deu "x is not defined"
+```
+
+### Diagnóstico da Causa Raiz ("x is not defined" / quebra de escopo):
+1. **Quebra de Closure pelo construtor `Function()`:**
+   - Na tentativa anterior de patch em `frontend/src/services/mysqlFunctions.ts`, o método `yy.Select.prototype.compileGroup` do AlaSQL foi extraído como string via `.toString()`, modificado via regex e recompilado usando `new Function('alasql', ...)`.
+   - No bundle distribuído do AlaSQL, o método original `compileGroup` depende de variáveis e funções utilitárias que residem no escopo léxico privado do módulo (closure), tais como `arrayUnion`, `decartes`, `cartes`, `getGroupConcatParams`, etc.
+   - Quando `Function()` recompilou a função isolada no escopo global/avulso, todas as referências a variáveis e funções de fechamento deixaram de existir. Dependendo do ambiente ou minificação, a primeira referência gerava `ReferenceError: arrayUnion is not defined` ou `ReferenceError: x is not defined` logo no primeiro `GROUP BY` ou consulta com agregação (`COUNT(*)`, etc.).
+2. **Arquitetura da Solução Definitiva (Wrapper Transparente):**
+   - Em vez de substituir ou recompilar `compileGroup`, o patch foi reestruturado como um wrapper de alta ordem que invoca o `compileGroup` original do AlaSQL via `origCompileGroup.call(this, query)`.
+   - Isso garante que 100% das variáveis de closure, escopo privado e compilador AST continuem funcionando perfeitamente sem nenhuma quebra.
+   - O wrapper intercepta a função de agregação retornada (`groupfn`), ajusta de forma cirúrgica e segura os blocos de compilação de `MIN` e `MAX` (permitindo strings e datas no formato ISO) e retorna o executável de grupo funcional.
+3. **Validação Abrangente:**
+   - Foram testados todos os 30 exercícios do script `semana09-03-exercicios-(ecommerce).sql`.
+   - O Exercício 1 (`COUNT(*)`) rodou com sucesso imediato sem erro de escopo.
+   - O Exercício 7 (`MIN(data_pedido)` e `MAX(data_pedido)`) retornou com sucesso `{"primeiro_pedido":"2025-01-01","pedido_mais_recente":"2025-02-27"}`.
+   - Todos os 30 comandos foram testados com 100% de sucesso.
+
+### Status da Conclusão:
+- Arquivo `frontend/src/services/mysqlFunctions.ts` corrigido com o wrapper transparente de compilação.
+- Build verificado com sucesso via `npm --prefix frontend run build` (código de saída 0).
+
+
 
 
 

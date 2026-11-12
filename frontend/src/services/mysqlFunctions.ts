@@ -800,11 +800,16 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
 }
 
 /**
- * Patch para o método `yy.Select.prototype.compileGroup` do AlaSQL.
+ * Patch para os métodos de compilação de agregação do AlaSQL.
  * O AlaSQL nativo restringe MIN e MAX apenas a `typeof == 'number' || typeof == 'bigint' || y instanceof Date`.
  * Campos de data armazenados como ISO string (ex: '2025-01-24') ou strings alfanuméricas
  * resultam em `undefined` quando agrupados com MIN() ou MAX().
- * Este patch estende MIN e MAX para aceitar strings/datas não nulas utilizando comparações seguras.
+ *
+ * Em vez de recompilar `compileGroup` via `Function()` (o que rompe o fechamento léxico com variáveis internas
+ * do módulo como `decartes`, `arrayUnion`, gerando erros como "x is not defined" ou "arrayUnion is not defined"),
+ * este patch atua como um wrapper transparente em torno de `compileGroup`: executa o compilador original
+ * mantendo 100% de seu escopo e variáveis intactas, e ajusta a função gerada para permitir ordenação
+ * segura de strings e datas no MIN e MAX.
  */
 export function patchAlaSqlAggregations(targetAlasql?: any): void {
   const engine = targetAlasql || alasql;
@@ -817,44 +822,54 @@ export function patchAlaSqlAggregations(targetAlasql?: any): void {
     return;
   }
 
-  let code = engine.yy.Select.prototype.compileGroup.toString();
+  const origCompileGroup = engine.yy.Select.prototype.compileGroup;
 
-  // 1. Substitui a inicialização de MIN e MAX para aceitar strings e outros valores comparáveis
-  code = code.replace(
-    /col\.aggregatorid\s*===\s*'MIN'\s*\?\s*\(.*?__alasql_tmp\s*:\s*undefined\)/g,
-    "col.aggregatorid === 'MIN' ? (__alasql_tmp !== null && __alasql_tmp !== undefined ? __alasql_tmp : undefined)"
-  );
-  code = code.replace(
-    /col\.aggregatorid\s*===\s*'MAX'\s*\?\s*\(.*?__alasql_tmp\s*:\s*undefined\)/g,
-    "col.aggregatorid === 'MAX' ? (__alasql_tmp !== null && __alasql_tmp !== undefined ? __alasql_tmp : undefined)"
-  );
+  const patchedCompileGroup = function(this: any, query: any) {
+    // 1. Invoca o compilador original com seu escopo léxico e closures preservados
+    const groupfn = origCompileGroup.call(this, query);
 
-  // 2. Substitui a condição de atualização no loop de agrupamento para MIN
-  code = code.replace(
-    /if\(col\.aggregatorid\s*===\s*'MIN'\)\s*\{\s*s\s*\+=\s*'if\(typeof\s+y\s*==\s*"number"\s*\|\|\s*typeof\s+y\s*==\s*"bigint"\s*\|\|\s*\(typeof\s+y\s*==\s*"object"\s*&&\s*y\s+instanceof\s+Date\)\)\s*\{';\s*s\s*\+=\s*'if\(typeof\s+g\['\+colas\+'\]\s*==\s*"undefined"\s*\|\|\s*y<g\['\+colas\+'\]\)\s*g\['\+colas\+'\]\s*=\s*y;';\s*s\s*\+=\s*'\}';\s*\}/g,
-    "if(col.aggregatorid === 'MIN') {\n" +
-    "    s += 'if(y !== null && y !== undefined && (typeof y == \"number\" || typeof y == \"bigint\" || typeof y == \"string\" || (typeof y == \"object\" && y instanceof Date))) {';\n" +
-    "    s += 'if(typeof g[\"'+colas+'\"] == \"undefined\" || y < g[\"'+colas+'\"]) g[\"'+colas+'\"] = y;';\n" +
-    "    s += '}';\n" +
-    "}"
-  );
+    if (typeof groupfn !== 'function') {
+      return groupfn;
+    }
 
-  // 3. Substitui a condição de atualização no loop de agrupamento para MAX
-  code = code.replace(
-    /else\s+if\(col\.aggregatorid\s*===\s*'MAX'\)\s*\{\s*s\s*\+=\s*'if\(typeof\s+y\s*==\s*"number"\s*\|\|\s*typeof\s+y\s*==\s*"bigint"\s*\|\|\s*\(typeof\s+y\s*==\s*"object"\s*&&\s*y\s+instanceof\s+Date\)\)\s*\{';\s*s\s*\+=\s*'if\(typeof\s+g\['\+colas\+'\]\s*==\s*"undefined"\s*\|\|\s*y>g\['\+colas\+'\]\)\s*g\['\+colas\+'\]\s*=\s*y;';\s*s\s*\+=\s*'\}';\s*\}/g,
-    "else if(col.aggregatorid === 'MAX') {\n" +
-    "    s += 'if(y !== null && y !== undefined && (typeof y == \"number\" || typeof y == \"bigint\" || typeof y == \"string\" || (typeof y == \"object\" && y instanceof Date))) {';\n" +
-    "    s += 'if(typeof g[\"'+colas+'\"] == \"undefined\" || y > g[\"'+colas+'\"]) g[\"'+colas+'\"] = y;';\n" +
-    "    s += '}';\n" +
-    "}"
-  );
+    try {
+      let fnStr = groupfn.toString();
+      let modified = false;
 
-  try {
-    const fnConstructor = Function('alasql', 'return (' + code + ');');
-    const patchedFn = fnConstructor(engine);
-    patchedFn.__minMaxPatched = true;
-    engine.yy.Select.prototype.compileGroup = patchedFn;
-  } catch (err) {
-    console.error('Falha ao aplicar patch de MIN/MAX no AlaSQL:', err);
-  }
+      // 2. Inicialização de MIN e MAX: permite strings/datas além de números
+      const initRegex = /__alasql_tmp\s*!==\s*null\s*&&\s*\(typeof\s+__alasql_tmp\s*==\s*['"]number['"]\s*\|\|\s*typeof\s+__alasql_tmp\s*==\s*['"]bigint['"]\s*\|\|\s*\(typeof\s+__alasql_tmp\s*==\s*['"]object['"]\s*&&\s*\(typeof\s+Number\(__alasql_tmp\)\s*==\s*['"]number['"]\s*\|\|\s*__alasql_tmp\s+instanceof\s+Date\)\)\)\s*\?\s*__alasql_tmp\s*:\s*undefined/g;
+      if (initRegex.test(fnStr)) {
+        fnStr = fnStr.replace(initRegex, '__alasql_tmp !== null && __alasql_tmp !== undefined ? __alasql_tmp : undefined');
+        modified = true;
+      }
+
+      // Inicialização MAX alternativa sem funcid:
+      const initMaxAltCompiled = /\(typeof\s+([^=]+)\s*==\s*['"]number['"]\s*\|\|\s*typeof\s+\1\s*==\s*['"]bigint['"]\)\s*\?\s*\1\s*:\s*\1\s*!==\s*null\s*&&\s*typeof\s+\1\s*==\s*['"]object['"]\s*\?\s*typeof\s+Number\(\1\)\s*==\s*['"]number['"]\s*\?\s*\1\s*:\s*undefined\s*:\s*undefined/g;
+      if (initMaxAltCompiled.test(fnStr)) {
+        fnStr = fnStr.replace(initMaxAltCompiled, '$1 !== null && $1 !== undefined ? $1 : undefined');
+        modified = true;
+      }
+
+      // 3. Acumulação no loop de grupos para MIN e MAX: aceita atribuição quando y for string ou data válida
+      const updateRegex = /if\s*\(\s*typeof\s+y\s*==\s*['"]number['"]\s*\|\|\s*typeof\s+y\s*==\s*['"]bigint['"]\s*\)\s*\{\s*g\['([^']+)'\]\s*=\s*y;\s*\}\s*else\s+if\s*\(typeof\s+y\s*==\s*'object'\s*&&\s*y\s+instanceof\s+Date\)\s*\{\s*g\['\1'\]\s*=\s*y;\s*\}\s*else\s+if\s*\(typeof\s+y\s*==\s*'object'\s*&&\s*typeof\s+Number\(y\)\s*==\s*['"]number['"]\)\s*\{\s*g\['\1'\]\s*=\s*Number\(y\);\s*\}/g;
+      if (updateRegex.test(fnStr)) {
+        fnStr = fnStr.replace(updateRegex, "if (y !== null && y !== undefined) { g['$1'] = y; }");
+        modified = true;
+      }
+
+      if (modified) {
+        const bodyStart = fnStr.indexOf('{');
+        const bodyEnd = fnStr.lastIndexOf('}');
+        const body = fnStr.substring(bodyStart + 1, bodyEnd);
+        return new Function('p,params,alasql', body);
+      }
+    } catch (err) {
+      console.warn('Aviso: Falha ao aplicar patch em groupfn:', err);
+    }
+
+    return groupfn;
+  };
+
+  (patchedCompileGroup as any).__minMaxPatched = true;
+  engine.yy.Select.prototype.compileGroup = patchedCompileGroup;
 }
