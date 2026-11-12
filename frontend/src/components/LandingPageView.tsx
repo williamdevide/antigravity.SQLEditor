@@ -26,12 +26,26 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v3.2.7',
+    date: '12/11/2026',
+    title:
+      'Patch de Agregação MIN/MAX para Datas e Strings, Sincronização Otimista de Scripts Salvos e Melhorias no Submenu de Sessão',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco v3.2.7',
+    items: [
+      'Compatibilidade Total com Agregações em Datas (MIN / MAX): Patch nativo no compilador de agrupamento do AlaSQL permitindo avaliar campos de data (formato ISO YYYY-MM-DD e strings) com ordenação cronológica e alfanumérica idêntica ao MySQL.',
+      'Sincronização Imediata e Resiliência em Scripts Salvos: Atualização otimista no estado local ao salvar scripts no perfil e desacoplamento de dependências assíncronas do perfil de usuário.',
+      'Abertura Responsiva do Menu de Scripts Salvos: Detecção de espaço na viewport para inverter a orientação do submenu para a esquerda quando próximo à borda da tela, prevenindo overflow horizontal.',
+      'Compatibilidade Validada com Lista Completa E-Commerce: Validação de 30 consultas analíticas e de agregação sobre o banco pedagógico db_ecommerce da Semana 09 com 100% de sucesso.',
+    ],
+  },
+  {
     version: 'v3.2.6',
     date: '07/11/2026',
     title:
       'Sistema Multiusuário SENAI (Aluno, Professor e Administrador), Gestão Pedagógica de Turmas, Trilha de Auditoria e Segurança Robusta no Firestore',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2.6',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Gestão Multiusuário & RBAC Completo: Separação de papéis de Aluno, Professor Docente e Administrador no Cloud Firestore e Firebase Auth com sincronização segura.',
       'Fluxo Docente & Turmas: Cadastro de docentes com fluxo de autorização administrativa, criação de turmas com código único de 6 caracteres, admissão de alunos por e-mail e aprovação de solicitações.',

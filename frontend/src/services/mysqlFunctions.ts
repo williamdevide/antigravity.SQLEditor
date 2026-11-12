@@ -794,4 +794,67 @@ export function registerMySQLFunctions(engine: typeof alasql = alasql): void {
     globalScope.date = dateCustom;
     globalScope.time = timeCustom;
   }
+
+  // Aplica o patch no compilador de agrupamento do AlaSQL para suportar MIN() e MAX() em datas e strings
+  patchAlaSqlAggregations(engine);
+}
+
+/**
+ * Patch para o método `yy.Select.prototype.compileGroup` do AlaSQL.
+ * O AlaSQL nativo restringe MIN e MAX apenas a `typeof == 'number' || typeof == 'bigint' || y instanceof Date`.
+ * Campos de data armazenados como ISO string (ex: '2025-01-24') ou strings alfanuméricas
+ * resultam em `undefined` quando agrupados com MIN() ou MAX().
+ * Este patch estende MIN e MAX para aceitar strings/datas não nulas utilizando comparações seguras.
+ */
+export function patchAlaSqlAggregations(targetAlasql?: any): void {
+  const engine = targetAlasql || alasql;
+  if (!engine || !engine.yy || !engine.yy.Select || !engine.yy.Select.prototype.compileGroup) {
+    return;
+  }
+
+  // Evita aplicar o patch múltiplas vezes
+  if ((engine.yy.Select.prototype.compileGroup as any).__minMaxPatched) {
+    return;
+  }
+
+  let code = engine.yy.Select.prototype.compileGroup.toString();
+
+  // 1. Substitui a inicialização de MIN e MAX para aceitar strings e outros valores comparáveis
+  code = code.replace(
+    /col\.aggregatorid\s*===\s*'MIN'\s*\?\s*\(.*?__alasql_tmp\s*:\s*undefined\)/g,
+    "col.aggregatorid === 'MIN' ? (__alasql_tmp !== null && __alasql_tmp !== undefined ? __alasql_tmp : undefined)"
+  );
+  code = code.replace(
+    /col\.aggregatorid\s*===\s*'MAX'\s*\?\s*\(.*?__alasql_tmp\s*:\s*undefined\)/g,
+    "col.aggregatorid === 'MAX' ? (__alasql_tmp !== null && __alasql_tmp !== undefined ? __alasql_tmp : undefined)"
+  );
+
+  // 2. Substitui a condição de atualização no loop de agrupamento para MIN
+  code = code.replace(
+    /if\(col\.aggregatorid\s*===\s*'MIN'\)\s*\{\s*s\s*\+=\s*'if\(typeof\s+y\s*==\s*"number"\s*\|\|\s*typeof\s+y\s*==\s*"bigint"\s*\|\|\s*\(typeof\s+y\s*==\s*"object"\s*&&\s*y\s+instanceof\s+Date\)\)\s*\{';\s*s\s*\+=\s*'if\(typeof\s+g\['\+colas\+'\]\s*==\s*"undefined"\s*\|\|\s*y<g\['\+colas\+'\]\)\s*g\['\+colas\+'\]\s*=\s*y;';\s*s\s*\+=\s*'\}';\s*\}/g,
+    "if(col.aggregatorid === 'MIN') {\n" +
+    "    s += 'if(y !== null && y !== undefined && (typeof y == \"number\" || typeof y == \"bigint\" || typeof y == \"string\" || (typeof y == \"object\" && y instanceof Date))) {';\n" +
+    "    s += 'if(typeof g[\"'+colas+'\"] == \"undefined\" || y < g[\"'+colas+'\"]) g[\"'+colas+'\"] = y;';\n" +
+    "    s += '}';\n" +
+    "}"
+  );
+
+  // 3. Substitui a condição de atualização no loop de agrupamento para MAX
+  code = code.replace(
+    /else\s+if\(col\.aggregatorid\s*===\s*'MAX'\)\s*\{\s*s\s*\+=\s*'if\(typeof\s+y\s*==\s*"number"\s*\|\|\s*typeof\s+y\s*==\s*"bigint"\s*\|\|\s*\(typeof\s+y\s*==\s*"object"\s*&&\s*y\s+instanceof\s+Date\)\)\s*\{';\s*s\s*\+=\s*'if\(typeof\s+g\['\+colas\+'\]\s*==\s*"undefined"\s*\|\|\s*y>g\['\+colas\+'\]\)\s*g\['\+colas\+'\]\s*=\s*y;';\s*s\s*\+=\s*'\}';\s*\}/g,
+    "else if(col.aggregatorid === 'MAX') {\n" +
+    "    s += 'if(y !== null && y !== undefined && (typeof y == \"number\" || typeof y == \"bigint\" || typeof y == \"string\" || (typeof y == \"object\" && y instanceof Date))) {';\n" +
+    "    s += 'if(typeof g[\"'+colas+'\"] == \"undefined\" || y > g[\"'+colas+'\"]) g[\"'+colas+'\"] = y;';\n" +
+    "    s += '}';\n" +
+    "}"
+  );
+
+  try {
+    const fnConstructor = Function('alasql', 'return (' + code + ');');
+    const patchedFn = fnConstructor(engine);
+    patchedFn.__minMaxPatched = true;
+    engine.yy.Select.prototype.compileGroup = patchedFn;
+  } catch (err) {
+    console.error('Falha ao aplicar patch de MIN/MAX no AlaSQL:', err);
+  }
 }
