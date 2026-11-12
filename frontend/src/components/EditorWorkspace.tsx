@@ -1331,7 +1331,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       },
     });
 
-    // 4. Salvar Como no Perfil (Ctrl+Shift+P)
+    // 4. Salvar Como no Perfil (Ctrl+Alt+S)
     editor.addAction({
       id: 'sql-save-as-profile',
       label: 'Salvar Como no Perfil...',
@@ -1994,7 +1994,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               </kbd>
             </button>
 
-            {/* 4. Salvar Como no Perfil... */}
+            {/* 4. Salvar Como no Perfil... (Ctrl+Alt+S) */}
             <button
               onClick={() => {
                 handleCloseContextMenu();
@@ -2009,7 +2009,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 </span>
                 <span className="font-medium">Salvar Como no Perfil...</span>
               </div>
-              <span className="text-[10px] text-[var(--text-muted)] font-mono">Novo</span>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[#FF6B00]">
+                Ctrl+Alt+S
+              </kbd>
             </button>
 
             {/* Linha separadora obrigatória após os 2 itens de salvamento */}
@@ -2109,7 +2111,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 <span className="material-symbols-outlined text-[15px] text-[#FF6B00]">save_as</span>
                 <span>Salvar Como no Perfil...</span>
               </div>
-              <span className="text-[9px] text-[var(--text-muted)] font-mono">Novo</span>
+              <kbd className="text-[10px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[#FF6B00]">Ctrl+Alt+S</kbd>
             </button>
 
             {/* Linha separadora após os 2 itens de salvamento */}

@@ -4053,6 +4053,27 @@ crie esse recurso e já publique com a versão atualizada
 ### Status da Conclusão:
 - Versão v3.2.9 gerada e publicada com sucesso no GitHub e Vercel.
 
+### Prompt 31
+```text
+/agente-orquestrador no menu suspenso Salvar Como no Perfil atribua uma tecla de atalho. já atualize o github
+```
+
+### Ações Executadas:
+1. **Atribuição da Tecla de Atalho `Ctrl+Alt+S` para "Salvar Como no Perfil...":**
+   - Configurada ação com atalho nativo no Monaco Editor via `monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS`.
+   - Adicionada a indicação visual da tecla `<kbd>Ctrl+Alt+S</kbd>` nos menus de contexto:
+     - No Menu de Contexto do Editor (clique com botão direito dentro da área de código).
+     - No Menu de Contexto da Aba (clique com botão direito sobre o título da guia).
+   - Ajustado o atalho global em `App.tsx` para direcionar `Ctrl+Shift+S` exclusivamente à exportação de arquivo `.sql` sem conflito com o atalho de perfil.
+2. **Build de Produção e Sincronização com o GitHub:**
+   - Compilação validada com sucesso via `npm --prefix frontend run build` (código 0).
+   - Realizado commit e push para o repositório remoto oficial no GitHub.
+
+### Status da Conclusão:
+- Atalho `Ctrl+Alt+S` configurado e exibido com sucesso.
+- Repositório no GitHub atualizado.
+
+
 
 
 

@@ -1421,8 +1421,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        handleExportScript();
+        // Se Ctrl+Shift+S: Exportar script como arquivo .sql para download
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleExportScript();
+          return;
+        }
+        // Se Ctrl+S direto: Salva no Perfil (o Monaco editor intercepta ou propaga para o workspace)
         return;
       }
 
