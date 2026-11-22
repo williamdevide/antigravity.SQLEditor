@@ -4177,3 +4177,24 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Cards da esquerda ordenados pelo nome da turma (`sortedClasses`) tanto no carregamento inicial quanto após criação ou edição.
    - Abas `Matriculados`, `Solicitações Pendentes` e `Disponíveis` ordenadas alfabeticamente pelos nomes normalizados em Title Case.
    - Na aba `Disponíveis`, ao clicar em **"Inserir"** (ou **"Inserir Selecionados"**), o aluno inserido é removido localmente da lista sem acionar spinner nem desmontar a tabela, mantendo o posicionamento visual e transferindo foco/destaque sutil para o próximo nome da lista (`focusNextAvailableStudent`).
+
+---
+
+### Prompt 36
+> /agente-orquestrador /grill-me /goal quando insiro um aluno em uma turma, não esta aparecendo que ele esta online. mesmo se recarrego a pagina não aparece essa informação.
+> quero também que automaticamente ao inserir ele em uma turma, lá na conta dele ele já visualize um alerta que foi inserido em uma turma e a borda na foto de perfil já fique com a borda combinada e já altere o comportamento do clique na foto de perfil (tudo já esta funcionando, mas preciso dar manualmente um atualizar na pagina do aluno, quero evitar isso).
+> outra coisa, o visualizar tela do aluno não funcionou, alem disso quero uma opção de jogar a tela do aluno daquela tela pequena que você criou para a tela do sqleditor (indicando quem é o aluno, e poderei fazer isso com mais de um aluno)
+
+**Ações Executadas:**
+1. **Perfil em Tempo Real sem F5 (`frontend/src/context/AuthContext.tsx`):**
+   - Adicionado listener `onSnapshot` em `users/{uid}` integrado ao ciclo de autenticação (`onAuthStateChanged`), fazendo com que mudanças de vínculo de turma (`classId`, `className`, `classCode`, `classStatus`) reflitam imediatamente no navegador do aluno sem recarregar a página, ativando instantaneamente a borda dourada neon e o menu rápido na foto de perfil.
+2. **Alerta Imediato ao Aluno Inserido (`frontend/src/App.tsx`):**
+   - Implementada detecção de transição para `classStatus === 'approved'` exibindo um toast fixo com opção direta **"Ir para Minha Classe"** ou **"Depois"**.
+3. **Presença Online Confiável (`frontend/src/services/classroomRealtimeService.ts` e `frontend/src/App.tsx`):**
+   - `updateClassPresence` passou a gravar `lastSeenAt: serverTimestamp()` com campos higienizados dentro dos limites do Firestore.
+   - `subscribeToClassPresence` passou a ler `serverTimestamps: 'estimate'`, usar `extractTimestampMs` para suportar `Timestamp`/ISO/epoch com janela de `120s` e reavaliar presença a cada `20s`.
+   - Eliminada a race condition do `App.tsx` onde o cleanup de `useEffect` enviava `isOnline: false` ao trocar de rota ou atualizar estado — agora `isOnline: false` é disparado somente em `beforeunload`/`pagehide`.
+4. **Correção do "Ver Tela" e Envio de Múltiplos Alunos para o SQLEditor (`frontend/src/types/index.ts`, `frontend/src/components/StudentMonitorModal.tsx`, `frontend/src/components/TeacherPanelView.tsx`, `frontend/src/components/EditorWorkspace.tsx`, `frontend/src/App.tsx`):**
+   - Substituído o debounce simples de `syncStudentLiveState` por throttle com trailing flush de `1000ms` lendo o conteúdo ativo direto do `editorRef`, além de reforço periódico a cada `10s`.
+   - `StudentMonitorModal` passou a assinar diretamente `subscribeToOwnLiveState(classId, studentUid)` e ganhou o botão **"Abrir no SQLEditor"**.
+   - Adicionado suporte a `studentMirror` em `TabItem`, abrindo uma aba dedicada por aluno no SQLEditor (`[Nome] • [arquivo.sql]`) com badge `AO VIVO` / `TESTE`, barra contextual identificando o aluno, sincronização simultânea de múltiplos alunos e botões **"Pausar Ao Vivo" / "Retomar Ao Vivo"** e **"Voltar às Turmas"**.

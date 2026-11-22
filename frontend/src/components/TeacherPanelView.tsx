@@ -52,9 +52,21 @@ import type {
 
 interface TeacherPanelViewProps {
   onBackToWorkspace: () => void;
+  onOpenStudentInSqlEditor?: (params: {
+    classId: string;
+    studentUid: string;
+    studentName: string;
+    studentEmail: string;
+    tabTitle: string;
+    content: string;
+    activeDatabase?: string;
+  }) => void;
 }
 
-export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWorkspace }) => {
+export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
+  onBackToWorkspace,
+  onOpenStudentInSqlEditor,
+}) => {
   const { user, userProfile, isAdmin } = useAuth();
 
   // Estados de Turmas
@@ -2827,6 +2839,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
             setTeacherChatTarget(uid);
             setActiveResourcePanel('chat');
           }}
+          onOpenInSqlEditor={
+            onOpenStudentInSqlEditor
+              ? (params) => {
+                  setMonitoringStudent(null);
+                  onOpenStudentInSqlEditor(params);
+                }
+              : undefined
+          }
           onQuickSaveGrade={handleQuickSaveGradeFromMonitor}
         />
       )}

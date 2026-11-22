@@ -8,8 +8,10 @@ import {
   query,
   where,
   arrayUnion,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { formatStudentDisplayName } from '../utils/studentNameFormatter';
 import type {
   ClassPresenceItem,
   ClassMessageItem,
@@ -19,6 +21,34 @@ import type {
   StudentLiveTabSnapshot,
   UserRole,
 } from '../types';
+
+/**
+ * Converte Timestamp do Firestore, Date, número ou string ISO em milissegundos.
+ */
+export function extractTimestampMs(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && value !== null) {
+    const maybeTs = value as { toMillis?: () => number; seconds?: number };
+    if (typeof maybeTs.toMillis === 'function') {
+      return maybeTs.toMillis();
+    }
+    if (typeof maybeTs.seconds === 'number') {
+      return maybeTs.seconds * 1000;
+    }
+    if (value instanceof Date) {
+      const ms = value.getTime();
+      return Number.isNaN(ms) ? null : ms;
+    }
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
 
 /**
  * Atualiza ou registra o status de presença online de um usuário na turma
@@ -35,20 +65,21 @@ export async function updateClassPresence(params: {
 }): Promise<void> {
   if (!params.classId || !params.uid) return;
   const docId = `${params.classId}_${params.uid}`;
+  const safeName = formatStudentDisplayName(params.displayName, params.email).slice(0, 100);
   try {
     await setDoc(
       doc(db, 'class_presence', docId),
       {
         id: docId,
-        classId: params.classId,
-        uid: params.uid,
-        displayName: params.displayName || 'Usuário',
-        email: params.email || '',
+        classId: params.classId.slice(0, 128),
+        uid: params.uid.slice(0, 128),
+        displayName: safeName,
+        email: (params.email || '').slice(0, 150),
         role: params.role || 'aluno',
-        photoURL: params.photoURL || '',
+        photoURL: (params.photoURL || '').slice(0, 1000),
         isOnline: params.isOnline,
-        lastSeenAt: new Date().toISOString(),
-        activeView: params.activeView || 'workspace',
+        lastSeenAt: serverTimestamp(),
+        activeView: (params.activeView || 'workspace').slice(0, 100),
       },
       { merge: true }
     );
@@ -59,7 +90,8 @@ export async function updateClassPresence(params: {
 
 /**
  * Inscreve para ouvir a lista de presença em tempo real da turma
- * Considera online apenas quem tem isOnline === true e heartbeat recente (< 90s)
+ * Considera online quem tem isOnline === true e heartbeat recente (< 120s),
+ * reavaliando periodicamente mesmo sem novas gravações no Firestore.
  */
 export function subscribeToClassPresence(
   classId: string,
@@ -69,28 +101,56 @@ export function subscribeToClassPresence(
     callback([]);
     return () => {};
   }
+
+  let latestRawItems: Array<{
+    id: string;
+    docData: ClassPresenceItem;
+    rawLastSeenAt: unknown;
+  }> = [];
+
+  const emitComputed = () => {
+    const nowMs = Date.now();
+    const items: ClassPresenceItem[] = latestRawItems.map(({ id, docData, rawLastSeenAt }) => {
+      const lastMs = extractTimestampMs(rawLastSeenAt);
+      // Tolerância ampla para evitar oscilação por pequenas diferenças de relógio
+      const isFresh = lastMs === null || Math.abs(nowMs - lastMs) < 120000;
+      return {
+        ...docData,
+        id,
+        lastSeenAt: lastMs !== null ? new Date(lastMs).toISOString() : new Date(nowMs).toISOString(),
+        isOnline: Boolean(docData.isOnline && isFresh),
+      };
+    });
+    callback(items);
+  };
+
   const q = query(collection(db, 'class_presence'), where('classId', '==', classId));
-  return onSnapshot(
+  const unsub = onSnapshot(
     q,
     (snap) => {
-      const nowMs = Date.now();
-      const items: ClassPresenceItem[] = [];
+      const nextRaw: typeof latestRawItems = [];
       snap.forEach((d) => {
-        const data = d.data() as ClassPresenceItem;
-        const lastMs = data.lastSeenAt ? new Date(data.lastSeenAt).getTime() : 0;
-        const isFresh = nowMs - lastMs < 90000;
-        items.push({
-          ...data,
+        const data = d.data({ serverTimestamps: 'estimate' }) as ClassPresenceItem;
+        nextRaw.push({
           id: d.id,
-          isOnline: Boolean(data.isOnline && isFresh),
+          docData: data,
+          rawLastSeenAt: data.lastSeenAt,
         });
       });
-      callback(items);
+      latestRawItems = nextRaw;
+      emitComputed();
     },
     (err) => {
       console.warn('[ClassroomRealtime] Erro ao escutar presença da turma:', err);
     }
   );
+
+  const refreshTimer = window.setInterval(emitComputed, 20000);
+
+  return () => {
+    window.clearInterval(refreshTimer);
+    unsub();
+  };
 }
 
 /**
@@ -272,16 +332,17 @@ export async function syncStudentLiveState(params: {
       content: (t.content || '').slice(0, 60000),
     }));
 
+    const safeStudentName = formatStudentDisplayName(params.studentName, params.studentEmail).slice(0, 100);
     const payload: Record<string, any> = {
-      id: docId,
-      classId: params.classId,
-      studentUid: params.studentUid,
-      studentName: params.studentName || 'Aluno',
-      studentEmail: params.studentEmail || '',
+      id: docId.slice(0, 260),
+      classId: params.classId.slice(0, 128),
+      studentUid: params.studentUid.slice(0, 128),
+      studentName: safeStudentName,
+      studentEmail: (params.studentEmail || '').slice(0, 150),
       activeTabTitle: (params.activeTabTitle || 'Script').slice(0, 120),
       activeTabContent: (params.activeTabContent || '').slice(0, 60000),
       tabs: safeTabs,
-      activeDatabase: params.activeDatabase || '',
+      activeDatabase: (params.activeDatabase || '').slice(0, 128),
       updatedAt: new Date().toISOString(),
     };
 

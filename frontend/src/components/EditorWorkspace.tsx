@@ -341,6 +341,8 @@ interface EditorWorkspaceProps {
   classExams?: SavedScriptItem[];
   onDeliverExam?: () => void;
   onScriptSaved?: (savedScript?: SavedScriptItem) => void;
+  onToggleStudentMirrorLive?: (tabId: string) => void;
+  onReturnToTeacherPanel?: () => void;
 }
 
 // Registro global de provedores de autocompletar do Monaco para evitar duplicação em re-renderizações e troca de abas
@@ -394,6 +396,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   classExams = [],
   onDeliverExam,
   onScriptSaved,
+  onToggleStudentMirrorLive,
+  onReturnToTeacherPanel,
 }) => {
   const preferencesRef = useRef<AppPreferences>(preferences);
   preferencesRef.current = preferences;
@@ -639,7 +643,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     if (!editorRef.current || !activeTab) return;
     const currentVal = editorRef.current.getValue();
     if (activeTab.content !== currentVal && !pendingContentRef.current[activeTab.id]) {
+      const prevScrollTop = editorRef.current.getScrollTop?.() ?? 0;
       editorRef.current.setValue(activeTab.content);
+      if (activeTab.studentMirror?.isLiveSync && prevScrollTop > 0) {
+        requestAnimationFrame(() => {
+          editorRef.current?.setScrollTop?.(prevScrollTop);
+        });
+      }
     }
     if (monacoInstanceRef.current) {
       try {
@@ -1660,6 +1670,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             const isEditing = tab.id === editingTabId;
+            const mirror = tab.studentMirror;
             return (
               <div
                 key={tab.id}
@@ -1670,6 +1681,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   }
                 }}
                 onDoubleClick={(e) => {
+                  if (mirror) return;
                   e.stopPropagation();
                   startRenaming(tab.id, tab.title);
                 }}
@@ -1685,14 +1697,28 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   });
                 }}
                 className={`group h-8 px-3 flex items-center gap-2 text-xs font-mono cursor-pointer border-r border-[var(--border-color)] transition-colors shrink-0 ${
-                  isActive
+                  mirror
+                    ? isActive
+                      ? 'bg-cyan-950/50 text-cyan-200 border-t-2 border-t-cyan-400 font-semibold'
+                      : 'bg-cyan-950/20 text-cyan-300/80 hover:text-cyan-200 hover:bg-cyan-950/35'
+                    : isActive
                     ? 'bg-[var(--bg-surface)] text-[var(--accent-yellow)] border-t-2 border-t-[var(--accent-yellow)] font-semibold'
                     : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                 }`}
-                title={isEditing ? 'Pressione Enter para salvar, Esc para cancelar' : `${tab.title} (Duplo clique ou F2 para renomear, botão direito para opções)`}
+                title={
+                  mirror
+                    ? `Tela do Aluno: ${mirror.studentName} (${mirror.studentEmail})`
+                    : isEditing
+                    ? 'Pressione Enter para salvar, Esc para cancelar'
+                    : `${tab.title} (Duplo clique ou F2 para renomear, botão direito para opções)`
+                }
               >
-                <span className="material-symbols-outlined text-[13px] text-[#FF8533]">
-                  description
+                <span
+                  className={`material-symbols-outlined text-[13px] ${
+                    mirror ? 'text-cyan-400' : 'text-[#FF8533]'
+                  }`}
+                >
+                  {mirror ? 'desktop_windows' : 'description'}
                 </span>
                 {isEditing ? (
                   <input
@@ -1716,7 +1742,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                     className="w-28 px-1.5 py-0.5 text-xs font-mono bg-[var(--bg-primary)] text-[var(--accent-yellow)] border border-[#FF6B00] rounded outline-none shadow-[0_0_8px_rgba(255,107,0,0.3)]"
                   />
                 ) : (
-                  <span className="truncate max-w-[140px] select-none">{tab.title}</span>
+                  <span className="truncate max-w-[180px] select-none">{tab.title}</span>
+                )}
+                {mirror && !isEditing && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide shrink-0 ${
+                      mirror.isLiveSync
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    }`}
+                  >
+                    {mirror.isLiveSync ? 'AO VIVO' : 'TESTE'}
+                  </span>
                 )}
                 {!isEditing && (
                   <button
@@ -1836,6 +1873,74 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           />
         </div>
       </div>
+
+      {/* Barra de Contexto da Tela do Aluno Espelhada no SQLEditor */}
+      {activeTab?.studentMirror && (
+        <div className="px-3 py-1.5 bg-cyan-950/35 border-b border-cyan-500/30 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                activeTab.studentMirror.isLiveSync
+                  ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]'
+                  : 'bg-amber-400'
+              }`}
+            />
+            <span className="font-bold text-cyan-200 truncate">
+              Tela do Aluno: {activeTab.studentMirror.studentName}
+            </span>
+            <span className="hidden md:inline font-mono text-[11px] text-cyan-300/75 truncate">
+              ({activeTab.studentMirror.studentEmail})
+            </span>
+            {activeTab.studentMirror.activeDatabase && (
+              <span className="px-2 py-0.5 rounded bg-black/30 border border-cyan-500/25 font-mono text-[10px] text-[#FFE600]">
+                BD: {activeTab.studentMirror.activeDatabase}
+              </span>
+            )}
+            {activeTab.studentMirror.lastUpdatedAt && (
+              <span className="hidden sm:inline font-mono text-[10px] text-[var(--text-muted)]">
+                • Sincronizado às{' '}
+                {new Date(activeTab.studentMirror.lastUpdatedAt).toLocaleTimeString('pt-BR')}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] text-cyan-200/80 hidden lg:inline">
+              {activeTab.studentMirror.isLiveSync
+                ? 'Espelho em tempo real (edite para pausar e testar)'
+                : 'Sincronização pausada (modo teste local)'}
+            </span>
+            {onToggleStudentMirrorLive && (
+              <button
+                type="button"
+                onClick={() => onToggleStudentMirrorLive(activeTab.id)}
+                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                  activeTab.studentMirror.isLiveSync
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">
+                  {activeTab.studentMirror.isLiveSync ? 'pause_circle' : 'sync'}
+                </span>
+                <span>
+                  {activeTab.studentMirror.isLiveSync ? 'Pausar Ao Vivo' : 'Retomar Ao Vivo'}
+                </span>
+              </button>
+            )}
+            {onReturnToTeacherPanel && (
+              <button
+                type="button"
+                onClick={onReturnToTeacherPanel}
+                className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[11px] font-semibold text-[var(--text-primary)] flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[14px]">school</span>
+                <span>Voltar às Turmas</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Editor Monaco */}
       <div className="flex-1 w-full h-full relative overflow-hidden">

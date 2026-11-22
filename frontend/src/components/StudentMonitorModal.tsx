@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { setStudentFrozenState } from '../services/classroomRealtimeService';
+import {
+  setStudentFrozenState,
+  subscribeToOwnLiveState,
+} from '../services/classroomRealtimeService';
 import { autoGradeStudentSubmission } from '../services/autoGraderService';
 import type {
   StudentLiveStateItem,
@@ -20,6 +23,15 @@ interface StudentMonitorModalProps {
   onClose: () => void;
   onAcknowledgeAlert?: (alertId: string) => void;
   onOpenDirectMessage?: (studentUid: string, studentName: string) => void;
+  onOpenInSqlEditor?: (params: {
+    classId: string;
+    studentUid: string;
+    studentName: string;
+    studentEmail: string;
+    tabTitle: string;
+    content: string;
+    activeDatabase?: string;
+  }) => void;
   onQuickSaveGrade?: (params: {
     studentUid: string;
     studentName: string;
@@ -48,8 +60,10 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
   onClose,
   onAcknowledgeAlert,
   onOpenDirectMessage,
+  onOpenInSqlEditor,
   onQuickSaveGrade,
 }) => {
+  const [directLiveState, setDirectLiveState] = useState<StudentLiveStateItem | null>(liveState);
   const [selectedTabId, setSelectedTabId] = useState<string>('');
   const [isTogglingFreeze, setIsTogglingFreeze] = useState(false);
   const [selectedExamId, setSelectedExamId] = useState<string>(classExams[0]?.id || '');
@@ -60,12 +74,30 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [showGrader, setShowGrader] = useState(false);
 
-  const tabs = liveState?.tabs || [];
+  // Assina diretamente o estado ao vivo do aluno para garantir atualização em tempo real
+  useEffect(() => {
+    setDirectLiveState(liveState);
+    if (!classId || !studentUid) return;
+    const unsub = subscribeToOwnLiveState(classId, studentUid, (state) => {
+      if (state) {
+        setDirectLiveState(state);
+      }
+    });
+    return () => unsub();
+  }, [classId, studentUid, liveState]);
+
+  const effectiveLiveState = directLiveState || liveState;
+  const tabs = effectiveLiveState?.tabs || [];
   const activeSnapshot =
     tabs.find((t) => t.id === selectedTabId) ||
+    tabs.find((t) => t.title === effectiveLiveState?.activeTabTitle) ||
     tabs[0] ||
-    (liveState
-      ? { id: 'active', title: liveState.activeTabTitle || 'script.sql', content: liveState.activeTabContent || '' }
+    (effectiveLiveState
+      ? {
+          id: 'active',
+          title: effectiveLiveState.activeTabTitle || 'script.sql',
+          content: effectiveLiveState.activeTabContent || '',
+        }
       : null);
 
   useEffect(() => {
@@ -78,7 +110,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
   const handleToggleFreeze = async () => {
     try {
       setIsTogglingFreeze(true);
-      const nextFrozen = !liveState?.isFrozen;
+      const nextFrozen = !effectiveLiveState?.isFrozen;
       await setStudentFrozenState(
         classId,
         studentUid,
@@ -93,7 +125,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
   };
 
   const handleRunAutoGrade = () => {
-    const code = activeSnapshot?.content || liveState?.activeTabContent || '';
+    const code = activeSnapshot?.content || effectiveLiveState?.activeTabContent || '';
     const report = autoGradeStudentSubmission({
       studentSql: code,
       answerKeySql: customAnswerKey,
@@ -109,7 +141,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
     const code =
       tabs.length > 0
         ? tabs.map((t) => `-- === ABA: ${t.title} ===\n${t.content}`).join('\n\n')
-        : liveState?.activeTabContent || '';
+        : effectiveLiveState?.activeTabContent || '';
     try {
       setIsSavingGrade(true);
       const details =
@@ -153,7 +185,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">
                   Tela ao Vivo: {studentName}
                 </h3>
-                {liveState?.isFrozen && (
+                {effectiveLiveState?.isFrozen && (
                   <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold">
                     ❄️ Editor Congelado
                   </span>
@@ -166,15 +198,40 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
               </div>
               <p className="text-[11px] text-[var(--text-secondary)] font-mono">
                 {studentEmail} • Banco ativo:{' '}
-                <strong className="text-[#FFE600]">{liveState?.activeDatabase || '(nenhum)'}</strong>{' '}
-                {liveState?.updatedAt
-                  ? `• Sincronizado às ${new Date(liveState.updatedAt).toLocaleTimeString('pt-BR')}`
+                <strong className="text-[#FFE600]">{effectiveLiveState?.activeDatabase || '(nenhum)'}</strong>{' '}
+                {effectiveLiveState?.updatedAt
+                  ? `• Sincronizado às ${new Date(effectiveLiveState.updatedAt).toLocaleTimeString('pt-BR')}`
                   : '• Aguardando atividade no editor'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {onOpenInSqlEditor && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenInSqlEditor({
+                    classId,
+                    studentUid,
+                    studentName,
+                    studentEmail,
+                    tabTitle: activeSnapshot?.title || effectiveLiveState?.activeTabTitle || 'script.sql',
+                    content:
+                      activeSnapshot?.content ||
+                      effectiveLiveState?.activeTabContent ||
+                      '-- Aguardando código do aluno...',
+                    activeDatabase: effectiveLiveState?.activeDatabase,
+                  })
+                }
+                title="Abrir o código ao vivo deste aluno em uma aba dedicada no SQLEditor (permite abrir vários alunos)"
+                className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow transition-colors"
+              >
+                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                <span>Abrir no SQLEditor</span>
+              </button>
+            )}
+
             {onOpenDirectMessage && (
               <button
                 type="button"
@@ -191,15 +248,15 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
               disabled={isTogglingFreeze}
               onClick={handleToggleFreeze}
               className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-                liveState?.isFrozen
+                effectiveLiveState?.isFrozen
                   ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
                   : 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
               }`}
             >
               <span className="material-symbols-outlined text-[15px]">
-                {liveState?.isFrozen ? 'lock_open' : 'ac_unit'}
+                {effectiveLiveState?.isFrozen ? 'lock_open' : 'ac_unit'}
               </span>
-              <span>{liveState?.isFrozen ? 'Desbloquear Editor' : 'Congelar Editor'}</span>
+              <span>{effectiveLiveState?.isFrozen ? 'Desbloquear Editor' : 'Congelar Editor'}</span>
             </button>
 
             <button
@@ -229,7 +286,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[var(--border-color)]">
               {tabs.length === 0 ? (
                 <span className="text-[11px] text-[var(--text-muted)] px-2 py-1">
-                  {liveState?.activeTabTitle || 'Sem abas sincronizadas ainda'}
+                  {effectiveLiveState?.activeTabTitle || 'Sem abas sincronizadas ainda'}
                 </span>
               ) : (
                 tabs.map((t) => {
@@ -255,28 +312,30 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
             {/* Editor Mirror Read-Only */}
             <div className="flex-1 rounded-2xl bg-[#0B0D12] border border-[var(--border-color)] p-4 overflow-auto min-h-[260px] max-h-[420px]">
               <pre className="font-mono text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
-                {activeSnapshot?.content || liveState?.activeTabContent || '-- Aluno ainda não digitou código neste ciclo --'}
+                {activeSnapshot?.content ||
+                  effectiveLiveState?.activeTabContent ||
+                  '-- Aluno ainda não digitou código neste ciclo --'}
               </pre>
             </div>
 
             {/* Status da última execução do aluno */}
-            {liveState?.lastQueryStatus && (
+            {effectiveLiveState?.lastQueryStatus && (
               <div
                 className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
-                  liveState.lastQueryStatus === 'success'
+                  effectiveLiveState.lastQueryStatus === 'success'
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                     : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                 }`}
               >
                 <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5">
-                  {liveState.lastQueryStatus === 'success' ? 'check_circle' : 'error'}
+                  {effectiveLiveState.lastQueryStatus === 'success' ? 'check_circle' : 'error'}
                 </span>
                 <div className="min-w-0">
                   <span className="font-bold block">
-                    Última execução: {liveState.lastQueryStatus === 'success' ? 'Sucesso' : 'Erro SQL'}
+                    Última execução: {effectiveLiveState.lastQueryStatus === 'success' ? 'Sucesso' : 'Erro SQL'}
                   </span>
                   <span className="text-[11px] font-mono break-all">
-                    {liveState.lastQueryError || liveState.lastQuerySummary || ''}
+                    {effectiveLiveState.lastQueryError || effectiveLiveState.lastQuerySummary || ''}
                   </span>
                 </div>
               </div>

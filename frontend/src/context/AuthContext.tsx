@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 import {
   syncUserProfile,
   getUserProfile,
@@ -88,7 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       setUser(currentUser);
       if (currentUser) {
         try {
@@ -108,13 +116,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             providerId: currentUser.providerData[0]?.providerId || 'password',
           });
         }
+
+        // Listener em tempo real para refletir admissão em turmas ou mudanças de perfil sem F5
+        unsubProfile = onSnapshot(
+          doc(db, 'users', currentUser.uid),
+          (snap) => {
+            if (snap.exists()) {
+              setUserProfile({
+                uid: snap.id,
+                ...(snap.data() as Omit<UserProfile, 'uid'>),
+              });
+            }
+          },
+          (err) => {
+            console.warn('[AuthContext] Erro ao ouvir atualizações do perfil:', err);
+          }
+        );
       } else {
         setUserProfile(null);
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubProfile) {
+        unsubProfile();
+      }
+      unsubscribe();
+    };
   }, []);
 
   const isAdmin = useMemo(() => {

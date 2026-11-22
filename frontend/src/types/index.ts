@@ -22,12 +22,24 @@ export interface DatabaseSchema {
   isActive?: boolean;
 }
 
+export interface StudentMirrorMeta {
+  classId: string;
+  studentUid: string;
+  studentName: string;
+  studentEmail: string;
+  sourceTabTitle?: string;
+  activeDatabase?: string;
+  isLiveSync: boolean;
+  lastUpdatedAt?: string;
+}
+
 export interface TabItem {
   id: string;
   title: string;
   content: string;
   isDirty?: boolean;
   savedScriptId?: string;
+  studentMirror?: StudentMirrorMeta;
 }
 
 export interface QueryResult {

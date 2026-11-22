@@ -29,6 +29,7 @@ import { dbStorage } from './services/storage';
 import { reviewSqlQuery, resolveReviewTargetRange, applySuggestedSqlToScript } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
 import { subscribeToClass, getClassesByTeacher, getAllClasses } from './services/classService';
+import { formatStudentDisplayName } from './utils/studentNameFormatter';
 import {
   updateClassPresence,
   subscribeToClassMessages,
@@ -275,12 +276,35 @@ export const App: React.FC = () => {
     isFrozen: false,
     message: '',
   });
+  const [classJoinedToast, setClassJoinedToast] = useState<{
+    className: string;
+    classCode?: string;
+  } | null>(null);
+  const hasInitializedClassStateRef = useRef<boolean>(false);
+  const prevClassMembershipRef = useRef<{ classId: string; classStatus: string }>({
+    classId: '',
+    classStatus: 'none',
+  });
 
   // Modal de Recuperação pós-avaliação
   const [isPostExamRecoveryOpen, setIsPostExamRecoveryOpen] = useState<boolean>(false);
   const [tempRecoveryScripts, setTempRecoveryScripts] = useState<SavedScriptItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('tab-1');
+  const activeTabIdRef = useRef<string>(activeTabId);
+  activeTabIdRef.current = activeTabId;
   const [results, setResults] = useState<QueryResult[]>([]);
+  const resultsRef = useRef<QueryResult[]>(results);
+  resultsRef.current = results;
+  const activeDatabaseRef = useRef<string>(activeDatabase);
+  activeDatabaseRef.current = activeDatabase;
+  const presenceUserRef = useRef(user);
+  presenceUserRef.current = user;
+  const presenceProfileRef = useRef(userProfile);
+  presenceProfileRef.current = userProfile;
+  const activeViewRef = useRef<ActiveView>(activeView);
+  activeViewRef.current = activeView;
+  const lastLiveSyncAtRef = useRef<number>(0);
+  const liveSyncTimerRef = useRef<number | null>(null);
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(0);
   const [executedTabId, setExecutedTabId] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
@@ -715,7 +739,22 @@ export const App: React.FC = () => {
 
   const handleUpdateTabContent = useCallback((id: string, content: string) => {
     setTabs(prev =>
-      prev.map(t => (t.id === id ? { ...t, content, isDirty: true } : t))
+      prev.map(t => {
+        if (t.id !== id) return t;
+        // Se o professor editar manualmente uma aba espelhada, pausa o sync ao vivo para preservar o teste local
+        if (t.studentMirror?.isLiveSync) {
+          return {
+            ...t,
+            content,
+            isDirty: true,
+            studentMirror: {
+              ...t.studentMirror,
+              isLiveSync: false,
+            },
+          };
+        }
+        return { ...t, content, isDirty: true };
+      })
     );
   }, []);
 
@@ -1233,44 +1272,125 @@ export const App: React.FC = () => {
     handleLoadPreset,
   ]);
 
-  // 2.1 Heartbeat de presença online na turma (aluno ou professor)
+  // 2.0 Alerta imediato para o aluno quando inserido/aprovado em uma turma sem precisar de F5
   useEffect(() => {
-    if (!user || !userProfile) return;
+    if (!user || !userProfile) {
+      hasInitializedClassStateRef.current = false;
+      prevClassMembershipRef.current = { classId: '', classStatus: 'none' };
+      setClassJoinedToast(null);
+      return;
+    }
+
+    const currClassId = userProfile.classId || '';
+    const currStatus = userProfile.classStatus || 'none';
+
+    if (!hasInitializedClassStateRef.current) {
+      hasInitializedClassStateRef.current = true;
+      prevClassMembershipRef.current = { classId: currClassId, classStatus: currStatus };
+      return;
+    }
+
+    const prev = prevClassMembershipRef.current;
+    const becameApproved =
+      userProfile.role === 'aluno' &&
+      Boolean(currClassId) &&
+      currStatus === 'approved' &&
+      (prev.classId !== currClassId || prev.classStatus !== 'approved');
+
+    prevClassMembershipRef.current = { classId: currClassId, classStatus: currStatus };
+
+    if (becameApproved) {
+      setClassJoinedToast({
+        className: userProfile.className || 'Nova Turma',
+        classCode: userProfile.classCode,
+      });
+    }
+  }, [
+    user,
+    userProfile?.role,
+    userProfile?.classId,
+    userProfile?.classStatus,
+    userProfile?.className,
+    userProfile?.classCode,
+  ]);
+
+  // 2.1 Heartbeat de presença online na turma (sem race condition de cleanup)
+  const presenceClassIdsKey = useMemo(() => {
+    if (!user || !userProfile) return '';
     const targetClassIds = new Set<string>();
     if (userProfile.classId && userProfile.classStatus === 'approved') {
       targetClassIds.add(userProfile.classId);
     }
     if (userProfile.role === 'professor' || userProfile.role === 'admin') {
-      teacherClasses.forEach((c) => targetClassIds.add(c.id));
+      teacherClasses.forEach((c) => {
+        if (c.id) targetClassIds.add(c.id);
+      });
     }
-    if (targetClassIds.size === 0) return;
+    return Array.from(targetClassIds).sort().join(',');
+  }, [user, userProfile, teacherClasses]);
 
-    const sendHeartbeat = (online: boolean) => {
-      targetClassIds.forEach((cId) => {
+  const sendPresenceHeartbeat = useCallback(
+    (online: boolean, explicitClassIds?: string[]) => {
+      const currentUser = presenceUserRef.current;
+      const currentProfile = presenceProfileRef.current;
+      const targetIds =
+        explicitClassIds ||
+        (presenceClassIdsKey ? presenceClassIdsKey.split(',').filter(Boolean) : []);
+      if (!currentUser || !currentProfile || targetIds.length === 0) return;
+
+      targetIds.forEach((cId) => {
         updateClassPresence({
           classId: cId,
-          uid: user.uid,
-          displayName: userProfile.displayName || user.displayName || 'Usuário',
-          email: userProfile.email || user.email || '',
-          role: userProfile.role || 'aluno',
-          photoURL: userProfile.photoURL || user.photoURL || '',
+          uid: currentUser.uid,
+          displayName: currentProfile.displayName || currentUser.displayName || 'Usuário',
+          email: currentProfile.email || currentUser.email || '',
+          role: currentProfile.role || 'aluno',
+          photoURL: currentProfile.photoURL || currentUser.photoURL || '',
           isOnline: online,
-          activeView,
+          activeView: activeViewRef.current,
         });
       });
+    },
+    [presenceClassIdsKey]
+  );
+
+  useEffect(() => {
+    const classIdsList = presenceClassIdsKey
+      ? presenceClassIdsKey.split(',').filter(Boolean)
+      : [];
+    if (!user?.uid || classIdsList.length === 0) return;
+
+    sendPresenceHeartbeat(true, classIdsList);
+    const interval = window.setInterval(() => sendPresenceHeartbeat(true, classIdsList), 20000);
+
+    const handleWakeUp = () => {
+      if (document.visibilityState !== 'hidden') {
+        sendPresenceHeartbeat(true, classIdsList);
+      }
+    };
+    const handleUnload = () => {
+      sendPresenceHeartbeat(false, classIdsList);
     };
 
-    sendHeartbeat(true);
-    const interval = window.setInterval(() => sendHeartbeat(true), 25000);
-    const handleUnload = () => sendHeartbeat(false);
+    window.addEventListener('focus', handleWakeUp);
+    document.addEventListener('visibilitychange', handleWakeUp);
     window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
 
     return () => {
       window.clearInterval(interval);
+      window.removeEventListener('focus', handleWakeUp);
+      document.removeEventListener('visibilitychange', handleWakeUp);
       window.removeEventListener('beforeunload', handleUnload);
-      sendHeartbeat(false);
+      window.removeEventListener('pagehide', handleUnload);
     };
-  }, [user, userProfile, teacherClasses, activeView]);
+  }, [user?.uid, presenceClassIdsKey, sendPresenceHeartbeat]);
+
+  // Atualiza apenas activeView na presença sem marcar usuário offline durante navegação
+  useEffect(() => {
+    if (!user?.uid || !presenceClassIdsKey) return;
+    sendPresenceHeartbeat(true);
+  }, [activeView, user?.uid, presenceClassIdsKey, sendPresenceHeartbeat]);
 
   // 2.2 Escuta mensagens da classe para atualizar sininho verde na Header/Landing
   useEffect(() => {
@@ -1346,6 +1466,100 @@ export const App: React.FC = () => {
     return () => unsub();
   }, [user, userProfile?.role, userProfile?.classId, userProfile?.classStatus]);
 
+  const pushStudentLiveStateNow = useCallback(() => {
+    const currentUser = presenceUserRef.current;
+    const currentProfile = presenceProfileRef.current;
+    if (
+      !currentUser ||
+      currentProfile?.role !== 'aluno' ||
+      !currentProfile?.classId ||
+      currentProfile?.classStatus !== 'approved'
+    ) {
+      return;
+    }
+
+    const currentTabs = tabsRef.current;
+    const currentTabId = activeTabIdRef.current;
+    const currentTab = currentTabs.find((t) => t.id === currentTabId) || currentTabs[0];
+    const liveEditorContent =
+      editorRef.current && currentTab?.id === currentTabId
+        ? editorRef.current.getValue()
+        : currentTab?.content || '';
+
+    const snapshotTabs = currentTabs.map((t) => ({
+      id: t.id,
+      title: t.title,
+      content: t.id === currentTab?.id ? liveEditorContent : t.content,
+    }));
+
+    const currentResults = resultsRef.current;
+    const latestResult =
+      currentResults.length > 0 ? currentResults[currentResults.length - 1] : undefined;
+
+    lastLiveSyncAtRef.current = Date.now();
+    syncStudentLiveState({
+      classId: currentProfile.classId,
+      studentUid: currentUser.uid,
+      studentName: currentProfile.displayName || currentUser.displayName || 'Aluno',
+      studentEmail: currentProfile.email || currentUser.email || '',
+      activeTabTitle: currentTab?.title || 'script.sql',
+      activeTabContent: liveEditorContent,
+      tabs: snapshotTabs,
+      activeDatabase: activeDatabaseRef.current,
+      lastQueryStatus: latestResult?.status,
+      lastQueryError: latestResult?.errorMessage,
+      lastQuerySummary:
+        latestResult?.status === 'success'
+          ? `${latestResult.rows?.length ?? 0} registro(s) / ${latestResult.statement.slice(0, 60)}`
+          : undefined,
+      violationCount: violationCountRef.current,
+    });
+  }, []);
+
+  // Throttle com trailing flush (1000ms) para que o código seja enviado continuamente mesmo digitando sem pausas
+  useEffect(() => {
+    if (
+      !user ||
+      userProfile?.role !== 'aluno' ||
+      !userProfile?.classId ||
+      userProfile?.classStatus !== 'approved'
+    ) {
+      if (liveSyncTimerRef.current) {
+        window.clearTimeout(liveSyncTimerRef.current);
+        liveSyncTimerRef.current = null;
+      }
+      return;
+    }
+
+    const elapsed = Date.now() - lastLiveSyncAtRef.current;
+    if (elapsed >= 1000) {
+      if (liveSyncTimerRef.current) {
+        window.clearTimeout(liveSyncTimerRef.current);
+        liveSyncTimerRef.current = null;
+      }
+      pushStudentLiveStateNow();
+    } else if (!liveSyncTimerRef.current) {
+      const waitMs = Math.max(250, 1000 - elapsed);
+      liveSyncTimerRef.current = window.setTimeout(() => {
+        liveSyncTimerRef.current = null;
+        pushStudentLiveStateNow();
+      }, waitMs);
+    }
+  }, [
+    user,
+    userProfile?.role,
+    userProfile?.classId,
+    userProfile?.classStatus,
+    userProfile?.displayName,
+    userProfile?.email,
+    tabs,
+    activeTabId,
+    activeDatabase,
+    results,
+    pushStudentLiveStateNow,
+  ]);
+
+  // Reforço periódico de sincronização ao vivo enquanto o aluno está na turma
   useEffect(() => {
     if (
       !user ||
@@ -1355,30 +1569,163 @@ export const App: React.FC = () => {
     ) {
       return;
     }
-    const timer = window.setTimeout(() => {
-      const currentTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-      const latestResult = results.length > 0 ? results[results.length - 1] : undefined;
-      syncStudentLiveState({
-        classId: userProfile.classId!,
-        studentUid: user.uid,
-        studentName: userProfile.displayName || user.displayName || 'Aluno',
-        studentEmail: userProfile.email || user.email || '',
-        activeTabTitle: currentTab?.title || 'script.sql',
-        activeTabContent: currentTab?.content || '',
-        tabs: tabs.map((t) => ({ id: t.id, title: t.title, content: t.content })),
-        activeDatabase,
-        lastQueryStatus: latestResult?.status,
-        lastQueryError: latestResult?.errorMessage,
-        lastQuerySummary:
-          latestResult?.status === 'success'
-            ? `${latestResult.rows?.length ?? 0} registro(s) / ${latestResult.statement.slice(0, 60)}`
-            : undefined,
-        violationCount: violationCountRef.current,
-      });
-    }, 1600);
+    const periodicTimer = window.setInterval(() => {
+      pushStudentLiveStateNow();
+    }, 10000);
+    return () => {
+      window.clearInterval(periodicTimer);
+      if (liveSyncTimerRef.current) {
+        window.clearTimeout(liveSyncTimerRef.current);
+        liveSyncTimerRef.current = null;
+      }
+    };
+  }, [user, userProfile?.role, userProfile?.classId, userProfile?.classStatus, pushStudentLiveStateNow]);
 
-    return () => window.clearTimeout(timer);
-  }, [user, userProfile, tabs, activeTabId, activeDatabase, results]);
+  // Formata título curto identificando o aluno na barra de abas do SQLEditor do professor
+  const formatMirrorTabTitle = (
+    studentName: string,
+    studentEmail: string,
+    sourceTabTitle?: string
+  ) => {
+    const normalized = formatStudentDisplayName(studentName, studentEmail);
+    const shortName = normalized.split(' ').slice(0, 2).join(' ');
+    const cleanSource = (sourceTabTitle || 'script.sql').trim();
+    return `${shortName} • ${cleanSource}`;
+  };
+
+  // Abre a tela ao vivo de um aluno em uma aba dedicada no SQLEditor principal (suporta múltiplos alunos)
+  const handleOpenStudentInSqlEditor = useCallback(
+    (params: {
+      classId: string;
+      studentUid: string;
+      studentName: string;
+      studentEmail: string;
+      tabTitle: string;
+      content: string;
+      activeDatabase?: string;
+    }) => {
+      const formattedName = formatStudentDisplayName(params.studentName, params.studentEmail);
+      const mirrorTabId = `student-mirror-${params.classId}-${params.studentUid}`;
+      const tabTitle = formatMirrorTabTitle(formattedName, params.studentEmail, params.tabTitle);
+
+      setTabs((prev) => {
+        const existingIdx = prev.findIndex((t) => t.id === mirrorTabId);
+        const mirrorMeta = {
+          classId: params.classId,
+          studentUid: params.studentUid,
+          studentName: formattedName,
+          studentEmail: params.studentEmail,
+          sourceTabTitle: params.tabTitle,
+          activeDatabase: params.activeDatabase,
+          isLiveSync: true,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+
+        if (existingIdx >= 0) {
+          return prev.map((t, idx) =>
+            idx === existingIdx
+              ? {
+                  ...t,
+                  title: tabTitle,
+                  content: params.content,
+                  isDirty: false,
+                  studentMirror: mirrorMeta,
+                }
+              : t
+          );
+        }
+
+        return [
+          ...prev,
+          {
+            id: mirrorTabId,
+            title: tabTitle,
+            content: params.content,
+            isDirty: false,
+            studentMirror: mirrorMeta,
+          },
+        ];
+      });
+
+      setActiveTabId(mirrorTabId);
+      setActiveView('workspace');
+    },
+    [setActiveView]
+  );
+
+  // Alterna sincronização ao vivo em tempo real para uma aba espelhada de aluno
+  const handleToggleStudentMirrorLive = useCallback((tabId: string) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== tabId || !t.studentMirror) return t;
+        return {
+          ...t,
+          studentMirror: {
+            ...t.studentMirror,
+            isLiveSync: !t.studentMirror.isLiveSync,
+          },
+        };
+      })
+    );
+  }, []);
+
+  const handleReturnToTeacherPanel = useCallback(() => {
+    setActiveView('teacher-panel');
+  }, [setActiveView]);
+
+  // Ouve em tempo real todas as abas de alunos espelhadas no SQLEditor com sync ativo
+  const liveMirrorTargetsKey = useMemo(() => {
+    const pairs = new Set<string>();
+    tabs.forEach((t) => {
+      if (t.studentMirror?.isLiveSync && t.studentMirror.classId && t.studentMirror.studentUid) {
+        pairs.add(`${t.studentMirror.classId}::${t.studentMirror.studentUid}`);
+      }
+    });
+    return Array.from(pairs).sort().join('|');
+  }, [tabs]);
+
+  useEffect(() => {
+    if (!liveMirrorTargetsKey) return;
+    const targets = liveMirrorTargetsKey.split('|').filter(Boolean);
+    const unsubs: Array<() => void> = [];
+
+    targets.forEach((pair) => {
+      const [classId, studentUid] = pair.split('::');
+      if (!classId || !studentUid) return;
+      const expectedTabId = `student-mirror-${classId}-${studentUid}`;
+
+      const unsub = subscribeToOwnLiveState(classId, studentUid, (state) => {
+        if (!state) return;
+        setTabs((prev) =>
+          prev.map((t) => {
+            if (t.id !== expectedTabId || !t.studentMirror?.isLiveSync) return t;
+            const nextTitle = formatMirrorTabTitle(
+              t.studentMirror.studentName,
+              t.studentMirror.studentEmail,
+              state.activeTabTitle
+            );
+            const nextContent = state.activeTabContent ?? t.content;
+            return {
+              ...t,
+              title: nextTitle,
+              content: nextContent,
+              studentMirror: {
+                ...t.studentMirror,
+                sourceTabTitle: state.activeTabTitle,
+                activeDatabase: state.activeDatabase,
+                lastUpdatedAt: state.updatedAt || new Date().toISOString(),
+              },
+            };
+          })
+        );
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [liveMirrorTargetsKey]);
 
   // 3. Entregar Avaliação (Aluno envia todas as abas atuais)
   const handleDeliverExam = useCallback(async () => {
@@ -1867,6 +2214,8 @@ export const App: React.FC = () => {
     classExams,
     onDeliverExam: handleDeliverExam,
     onScriptSaved: handleScriptSaved,
+    onToggleStudentMirrorLive: handleToggleStudentMirrorLive,
+    onReturnToTeacherPanel: handleReturnToTeacherPanel,
   };
 
   return (
@@ -2044,7 +2393,10 @@ export const App: React.FC = () => {
           ) : activeView === 'admin-panel' ? (
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'teacher-panel' ? (
-            <TeacherPanelView onBackToWorkspace={() => setActiveView('workspace')} />
+            <TeacherPanelView
+              onBackToWorkspace={() => setActiveView('workspace')}
+              onOpenStudentInSqlEditor={handleOpenStudentInSqlEditor}
+            />
           ) : activeView === 'my-class' ? (
             <MyClassView
               classItem={activeClassItem}
@@ -2478,6 +2830,61 @@ export const App: React.FC = () => {
         }}
         onRefreshUserScripts={reloadAllScripts}
       />
+
+      {/* Toast Imediato de Admissão Automática em Turma (Aluno sem precisar de F5) */}
+      {classJoinedToast && (
+        <div
+          data-sql-app-portal="true"
+          className="fixed top-16 right-4 z-[99990] max-w-sm w-[calc(100%-2rem)] bg-[var(--bg-surface)] border-2 border-[#FFE600] rounded-2xl p-4 shadow-[0_0_28px_rgba(255,230,0,0.35)] animate-in fade-in duration-200"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#FFE600]/15 border border-[#FFE600]/50 text-[#FFE600] flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[22px]">school</span>
+            </div>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-black text-[var(--text-primary)]">
+                  Você foi inserido(a) em uma turma!
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setClassJoinedToast(null)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer shrink-0"
+                  title="Fechar aviso"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                O professor adicionou você na turma{' '}
+                <strong className="text-[#FFE600]">{classJoinedToast.className}</strong>
+                {classJoinedToast.classCode ? ` (${classJoinedToast.classCode})` : ''}. Clique na sua foto de perfil para acessar{' '}
+                <strong>Minha Classe</strong>.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveView('my-class');
+                    setClassJoinedToast(null);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FF6B00] to-[#FFE600] text-black font-bold text-[11px] shadow cursor-pointer hover:brightness-105 transition-all flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">groups</span>
+                  <span>Ir para Minha Classe</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassJoinedToast(null)}
+                  className="px-2.5 py-1.5 rounded-xl border border-[var(--border-color)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  Depois
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
