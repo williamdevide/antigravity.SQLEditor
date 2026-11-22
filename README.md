@@ -8,7 +8,7 @@
 ![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![Storage](https://img.shields.io/badge/Storage-IndexedDB%20%2B%20Dexie%20%2B%20AlaSQL-FF6B00?style=for-the-badge&logo=mysql&logoColor=white)
-![Version](https://img.shields.io/badge/Version-v3.2.9-00E676?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v4.0.0-00E676?style=for-the-badge)
 ![SENAI](https://img.shields.io/badge/Parceria-SENAI%20Ourinhos-D32F2F?style=for-the-badge)
 ![Milkfed](https://img.shields.io/badge/Empresa-Milkfed%20Devs%20%26%26%20Reqs%20Lords-6A1B9A?style=for-the-badge)
 ![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?style=for-the-badge&logo=vercel&logoColor=white)
@@ -32,7 +32,7 @@
 
 ## 💡 Inovações & Inspirações Arquiteturais (LiveSchema & DrawDB)
 
-O **SQLEditor v3.2** foi projetado para superar a fragmentação de ferramentas no aprendizado de banco de dados, unificando os conceitos mais modernos do mercado em uma experiência pedagógica contínua:
+O **SQLEditor v4.0** foi projetado para superar a fragmentação de ferramentas no aprendizado de banco de dados, unificando os conceitos mais modernos do mercado em uma experiência pedagógica contínua:
 
 * ⚡ **Inspirado no LiveSchema (Split-View Reativo Bidirecional):**
   * Sincronização em tempo real entre o código DDL escrito no editor e o diagrama visual.
@@ -67,7 +67,7 @@ Este projeto foi concebido, arquitetado e evoluído utilizando os agentes autôn
 
 ## 🇧🇷 Português
 
-### 📖 Visão Geral da Central (v3.2.4)
+### 📖 Visão Geral da Central (v4.0.0)
 O **SQLEditor** é uma plataforma SPA educacional criada pela **Milkfed Devs && Reqs Lords** em cooperação com os instrutores e alunos do **SENAI Ourinhos**. A ferramenta cobre a jornada completa da disciplina de Banco de Dados:
 
 ```
@@ -157,7 +157,7 @@ No Windows, você também pode dar duplo clique no arquivo [`executar.bat`](file
 
 ## 🇺🇸 English
 
-### 📖 Platform Overview (v3.2.4)
+### 📖 Platform Overview (v4.0.0)
 **SQLEditor** is an all-in-one educational Single Page Application (SPA) developed by **Milkfed Devs && Reqs Lords** in partnership with **SENAI Ourinhos**. The platform is designed to guide students and professionals through every practical stage of Relational Database Systems directly in the browser:
 
 ```

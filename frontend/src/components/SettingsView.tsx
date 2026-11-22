@@ -187,7 +187,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               Central de Configurações & Preferências
             </h2>
             <span className="px-2 py-0.5 rounded-full bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/30 text-[10px] font-mono font-bold">
-              4 Pilares • v3.2
+              4 Pilares • v4.0
             </span>
           </div>
           <p className="text-xs text-[var(--text-secondary)] mt-1">

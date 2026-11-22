@@ -4129,6 +4129,22 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Adicionada a aba **`Disponíveis ({availableStudents.length})`** com busca instantânea por nome, e-mail, matrícula ou curso.
    - Suporte a **inserção individual** (botão "Inserir" em cada aluno) e **inserção em lote via checkboxes** (selecionar individualmente ou "selecionar todos filtrados" + botão **"Inserir Selecionados (N)"**), sincronizando automaticamente as abas e contadores após cada operação.
 
+### Prompt 34
+```text
+/agente-orquestrador /grill-me /goal publique as atualizações com a nova numeração de versão
+```
+
+### Decisões (Grill-Me) e Ações Executadas:
+1. **Numeração de Versão Selecionada:** **`v4.0.0`** (Novo marco Major do SQLEditor).
+2. **Sincronização Completa da Versão:**
+   - `frontend/src/config/version.ts`: `APP_VERSION = '4.0.0'`.
+   - `frontend/package.json`: `"version": "4.0.0"`.
+   - `frontend/src/components/LandingPageView.tsx`: Nova entrada `v4.0.0` (`isLatest: true`) no topo de `CHANGELOG_HISTORY` consolidando todos os recursos de Classes, Chat em Tempo Real, Visibilidade por Modo, Anti-Trapaça, Monitoramento Ao Vivo, Correção Automática, Aba "Disponíveis" e correções SQL (`REQ-27` / `REQ-29`).
+   - `frontend/src/components/MainMenuDropdown.tsx`, `frontend/src/components/SettingsView.tsx` e `README.md`: Atualizados para `v4.0` / `v4.0.0`.
+3. **Build & Publicação:**
+   - Build validado com `npm --prefix frontend run build` (código 0) e publicado em `origin/main` no GitHub.
+
+
 
 
 

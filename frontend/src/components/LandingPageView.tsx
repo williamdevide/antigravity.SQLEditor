@@ -29,12 +29,28 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v4.0.0',
+    date: '22/11/2026',
+    title:
+      'Ecossistema Completo de Classes em Tempo Real, Chat, Anti-Trapaça, Monitoramento Ao Vivo, Correção Automática & Alunos Disponíveis',
+    isLatest: true,
+    tag: 'Lançamento Atual • Marco Major v4.0.0',
+    items: [
+      'Identidade Visual de Classe, Sininho Verde & Menu Rápido: Alunos vinculados recebem borda dourada neon no avatar, notificação em tempo real via sininho verde pulsante ao receber mensagens e Menu Rápido ("Meu Perfil" e "Minha Classe").',
+      'Tela "Minha Classe" & Comunicação Ao Vivo: Visualização da turma, professor e colegas com indicador Online/Offline, Chat Geral da Turma + Mensagens Diretas (1-para-1), compartilhamento de scripts SQL com abertura direta no editor e aba "Minhas Notas".',
+      'Governança Docente & Visibilidade em Camadas: Controles instantâneos de Chat e Compartilhamento de Scripts (ON/OFF), auditoria de todas as mensagens trafegadas, botão de Olho Verde (Modo Sala de Aula), Olho Roxo (Modo Avaliação), opção de Modo Normal, categoria "Solução de Aula" e menu inteligente de Nova Aba.',
+      '4ª Aba "Disponíveis" em Minhas Turmas: Listagem automática de alunos sem turma com busca, inserção individual e checkboxes de seleção múltipla para matrícula em lote.',
+      'Sistema Anti-Trapaça, Monitoramento "Ver Tela" & Correção Automática: Bloqueio de copiar/colar/DevTools, detecção imediata de saída de aba/janela e extensões de IA injetadas, espelhamento ao vivo do código do aluno, congelamento remoto do editor e correção automática com Gabarito SQL e publicação de notas.',
+      'Evolução do Motor SQL (db_ecommerce): Correção do pré-processador para cláusulas ORDER BY COUNT(...) DESC (REQ-27) e suporte transparente a ramos UNION com ORDER BY / LIMIT (REQ-29).',
+    ],
+  },
+  {
     version: 'v3.2.9',
     date: '12/11/2026',
     title:
       'Salvar Direto no Perfil (Ctrl+S), "Salvar Como no Perfil..." no Menu Suspenso e Limpeza da Barra de Abas',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco v3.2.9',
+    isLatest: false,
+    tag: 'Versão Anterior',
     items: [
       'Remoção do Botão Fixo na Barra de Abas: O botão redundante "Salvar no Perfil" foi removido da barra superior de abas, mantendo o workspace limpo e minimalista.',
       'Ações Contextuais de Salvamento: Disponibilização das opções "Salvar no Perfil" (Ctrl+S) e "Salvar Como no Perfil..." no menu suspenso do editor e no clique com botão direito da aba.',

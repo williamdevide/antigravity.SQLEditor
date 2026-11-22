@@ -177,7 +177,7 @@ export const MainMenuDropdown: React.FC<MainMenuDropdownProps> = ({
           {/* ========================================================== */}
           <div className="px-3 py-1.5 text-[10px] font-bold text-[var(--accent-yellow)] uppercase tracking-wider border-b border-[var(--border-color)]/60 flex items-center justify-between">
             <span>🎓 Jornada da Disciplina</span>
-            <span className="text-[9px] font-mono text-[var(--text-muted)]">v3.2</span>
+            <span className="text-[9px] font-mono text-[var(--text-muted)]">v4.0</span>
           </div>
 
           {/* 1. Galeria & Prática Guiada */}
