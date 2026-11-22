@@ -4,10 +4,12 @@ import {
   type ThemeMode,
   type FontTheme,
   type SavedScriptItem,
+  type ClassroomMode,
   THEME_OPTIONS,
 } from '../types';
 import { NewTabDropdown } from './NewTabDropdown';
 import { MainMenuDropdown, type VisiblePanels } from './MainMenuDropdown';
+import { ProfileAvatarButton } from './ProfileAvatarButton';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { APP_VERSION } from '../config/version';
 import { useAuth } from '../context/AuthContext';
@@ -26,8 +28,12 @@ interface HeaderProps {
   onSelectSavedScript?: (script: SavedScriptItem) => void;
   classExamples?: SavedScriptItem[];
   classExercises?: SavedScriptItem[];
+  classSolutions?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
+  classroomMode?: ClassroomMode;
   isExamModeActive?: boolean;
+  unreadClassMessagesCount?: number;
+  activeClassName?: string;
   onClearEditor: () => void;
   onCloseAllTabs: () => void;
   onResetDb: () => void;
@@ -57,8 +63,12 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectSavedScript,
   classExamples = [],
   classExercises = [],
+  classSolutions = [],
   classExams = [],
+  classroomMode = 'normal',
   isExamModeActive = false,
+  unreadClassMessagesCount = 0,
+  activeClassName = '',
   onClearEditor,
   onCloseAllTabs,
   onResetDb,
@@ -311,7 +321,9 @@ export const Header: React.FC<HeaderProps> = ({
                 onSelectSavedScript={onSelectSavedScript}
                 classExamples={classExamples}
                 classExercises={classExercises}
+                classSolutions={classSolutions}
                 classExams={classExams}
+                classroomMode={classroomMode}
                 isExamModeActive={isExamModeActive}
                 align="left"
                 triggerButton={({ isOpen, toggle }) => (
@@ -441,32 +453,17 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-1.5 pl-1.5 border-l border-[var(--border-color)]">
           {user ? (
             <div className="flex items-center gap-1.5">
-              {/* Botão de Perfil: apenas foto ou letra inicial (sem texto do nome) */}
-              <button
-                type="button"
-                onClick={() => onViewChange('profile')}
-                className="w-7 h-7 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] flex items-center justify-center p-0.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0 overflow-hidden"
-                title={`Perfil: ${userProfile?.displayName || user.displayName || user.email} (${
-                  isAdmin
-                    ? 'Administrador'
-                    : isProfessor || userProfile?.role === 'professor'
-                    ? 'Professor'
-                    : 'Aluno'
-                })`}
-                aria-label="Acessar Meu Perfil"
-              >
-                {user.photoURL || userProfile?.photoURL ? (
-                  <img
-                    src={(userProfile?.photoURL || user.photoURL) || undefined}
-                    alt={userProfile?.displayName || user.displayName || 'Avatar'}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="w-full h-full rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] text-black text-[10px] font-black flex items-center justify-center shadow-inner">
-                    {(userProfile?.displayName || user.displayName || user.email || 'U')[0].toUpperCase()}
-                  </span>
-                )}
-              </button>
+              {/* Botão de Perfil / Classe (borda dourada neon + sininho verde + menu rápido) */}
+              <ProfileAvatarButton
+                user={user}
+                userProfile={userProfile}
+                isAdmin={isAdmin}
+                isProfessor={isProfessor}
+                onViewChange={onViewChange}
+                unreadClassMessagesCount={unreadClassMessagesCount}
+                size="sm"
+                activeClassName={activeClassName}
+              />
 
               <button
                 type="button"

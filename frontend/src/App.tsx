@@ -16,10 +16,12 @@ import { AboutView } from './components/AboutView';
 import { UserProfileView } from './components/UserProfileView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { TeacherPanelView } from './components/TeacherPanelView';
+import { MyClassView } from './components/MyClassView';
 import { AuthModal } from './components/AuthModal';
 import { NavigationHubModal } from './components/NavigationHubModal';
 import { PostExamRecoveryModal } from './components/PostExamRecoveryModal';
 import { useAuth } from './context/AuthContext';
+import { useExamAntiCheat } from './hooks/useExamAntiCheat';
 import { LandingPageView } from './components/LandingPageView';
 import { ContextMenu } from './components/ContextMenu';
 import { dbEngine, type DatabaseLoadProgress } from './services/dbEngine';
@@ -27,6 +29,13 @@ import { dbStorage } from './services/storage';
 import { reviewSqlQuery, resolveReviewTargetRange, applySuggestedSqlToScript } from './services/sqlReviewer';
 import { getAvailableSolutions, type SolutionItem } from './services/scriptsLoader';
 import { subscribeToClass, getClassesByTeacher, getAllClasses } from './services/classService';
+import {
+  updateClassPresence,
+  subscribeToClassMessages,
+  reportExamAlert,
+  syncStudentLiveState,
+  subscribeToOwnLiveState,
+} from './services/classroomRealtimeService';
 import {
   getUserSavedScripts,
   getClassScripts,
@@ -65,6 +74,8 @@ import type {
   ClassItem,
   SavedScriptItem,
   ClassroomMode,
+  ClassMessageItem,
+  ExamAlertType,
 } from './types';
 
 const INITIAL_TABS: TabItem[] = [
@@ -102,6 +113,7 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
   if (raw === 'perfil' || raw === 'profile') return 'profile';
   if (raw === 'admin' || raw === 'admin-panel' || raw === 'administrador') return 'admin-panel';
   if (raw === 'turmas' || raw === 'teacher-panel' || raw === 'professor') return 'teacher-panel';
+  if (raw === 'minha-classe' || raw === 'my-class' || raw === 'classe') return 'my-class';
   if (raw === 'landing' || raw === 'home') return 'landing';
   return null;
 }
@@ -160,15 +172,23 @@ export const App: React.FC = () => {
         window.location.hash = '#admin';
       } else if (view === 'teacher-panel') {
         window.location.hash = '#turmas';
+      } else if (view === 'my-class') {
+        window.location.hash = '#minha-classe';
       } else if (view === 'landing') {
         history.replaceState(null, '', window.location.pathname + window.location.search);
       }
     } catch (_) {}
   }, []);
 
-  // Se o usuário deslogar enquanto estiver em telas restritas (perfil, admin, turmas), redireciona imediatamente para a landing page
+  // Se o usuário deslogar enquanto estiver em telas restritas (perfil, minha classe, admin, turmas), redireciona imediatamente para a landing page
   useEffect(() => {
-    if (!user && (activeView === 'profile' || activeView === 'admin-panel' || activeView === 'teacher-panel')) {
+    if (
+      !user &&
+      (activeView === 'profile' ||
+        activeView === 'my-class' ||
+        activeView === 'admin-panel' ||
+        activeView === 'teacher-panel')
+    ) {
       setActiveView('landing');
     }
   }, [user, activeView, setActiveView]);
@@ -238,16 +258,23 @@ export const App: React.FC = () => {
   tabsRef.current = tabs;
 
   // Estados de Sala de Aula, Modo Avaliação e Materiais/Scripts Salvos
+  const [activeClassItem, setActiveClassItem] = useState<ClassItem | null>(null);
   const [activeClassroomMode, setActiveClassroomMode] = useState<ClassroomMode>('normal');
   const [activeClassName, setActiveClassName] = useState<string>('');
   const [isExamModeActive, setIsExamModeActive] = useState<boolean>(false);
   const isExamModeActiveRef = useRef<boolean>(false);
   const [teacherClasses, setTeacherClasses] = useState<ClassItem[]>([]);
   const [savedScripts, setSavedScripts] = useState<SavedScriptItem[]>([]);
-  const [classExamples, setClassExamples] = useState<SavedScriptItem[]>([]);
-  const [classExercises, setClassExercises] = useState<SavedScriptItem[]>([]);
-  const [classExams, setClassExams] = useState<SavedScriptItem[]>([]);
-  const [teacherClassDbs, setTeacherClassDbs] = useState<SavedScriptItem[]>([]);
+  const [rawClassScripts, setRawClassScripts] = useState<SavedScriptItem[]>([]);
+
+  // Comunicação em Tempo Real, Anti-Trapaça e Congelamento Remoto
+  const [classMessages, setClassMessages] = useState<ClassMessageItem[]>([]);
+  const [antiCheatWarning, setAntiCheatWarning] = useState<{ message: string; count: number } | null>(null);
+  const violationCountRef = useRef<number>(0);
+  const [frozenState, setFrozenState] = useState<{ isFrozen: boolean; message: string }>({
+    isFrozen: false,
+    message: '',
+  });
 
   // Modal de Recuperação pós-avaliação
   const [isPostExamRecoveryOpen, setIsPostExamRecoveryOpen] = useState<boolean>(false);
@@ -864,6 +891,66 @@ export const App: React.FC = () => {
     setActiveTabId(keepId);
   }, []);
 
+  // Filtragem dinâmica dos materiais da classe conforme o modo operacional e os olhos de visibilidade
+  const isStudentInClass = Boolean(userProfile?.role === 'aluno' && userProfile?.classId && userProfile?.classStatus === 'approved');
+
+  const classExamples = useMemo(() => {
+    return rawClassScripts.filter((s) => {
+      if (s.category !== 'example') return false;
+      if (!isStudentInClass) return true;
+      if (activeClassroomMode === 'exam') return Boolean(s.visibleInExam);
+      if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
+      return Boolean(s.visibleInNormal);
+    });
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+  const classExercises = useMemo(() => {
+    return rawClassScripts.filter((s) => {
+      if (s.category !== 'exercise') return false;
+      if (!isStudentInClass) return true;
+      if (activeClassroomMode === 'exam') return false;
+      if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
+      return Boolean(s.visibleInNormal);
+    });
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+  const classSolutions = useMemo(() => {
+    return rawClassScripts.filter((s) => {
+      if (s.category !== 'solution') return false;
+      if (!isStudentInClass) return true;
+      if (activeClassroomMode === 'exam') return false;
+      if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
+      return Boolean(s.visibleInNormal);
+    });
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+  const classExams = useMemo(() => {
+    return rawClassScripts.filter((s) => {
+      if (s.category !== 'exam') return false;
+      if (!isStudentInClass) return true;
+      if (activeClassroomMode === 'exam') return s.visibleInExam !== false;
+      return Boolean(s.visibleInNormal);
+    });
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+  const teacherClassDbs = useMemo(() => {
+    return rawClassScripts.filter((s) => {
+      if (s.category !== 'class_database') return false;
+      if (!isStudentInClass) return true;
+      if (activeClassroomMode === 'exam') return Boolean(s.visibleInExam);
+      if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
+      return Boolean(s.visibleInNormal);
+    });
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+  const examDbScriptsForPreset = useMemo(() => {
+    return rawClassScripts.filter(
+      (s) =>
+        (s.category === 'class_database' && Boolean(s.visibleInExam)) ||
+        (s.category === 'exam' && s.visibleInExam !== false)
+    );
+  }, [rawClassScripts]);
+
   // Carregar Preset do Schema Explorer
   const handleLoadPreset = useCallback(async (
     preset: DatabasePreset,
@@ -879,7 +966,7 @@ export const App: React.FC = () => {
       if (preset === 'teacher_class') {
         effectiveCustomScripts = teacherClassDbs.map(s => ({ title: s.title, content: s.content }));
       } else if (preset === 'exam') {
-        effectiveCustomScripts = classExams.map(s => ({ title: s.title, content: s.content }));
+        effectiveCustomScripts = examDbScriptsForPreset.map(s => ({ title: s.title, content: s.content }));
       }
     }
 
@@ -928,7 +1015,7 @@ export const App: React.FC = () => {
       setLoadingProgress(null);
       setIsClassLoading(false);
     }, 1800);
-  }, [refreshSchemas, teacherClassDbs, classExams]);
+  }, [refreshSchemas, teacherClassDbs, examDbScriptsForPreset]);
 
   const handleReloadAllDatabases = useCallback(async () => {
     const preset = dbEngine.getPreset();
@@ -960,10 +1047,7 @@ export const App: React.FC = () => {
   const reloadAllScripts = useCallback(async () => {
     if (!user) {
       setSavedScripts([]);
-      setClassExamples([]);
-      setClassExercises([]);
-      setClassExams([]);
-      setTeacherClassDbs([]);
+      setRawClassScripts([]);
       return;
     }
 
@@ -985,10 +1069,9 @@ export const App: React.FC = () => {
       const classId = userProfile?.classId;
       if (classId) {
         const allClassScripts = await getClassScripts(classId);
-        setClassExamples(allClassScripts.filter(s => s.category === 'example'));
-        setClassExercises(allClassScripts.filter(s => s.category === 'exercise'));
-        setClassExams(allClassScripts.filter(s => s.category === 'exam'));
-        setTeacherClassDbs(allClassScripts.filter(s => s.category === 'class_database'));
+        setRawClassScripts(allClassScripts);
+      } else {
+        setRawClassScripts([]);
       }
     } catch (err) {
       console.warn('[reloadAllScripts Warning]', err);
@@ -1010,13 +1093,16 @@ export const App: React.FC = () => {
     reloadAllScripts();
   }, [reloadAllScripts]);
 
-  // 2. Ouve alterações da turma do aluno em tempo real (Modo Sala de Aula / Modo Avaliação)
+  // 2. Ouve alterações da turma do aluno em tempo real (Modo Sala de Aula / Modo Avaliação / Chat / Scripts)
   useEffect(() => {
     const classId = userProfile?.classId;
+    const isApprovedMember = Boolean(classId && userProfile?.classStatus === 'approved');
     const isStudent = userProfile?.role === 'aluno';
 
-    if (!classId || !isStudent) {
+    if (!classId || !isApprovedMember) {
+      setActiveClassItem(null);
       setActiveClassroomMode('normal');
+      setActiveClassName('');
       setIsExamModeActive(false);
       isExamModeActiveRef.current = false;
       return;
@@ -1024,9 +1110,22 @@ export const App: React.FC = () => {
 
     const unsubscribe = subscribeToClass(classId, async (classData) => {
       if (!classData) return;
+      setActiveClassItem(classData);
+      setActiveClassName(classData.name || '');
+
+      // Recarrega scripts da turma para refletir mudanças imediatas nos olhos de visibilidade
+      const latestClassScripts = await getClassScripts(classId);
+      setRawClassScripts(latestClassScripts);
+
+      if (!isStudent) {
+        setActiveClassroomMode('normal');
+        setIsExamModeActive(false);
+        isExamModeActiveRef.current = false;
+        return;
+      }
+
       const newMode: ClassroomMode = classData.classroomMode || 'normal';
       setActiveClassroomMode(newMode);
-      setActiveClassName(classData.name || '');
 
       const wasInExam = isExamModeActiveRef.current;
       const willBeInExam = newMode === 'exam';
@@ -1060,9 +1159,11 @@ export const App: React.FC = () => {
         setTabs([]);
         setActiveTabId('');
 
-        // C. Carrega scripts oficiais de prova da turma
+        // C. Carrega scripts oficiais de prova visíveis na turma
         try {
-          const examScripts = await getClassScripts(classData.id, 'exam');
+          const examScripts = latestClassScripts.filter(
+            (s) => s.category === 'exam' && s.visibleInExam !== false
+          );
           if (examScripts.length > 0) {
             const newExamTabs: TabItem[] = examScripts.map((s) => ({
               id: s.id,
@@ -1075,7 +1176,7 @@ export const App: React.FC = () => {
             const defaultExamTab: TabItem = {
               id: `tab-exam-${Date.now()}`,
               title: 'avaliacao_respostas.sql',
-              content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e salve no seu perfil com Ctrl+S.\n\n`,
+              content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e entregue ao finalizar.\n\n`,
             };
             setTabs([defaultExamTab]);
             setActiveTabId(defaultExamTab.id);
@@ -1084,12 +1185,18 @@ export const App: React.FC = () => {
           console.warn('[Exam Scripts Load Error]', loadErr);
         }
 
-        // D. Carrega BDs de avaliação
+        // D. Carrega BDs de avaliação (class_database visíveis na prova + exam scripts)
         try {
-          const examDbScripts = (await getClassScripts(classData.id, 'exam')).map(s => ({
-            title: s.title,
-            content: s.content,
-          }));
+          const examDbScripts = latestClassScripts
+            .filter(
+              (s) =>
+                (s.category === 'class_database' && Boolean(s.visibleInExam)) ||
+                (s.category === 'exam' && s.visibleInExam !== false)
+            )
+            .map((s) => ({
+              title: s.title,
+              content: s.content,
+            }));
           await handleLoadPreset('exam', examDbScripts);
         } catch (presetErr) {
           console.warn('[Exam Preset Load Error]', presetErr);
@@ -1116,7 +1223,162 @@ export const App: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [user, userProfile?.classId, userProfile?.role, userProfile?.displayName, userProfile?.email, handleLoadPreset]);
+  }, [
+    user,
+    userProfile?.classId,
+    userProfile?.classStatus,
+    userProfile?.role,
+    userProfile?.displayName,
+    userProfile?.email,
+    handleLoadPreset,
+  ]);
+
+  // 2.1 Heartbeat de presença online na turma (aluno ou professor)
+  useEffect(() => {
+    if (!user || !userProfile) return;
+    const targetClassIds = new Set<string>();
+    if (userProfile.classId && userProfile.classStatus === 'approved') {
+      targetClassIds.add(userProfile.classId);
+    }
+    if (userProfile.role === 'professor' || userProfile.role === 'admin') {
+      teacherClasses.forEach((c) => targetClassIds.add(c.id));
+    }
+    if (targetClassIds.size === 0) return;
+
+    const sendHeartbeat = (online: boolean) => {
+      targetClassIds.forEach((cId) => {
+        updateClassPresence({
+          classId: cId,
+          uid: user.uid,
+          displayName: userProfile.displayName || user.displayName || 'Usuário',
+          email: userProfile.email || user.email || '',
+          role: userProfile.role || 'aluno',
+          photoURL: userProfile.photoURL || user.photoURL || '',
+          isOnline: online,
+          activeView,
+        });
+      });
+    };
+
+    sendHeartbeat(true);
+    const interval = window.setInterval(() => sendHeartbeat(true), 25000);
+    const handleUnload = () => sendHeartbeat(false);
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('beforeunload', handleUnload);
+      sendHeartbeat(false);
+    };
+  }, [user, userProfile, teacherClasses, activeView]);
+
+  // 2.2 Escuta mensagens da classe para atualizar sininho verde na Header/Landing
+  useEffect(() => {
+    if (!user || !userProfile?.classId || userProfile?.classStatus !== 'approved') {
+      setClassMessages([]);
+      return;
+    }
+    const unsub = subscribeToClassMessages(userProfile.classId, setClassMessages);
+    return () => unsub();
+  }, [user, userProfile?.classId, userProfile?.classStatus]);
+
+  const unreadClassMessagesCount = useMemo(() => {
+    if (!user || classMessages.length === 0) return 0;
+    return classMessages.filter((m) => {
+      if (m.senderUid === user.uid) return false;
+      if ((m.readBy || []).includes(user.uid)) return false;
+      if (isExamModeActive && activeClassItem?.teacherId) {
+        return m.senderUid === activeClassItem.teacherId && m.recipientUid === user.uid;
+      }
+      return m.recipientUid === 'all' || m.recipientUid === user.uid;
+    }).length;
+  }, [user, classMessages, isExamModeActive, activeClassItem?.teacherId]);
+
+  // 2.3 Sistema Anti-Trapaça durante Modo Avaliação (Aluno)
+  const handleAntiCheatAlert = useCallback(
+    (type: ExamAlertType, details: string, severityMessage: string) => {
+      if (!user || !userProfile?.classId) return;
+      violationCountRef.current += 1;
+      setAntiCheatWarning({
+        message: severityMessage,
+        count: violationCountRef.current,
+      });
+      reportExamAlert({
+        classId: userProfile.classId,
+        studentUid: user.uid,
+        studentName: userProfile.displayName || user.displayName || 'Aluno',
+        studentEmail: userProfile.email || user.email || '',
+        type,
+        details,
+      });
+    },
+    [user, userProfile]
+  );
+
+  useExamAntiCheat({
+    enabled: Boolean(
+      user &&
+        userProfile?.role === 'aluno' &&
+        userProfile?.classId &&
+        userProfile?.classStatus === 'approved' &&
+        isExamModeActive
+    ),
+    onAlert: handleAntiCheatAlert,
+  });
+
+  // 2.4 Congelamento remoto pelo professor + Espelhamento ao vivo do Workspace do aluno
+  useEffect(() => {
+    if (
+      !user ||
+      userProfile?.role !== 'aluno' ||
+      !userProfile?.classId ||
+      userProfile?.classStatus !== 'approved'
+    ) {
+      setFrozenState({ isFrozen: false, message: '' });
+      return;
+    }
+    const unsub = subscribeToOwnLiveState(userProfile.classId, user.uid, (state) => {
+      setFrozenState({
+        isFrozen: Boolean(state?.isFrozen),
+        message: state?.frozenMessage || '',
+      });
+    });
+    return () => unsub();
+  }, [user, userProfile?.role, userProfile?.classId, userProfile?.classStatus]);
+
+  useEffect(() => {
+    if (
+      !user ||
+      userProfile?.role !== 'aluno' ||
+      !userProfile?.classId ||
+      userProfile?.classStatus !== 'approved'
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const currentTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+      const latestResult = results.length > 0 ? results[results.length - 1] : undefined;
+      syncStudentLiveState({
+        classId: userProfile.classId!,
+        studentUid: user.uid,
+        studentName: userProfile.displayName || user.displayName || 'Aluno',
+        studentEmail: userProfile.email || user.email || '',
+        activeTabTitle: currentTab?.title || 'script.sql',
+        activeTabContent: currentTab?.content || '',
+        tabs: tabs.map((t) => ({ id: t.id, title: t.title, content: t.content })),
+        activeDatabase,
+        lastQueryStatus: latestResult?.status,
+        lastQueryError: latestResult?.errorMessage,
+        lastQuerySummary:
+          latestResult?.status === 'success'
+            ? `${latestResult.rows?.length ?? 0} registro(s) / ${latestResult.statement.slice(0, 60)}`
+            : undefined,
+        violationCount: violationCountRef.current,
+      });
+    }, 1600);
+
+    return () => window.clearTimeout(timer);
+  }, [user, userProfile, tabs, activeTabId, activeDatabase, results]);
 
   // 3. Entregar Avaliação (Aluno envia todas as abas atuais)
   const handleDeliverExam = useCallback(async () => {
@@ -1593,12 +1855,15 @@ export const App: React.FC = () => {
     user,
     userProfile,
     teacherClasses,
+    classroomMode: activeClassroomMode,
     isExamModeActive,
+    isEditorFrozen: frozenState.isFrozen,
     classroomName: activeClassName,
     savedScripts,
     onSelectSavedScript: (script: SavedScriptItem) => handleNewTab(script.content, script.title, script.id),
     classExamples,
     classExercises,
+    classSolutions,
     classExams,
     onDeliverExam: handleDeliverExam,
     onScriptSaved: handleScriptSaved,
@@ -1617,6 +1882,8 @@ export const App: React.FC = () => {
             onOpenView={(view) => setActiveView(view)}
             theme={theme}
             onToggleTheme={handleToggleTheme}
+            unreadClassMessagesCount={unreadClassMessagesCount}
+            activeClassName={activeClassName}
             onInstantiateTemplate={(tplId) => {
               const found = solutions.find((s) => s.id === tplId);
               if (found) {
@@ -1644,8 +1911,12 @@ export const App: React.FC = () => {
             onSelectSavedScript={(script: SavedScriptItem) => handleNewTab(script.content, script.title, script.id)}
             classExamples={classExamples}
             classExercises={classExercises}
+            classSolutions={classSolutions}
             classExams={classExams}
+            classroomMode={activeClassroomMode}
             isExamModeActive={isExamModeActive}
+            unreadClassMessagesCount={unreadClassMessagesCount}
+            activeClassName={activeClassName}
             onClearEditor={handleClearEditor}
             onCloseAllTabs={handleCloseAllTabs}
             onResetDb={handleResetDb}
@@ -1774,6 +2045,14 @@ export const App: React.FC = () => {
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'teacher-panel' ? (
             <TeacherPanelView onBackToWorkspace={() => setActiveView('workspace')} />
+          ) : activeView === 'my-class' ? (
+            <MyClassView
+              classItem={activeClassItem}
+              onBackToWorkspace={() => setActiveView('workspace')}
+              onOpenScriptInEditor={(title, content) => handleNewTab(content, title)}
+              openTabs={tabs}
+              savedScripts={savedScripts}
+            />
           ) : (
             /* Workspace Principal (Laboratório SQL) */
             <main className="flex-1 flex flex-row overflow-hidden relative">
@@ -2106,8 +2385,61 @@ export const App: React.FC = () => {
         currentPreset={currentPreset}
         classroomMode={activeClassroomMode}
         hasTeacherClassDbs={teacherClassDbs.length > 0}
-        hasExamDbs={classExams.length > 0}
+        hasExamDbs={examDbScriptsForPreset.length > 0}
       />
+
+      {/* Overlay Bloqueante: Editor Congelado Remotamente pelo Professor */}
+      {frozenState.isFrozen && (
+        <div
+          data-sql-app-portal="true"
+          className="fixed inset-0 z-[999998] bg-black/85 backdrop-blur-md flex items-center justify-center p-6 text-center animate-in fade-in duration-150"
+        >
+          <div className="max-w-md w-full bg-[var(--bg-surface)] border-2 border-rose-500 rounded-3xl p-8 space-y-4 shadow-[0_0_50px_rgba(244,63,94,0.4)]">
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/20 border border-rose-500/50 text-rose-400 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-[36px] animate-pulse">ac_unit</span>
+            </div>
+            <h2 className="text-lg font-black text-white">Editor Temporariamente Bloqueado</h2>
+            <p className="text-xs text-rose-200 leading-relaxed">
+              {frozenState.message ||
+                'O professor pausou temporariamente a edição do seu laboratório para verificação pedagógica.'}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Aguarde o professor liberar novamente o acesso no painel da turma.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Severo Anti-Trapaça (Modo Avaliação) */}
+      {antiCheatWarning && isExamModeActive && (
+        <div
+          data-sql-app-portal="true"
+          className="fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 text-center animate-in fade-in duration-150"
+        >
+          <div className="max-w-lg w-full bg-[#190B10] border-2 border-red-500 rounded-3xl p-7 space-y-4 shadow-[0_0_60px_rgba(239,68,68,0.5)]">
+            <div className="w-16 h-16 rounded-full bg-red-500/20 border-2 border-red-500 text-red-400 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-[36px] animate-bounce">gpp_maybe</span>
+            </div>
+            <div className="space-y-1">
+              <span className="px-3 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] font-black uppercase tracking-wider">
+                Alerta de Segurança • Ocorrência #{antiCheatWarning.count}
+              </span>
+              <h2 className="text-lg font-black text-white pt-1">Comportamento Não Permitido na Prova</h2>
+            </div>
+            <p className="text-xs text-red-100 leading-relaxed">{antiCheatWarning.message}</p>
+            <p className="text-[11px] text-red-300/80">
+              Esta ocorrência foi registrada em tempo real no painel do seu professor com data e hora exatas.
+            </p>
+            <button
+              type="button"
+              onClick={() => setAntiCheatWarning(null)}
+              className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg cursor-pointer transition-colors"
+            >
+              Entendi — Retornar à Avaliação
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Autenticação (Firebase Auth & Cadastro SENAI) */}
       <AuthModal

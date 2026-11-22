@@ -15,6 +15,7 @@ import type {
   UserProfile,
   SavedScriptItem,
   ClassItem,
+  ClassroomMode,
 } from '../types';
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
@@ -328,12 +329,15 @@ interface EditorWorkspaceProps {
   user?: any;
   userProfile?: UserProfile | null;
   teacherClasses?: ClassItem[];
+  classroomMode?: ClassroomMode;
   isExamModeActive?: boolean;
+  isEditorFrozen?: boolean;
   classroomName?: string;
   savedScripts?: SavedScriptItem[];
   onSelectSavedScript?: (script: SavedScriptItem) => void;
   classExamples?: SavedScriptItem[];
   classExercises?: SavedScriptItem[];
+  classSolutions?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
   onDeliverExam?: () => void;
   onScriptSaved?: (savedScript?: SavedScriptItem) => void;
@@ -378,12 +382,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   user,
   userProfile,
   teacherClasses = [],
+  classroomMode = 'normal',
   isExamModeActive = false,
+  isEditorFrozen = false,
   classroomName,
   savedScripts = [],
   onSelectSavedScript,
   classExamples = [],
   classExercises = [],
+  classSolutions = [],
   classExams = [],
   onDeliverExam,
   onScriptSaved,
@@ -1771,7 +1778,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               onSelectSavedScript={onSelectSavedScript}
               classExamples={classExamples}
               classExercises={classExercises}
+              classSolutions={classSolutions}
               classExams={classExams}
+              classroomMode={classroomMode}
               isExamModeActive={isExamModeActive}
               align="left"
               triggerButton={({ isOpen, toggle }) => (
@@ -1846,6 +1855,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             onChange={handleEditorContentChange}
             onMount={handleEditorDidMount}
             options={{
+              readOnly: isEditorFrozen,
               contextmenu: false,
               glyphMargin: true,
               fontSize: currentFontSize,

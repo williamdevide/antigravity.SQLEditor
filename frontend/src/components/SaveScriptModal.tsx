@@ -322,6 +322,27 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
 
                   <label
                     className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      category === 'solution'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-[var(--text-primary)] font-bold'
+                        : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="scriptCategory"
+                      value="solution"
+                      checked={category === 'solution'}
+                      onChange={() => setCategory('solution')}
+                      className="hidden"
+                    />
+                    <span className="material-symbols-outlined text-[16px] text-emerald-400">
+                      check_circle
+                    </span>
+                    <span className="text-[11px]">Solução de Aula</span>
+                  </label>
+
+                  <label
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
                       category === 'exam'
                         ? 'border-purple-500 bg-purple-500/10 text-[var(--text-primary)] font-bold'
                         : 'border-[var(--border-color)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]'

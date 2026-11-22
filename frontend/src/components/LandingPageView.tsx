@@ -5,6 +5,7 @@ import { parseLiveSqlSchema } from '../services/liveSqlSchemaParser';
 import type { ActiveView, ThemeMode } from '../types';
 import { ERThumbnailSvg } from './er/ERThumbnailSvg';
 import { HeroInteractiveERCanvas } from './er/HeroInteractiveERCanvas';
+import { ProfileAvatarButton } from './ProfileAvatarButton';
 import { useAuth } from '../context/AuthContext';
 
 interface LandingPageViewProps {
@@ -13,6 +14,8 @@ interface LandingPageViewProps {
   theme: ThemeMode;
   onToggleTheme: () => void;
   onInstantiateTemplate?: (templateId: string) => void;
+  unreadClassMessagesCount?: number;
+  activeClassName?: string;
 }
 
 interface ChangelogEntry {
@@ -311,8 +314,10 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   theme,
   onToggleTheme,
   onInstantiateTemplate,
+  unreadClassMessagesCount = 0,
+  activeClassName = '',
 }) => {
-  const { user, userProfile, openAuthModal, logout } = useAuth();
+  const { user, userProfile, isAdmin, isProfessor, openAuthModal, logout } = useAuth();
   const [activeShowcaseTab, setActiveShowcaseTab] = useState<
     'diagram' | 'split' | 'data' | 'model'
   >('diagram');
@@ -553,26 +558,17 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
                 </button>
 
-                {/* Botão de Perfil: apenas foto ou letra inicial à direita do botão Laboratório */}
-                <button
-                  type="button"
-                  onClick={() => onOpenView('profile')}
-                  className="w-9 h-9 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] flex items-center justify-center p-0.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0 overflow-hidden"
-                  title={`Meu Perfil: ${userProfile?.displayName || user.displayName || user.email || ''}`}
-                  aria-label="Acessar Meu Perfil"
-                >
-                  {user.photoURL || userProfile?.photoURL ? (
-                    <img
-                      src={(userProfile?.photoURL || user.photoURL) || undefined}
-                      alt={userProfile?.displayName || user.displayName || 'Foto de perfil'}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="w-full h-full rounded-full bg-gradient-to-tr from-[#FF6B00] to-[#FFE600] text-black text-xs font-black flex items-center justify-center shadow-inner">
-                      {(userProfile?.displayName || user.displayName || user.email || 'U')[0].toUpperCase()}
-                    </span>
-                  )}
-                </button>
+                {/* Botão de Perfil / Classe: borda dourada neon + sininho verde + menu rápido */}
+                <ProfileAvatarButton
+                  user={user}
+                  userProfile={userProfile}
+                  isAdmin={isAdmin}
+                  isProfessor={isProfessor}
+                  onViewChange={onViewChangeWrapped => onOpenView(onViewChangeWrapped)}
+                  unreadClassMessagesCount={unreadClassMessagesCount}
+                  size="md"
+                  activeClassName={activeClassName}
+                />
               </div>
             ) : (
               <div className="flex items-center gap-1.5">

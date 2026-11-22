@@ -9,7 +9,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { SavedScriptItem, SavedScriptCategory, UserRole } from '../types';
+import type { SavedScriptItem, SavedScriptCategory, UserRole, AutoGradeDetails } from '../types';
 
 /**
  * Normaliza o título de um script para o formato de arquivo kebab-case com extensão .sql.
@@ -54,6 +54,10 @@ export async function saveScript(
     authorRole: UserRole;
     category: SavedScriptCategory;
     classIds?: string[];
+    visibleInNormal?: boolean;
+    visibleInClassroom?: boolean;
+    visibleInExam?: boolean;
+    answerKeySql?: string;
     isTemporary?: boolean;
     submittedAt?: string;
   },
@@ -72,6 +76,18 @@ export async function saveScript(
       classIds: cleanClassIds,
       updatedAt: now,
     };
+    if (payload.visibleInNormal !== undefined) {
+      updatePayload.visibleInNormal = payload.visibleInNormal;
+    }
+    if (payload.visibleInClassroom !== undefined) {
+      updatePayload.visibleInClassroom = payload.visibleInClassroom;
+    }
+    if (payload.visibleInExam !== undefined) {
+      updatePayload.visibleInExam = payload.visibleInExam;
+    }
+    if (payload.answerKeySql !== undefined) {
+      updatePayload.answerKeySql = payload.answerKeySql;
+    }
     if (payload.isTemporary !== undefined) {
       updatePayload.isTemporary = payload.isTemporary;
     }
@@ -98,10 +114,17 @@ export async function saveScript(
     authorRole: payload.authorRole || 'professor',
     category: payload.category,
     classIds: cleanClassIds,
+    visibleInNormal: payload.visibleInNormal ?? false,
+    visibleInClassroom: payload.visibleInClassroom ?? true,
+    visibleInExam: payload.visibleInExam ?? (payload.category === 'exam'),
     isTemporary: Boolean(payload.isTemporary),
     createdAt: now,
     updatedAt: now,
   };
+
+  if (payload.answerKeySql && payload.answerKeySql.trim()) {
+    docPayload.answerKeySql = payload.answerKeySql;
+  }
 
   if (payload.submittedAt) {
     docPayload.submittedAt = payload.submittedAt;
@@ -188,7 +211,7 @@ export async function getTeacherPublishedScripts(teacherUid: string): Promise<Sa
     snap.forEach((d) => {
       const data = d.data() as Omit<SavedScriptItem, 'id'>;
       // Apenas scripts pedagógicos do professor (não entregas ou temporários)
-      if (['class_database', 'example', 'exercise', 'exam'].includes(data.category)) {
+      if (['class_database', 'example', 'exercise', 'solution', 'exam'].includes(data.category)) {
         scripts.push({ id: d.id, ...data });
       }
     });
@@ -303,6 +326,58 @@ export async function getExamSubmissions(classId: string): Promise<SavedScriptIt
     return submissions.sort((a, b) => (b.submittedAt || b.createdAt || '').localeCompare(a.submittedAt || a.createdAt || ''));
   } catch (err) {
     console.warn('[ScriptService] Erro ao buscar entregas de avaliações:', err);
+    return [];
+  }
+}
+
+/**
+ * Grava a nota, feedback e relatório de correção automática de uma entrega de avaliação
+ */
+export async function gradeExamSubmission(
+  submissionId: string,
+  payload: {
+    grade: number;
+    teacherFeedback: string;
+    gradedBy: string;
+    gradePublished: boolean;
+    autoGradeDetails?: AutoGradeDetails;
+  }
+): Promise<void> {
+  const now = new Date().toISOString();
+  const scriptRef = doc(db, 'savedScripts', submissionId);
+  const updateData: Record<string, any> = {
+    grade: Math.max(0, Math.min(10, Number(payload.grade) || 0)),
+    teacherFeedback: (payload.teacherFeedback || '').trim(),
+    gradedBy: payload.gradedBy,
+    gradedAt: now,
+    gradePublished: Boolean(payload.gradePublished),
+    updatedAt: now,
+  };
+  if (payload.autoGradeDetails) {
+    updateData.autoGradeDetails = payload.autoGradeDetails;
+  }
+  await updateDoc(scriptRef, updateData);
+}
+
+/**
+ * Busca as entregas de avaliação de um determinado aluno (para visualizar notas publicadas em Minha Classe / Meu Perfil)
+ */
+export async function getStudentExamSubmissions(studentUid: string): Promise<SavedScriptItem[]> {
+  if (!studentUid) return [];
+  try {
+    const q = query(
+      collection(db, 'savedScripts'),
+      where('authorUid', '==', studentUid),
+      where('category', '==', 'exam_submission')
+    );
+    const snap = await getDocs(q);
+    const list: SavedScriptItem[] = [];
+    snap.forEach((d) => {
+      list.push({ id: d.id, ...(d.data() as Omit<SavedScriptItem, 'id'>) });
+    });
+    return list.sort((a, b) => (b.submittedAt || b.createdAt || '').localeCompare(a.submittedAt || a.createdAt || ''));
+  } catch (err) {
+    console.warn('[ScriptService] Erro ao buscar avaliações entregues do aluno:', err);
     return [];
   }
 }

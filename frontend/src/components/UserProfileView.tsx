@@ -416,6 +416,12 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
             📝 Exercício
           </span>
         );
+      case 'solution':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            ✅ Solução
+          </span>
+        );
       case 'exam':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">

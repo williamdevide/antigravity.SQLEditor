@@ -214,6 +214,15 @@ export const ALASQL_RESERVED_ALIAS_KEYWORDS = new Set<string>([
   'asc', 'desc', 'temporary', 'percent'
 ]);
 
+// Palavras-chave que podem aparecer imediatamente após ')' sem constituírem um apelido implícito de coluna
+const NON_ALIAS_FOLLOWERS_AFTER_PAREN = new Set<string>([
+  'asc', 'desc', 'and', 'or', 'is', 'in', 'like', 'between',
+  'when', 'then', 'else', 'end', 'union', 'intersect', 'except', 'minus',
+  'from', 'where', 'group', 'order', 'having', 'limit', 'offset',
+  'on', 'using', 'join', 'inner', 'left', 'right', 'outer', 'cross',
+  'not', 'null', 'true', 'false'
+]);
+
 /**
  * Envolve automaticamente com crases (`...`) apelidos de colunas e tabelas que coincidem
  * com palavras-chave reservadas do AlaSQL (como `total`, `sum`, `count`, etc.),
@@ -241,9 +250,13 @@ export function protectReservedAliases(sql: string): string {
   });
 
   // 2. Protege aliases implícitos após fechamento de expressão com parênteses: ) total FROM ou ) total,
+  // Ignora palavras de ordenação/lógica SQL como DESC, ASC, AND, OR, UNION etc. (evita quebrar ORDER BY COUNT(x) DESC)
   protectedSql = transformSqlCodeSegments(protectedSql, (segment) => {
     return segment.replace(/(\))\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?=,|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|LIMIT\b|;|$)/gi, (match, closeParen, word) => {
       const lower = word.toLowerCase();
+      if (NON_ALIAS_FOLLOWERS_AFTER_PAREN.has(lower)) {
+        return match;
+      }
       if (ALASQL_RESERVED_ALIAS_KEYWORDS.has(lower)) {
         definedAliases.add(word);
         return `${closeParen} \`${word}\` `;
@@ -272,11 +285,203 @@ export function protectReservedAliases(sql: string): string {
 }
 
 /**
+ * Divide uma instrução SQL pelos conectores UNION / UNION ALL apenas no nível raiz
+ * (ignorando strings, comentários e conteúdo dentro de parênteses).
+ */
+function splitTopLevelUnion(sql: string): { branches: string[]; connectors: string[]; trailingSemicolon: string } | null {
+  const trimmed = sql.trim();
+  const hasTrailingSemicolon = trimmed.endsWith(';');
+  const body = hasTrailingSemicolon ? trimmed.slice(0, -1).trim() : trimmed;
+
+  const branches: string[] = [];
+  const connectors: string[] = [];
+
+  let parenDepth = 0;
+  let lastSplit = 0;
+  let i = 0;
+  const len = body.length;
+
+  while (i < len) {
+    const ch = body[i];
+    // Pula literais com aspas simples, duplas ou crases
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const quote = ch;
+      i++;
+      while (i < len) {
+        if (body[i] === '\\') {
+          i += 2;
+          continue;
+        }
+        if (body[i] === quote) {
+          if (body[i + 1] === quote) {
+            i += 2;
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    // Pula comentários -- ou #
+    if ((ch === '-' && body[i + 1] === '-') || ch === '#') {
+      while (i < len && body[i] !== '\n') i++;
+      continue;
+    }
+    // Pula comentários /* ... */
+    if (ch === '/' && body[i + 1] === '*') {
+      i += 2;
+      while (i < len && !(body[i] === '*' && body[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+
+    if (ch === '(') {
+      parenDepth++;
+      i++;
+      continue;
+    }
+    if (ch === ')') {
+      if (parenDepth > 0) parenDepth--;
+      i++;
+      continue;
+    }
+
+    if (parenDepth === 0 && (ch === 'u' || ch === 'U')) {
+      const rest = body.slice(i);
+      const prevChar = i > 0 ? body[i - 1] : ' ';
+      const isWordStart = !/[A-Za-z0-9_$]/.test(prevChar);
+      if (isWordStart) {
+        const unionMatch = rest.match(/^UNION(?:\s+ALL)?(?![A-Za-z0-9_$])/i);
+        if (unionMatch) {
+          branches.push(body.slice(lastSplit, i).trim());
+          connectors.push(unionMatch[0].replace(/\s+/g, ' ').toUpperCase());
+          i += unionMatch[0].length;
+          lastSplit = i;
+          continue;
+        }
+      }
+    }
+    i++;
+  }
+
+  if (connectors.length === 0) return null;
+  branches.push(body.slice(lastSplit).trim());
+
+  return {
+    branches,
+    connectors,
+    trailingSemicolon: hasTrailingSemicolon ? ';' : '',
+  };
+}
+
+/**
+ * Remove parênteses externos balanceados se envolverem toda a string SQL.
+ */
+function stripOuterParentheses(branch: string): { inner: string; wasWrapped: boolean } {
+  const s = branch.trim();
+  if (!s.startsWith('(') || !s.endsWith(')')) return { inner: s, wasWrapped: false };
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const q = ch;
+      i++;
+      while (i < s.length) {
+        if (s[i] === '\\') { i += 2; continue; }
+        if (s[i] === q) {
+          if (s[i + 1] === q) { i += 2; continue; }
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      depth--;
+      if (depth === 0 && i < s.length - 1) {
+        return { inner: s, wasWrapped: false };
+      }
+    }
+  }
+  return { inner: s.slice(1, -1).trim(), wasWrapped: true };
+}
+
+/**
+ * Verifica se há ORDER BY ou LIMIT no nível raiz (fora de parênteses/strings) do ramo UNION.
+ */
+function hasTopLevelOrderOrLimit(sql: string): boolean {
+  let cleaned = '';
+  let depth = 0;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const q = ch;
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === '\\') { i += 2; continue; }
+        if (sql[i] === q) {
+          if (sql[i + 1] === q) { i += 2; continue; }
+          break;
+        }
+        i++;
+      }
+      cleaned += ' ';
+      continue;
+    }
+    if (ch === '(') { depth++; continue; }
+    if (ch === ')') { if (depth > 0) depth--; continue; }
+    if (depth === 0) cleaned += ch;
+  }
+  return /\b(?:ORDER\s+BY|LIMIT)\b/i.test(cleaned);
+}
+
+/**
+ * Envolve ramos de UNION que possuem ORDER BY ou LIMIT em subqueries `SELECT * FROM (...) AS _union_branch_n`
+ * porque o parser do AlaSQL rejeita ORDER BY / LIMIT diretamente antes de UNION (como no padrão MySQL).
+ */
+export function normalizeUnionBranchesWithOrderOrLimit(sql: string): string {
+  const split = splitTopLevelUnion(sql);
+  if (!split) return sql;
+
+  const { branches, connectors, trailingSemicolon } = split;
+  const nonLastHasOrderOrLimitOrParens = branches.slice(0, -1).some((b) => {
+    const { inner, wasWrapped } = stripOuterParentheses(b);
+    return wasWrapped || hasTopLevelOrderOrLimit(inner);
+  });
+
+  if (!nonLastHasOrderOrLimitOrParens) {
+    return sql;
+  }
+
+  const transformedBranches = branches.map((branch, idx) => {
+    const { inner } = stripOuterParentheses(branch);
+    // Se já está no formato SELECT * FROM (...) [AS alias], preserva
+    if (/^SELECT\s+\*\s+FROM\s*\(/i.test(inner) && !hasTopLevelOrderOrLimit(inner)) {
+      return inner;
+    }
+    if (hasTopLevelOrderOrLimit(inner)) {
+      return `SELECT * FROM (${inner}) AS _union_branch_${idx + 1}`;
+    }
+    return inner;
+  });
+
+  let rebuilt = transformedBranches[0];
+  for (let i = 0; i < connectors.length; i++) {
+    rebuilt += ` ${connectors[i]} ${transformedBranches[i + 1]}`;
+  }
+  return rebuilt + trailingSemicolon;
+}
+
+/**
  * Pré-processa uma instrução SQL para traduzir funções MySQL incompatíveis com o parser rígido do AlaSQL
  * Ex: DATEDIFF(d1, d2) -> MYSQL_DATEDIFF(d1, d2)
  *     LEFT(col, n) -> MYSQL_LEFT(col, n)
  *     RIGHT(col, n) -> MYSQL_RIGHT(col, n)
  *     AS total -> AS `total`
+ *     SELECT ... ORDER BY ... LIMIT ... UNION SELECT ... -> SELECT * FROM (...) UNION SELECT * FROM (...)
  */
 export function preprocessSqlQuery(sql: string): string {
   if (!sql) return sql;
@@ -302,6 +507,9 @@ export function preprocessSqlQuery(sql: string): string {
 
   // 3. Protege palavras reservadas do AlaSQL usadas como apelidos (aliases) de colunas ou tabelas
   res = protectReservedAliases(res);
+
+  // 4. Normaliza ramos UNION contendo ORDER BY ou LIMIT para subqueries compatíveis com AlaSQL
+  res = normalizeUnionBranchesWithOrderOrLimit(res);
 
   return res;
 }

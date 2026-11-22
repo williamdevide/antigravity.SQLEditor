@@ -157,6 +157,7 @@ export type ActiveView =
   | 'guide-feedback'
   | 'about'
   | 'profile'
+  | 'my-class'
   | 'admin-panel'
   | 'teacher-panel';
 
@@ -198,6 +199,8 @@ export interface ClassItem {
   createdAt: string;
   active: boolean;
   classroomMode?: ClassroomMode; // Modo ativo: 'normal', 'classroom' ou 'exam'
+  chatEnabled?: boolean; // Habilita ou desabilita o chat para os alunos na turma (default true)
+  scriptSharingEnabled?: boolean; // Habilita ou desabilita o compartilhamento de scripts entre alunos (default true)
   studentCount?: number;
   description?: string;
 }
@@ -249,8 +252,24 @@ export type SavedScriptCategory =
   | 'class_database'
   | 'example'
   | 'exercise'
+  | 'solution'
   | 'exam'
   | 'exam_submission';
+
+export interface AutoGradeQueryDetail {
+  label: string;
+  passed: boolean;
+  expectedSummary: string;
+  actualSummary: string;
+  error?: string;
+}
+
+export interface AutoGradeDetails {
+  totalQueries: number;
+  passedQueries: number;
+  score: number;
+  items: AutoGradeQueryDetail[];
+}
 
 export interface SavedScriptItem {
   id: string;
@@ -263,9 +282,93 @@ export interface SavedScriptItem {
   authorRole: UserRole;
   category: SavedScriptCategory;
   classIds: string[]; // ['all'] ou lista de IDs das turmas vinculadas
+  visibleInNormal?: boolean; // Visível no Modo Normal junto aos materiais gerais da plataforma
+  visibleInClassroom?: boolean; // Olho Modo Sala de Aula (default true)
+  visibleInExam?: boolean; // Olho Modo Avaliação (default true para 'exam', false para demais)
+  answerKeySql?: string; // Gabarito SQL opcional da avaliação para correção automática
+  grade?: number; // Nota atribuída (0 a 10) em entregas de avaliação
+  teacherFeedback?: string; // Feedback do professor na entrega
+  gradedAt?: string;
+  gradedBy?: string;
+  gradePublished?: boolean; // Se verdadeiro, exibe nota e feedback para o aluno em Minha Classe / Meu Perfil
+  autoGradeDetails?: AutoGradeDetails;
   isTemporary?: boolean; // Backup automático antes de iniciar o modo avaliação
   submittedAt?: string; // Data/hora formal da entrega da avaliação
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassPresenceItem {
+  id: string; // `${classId}_${uid}`
+  classId: string;
+  uid: string;
+  displayName: string;
+  email: string;
+  role: UserRole;
+  photoURL?: string;
+  isOnline: boolean;
+  lastSeenAt: string;
+  activeView?: string;
+}
+
+export interface ClassMessageItem {
+  id: string;
+  classId: string;
+  senderUid: string;
+  senderName: string;
+  senderRole: UserRole;
+  senderPhotoURL?: string;
+  recipientUid: string | 'all'; // 'all' para sala inteira ou UID do destinatário
+  recipientName?: string;
+  text: string;
+  type: 'text' | 'script';
+  scriptTitle?: string;
+  scriptContent?: string;
+  createdAt: string;
+  readBy: string[];
+}
+
+export type ExamAlertType =
+  | 'tab_switch'
+  | 'window_blur'
+  | 'copy_paste_attempt'
+  | 'extension_detected'
+  | 'devtools_or_resize';
+
+export interface ExamAlertItem {
+  id: string;
+  classId: string;
+  studentUid: string;
+  studentName: string;
+  studentEmail: string;
+  type: ExamAlertType;
+  details: string;
+  createdAt: string;
+  acknowledged?: boolean;
+}
+
+export interface StudentLiveTabSnapshot {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface StudentLiveStateItem {
+  id: string; // `${classId}_${studentUid}`
+  classId: string;
+  studentUid: string;
+  studentName: string;
+  studentEmail: string;
+  activeTabTitle: string;
+  activeTabContent: string;
+  tabs: StudentLiveTabSnapshot[];
+  activeDatabase: string;
+  lastQueryStatus?: 'success' | 'error';
+  lastQueryError?: string;
+  lastQuerySummary?: string;
+  isFrozen?: boolean;
+  frozenMessage?: string;
+  violationCount: number;
   updatedAt: string;
 }
 

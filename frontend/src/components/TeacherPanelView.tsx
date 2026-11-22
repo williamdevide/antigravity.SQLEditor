@@ -12,6 +12,7 @@ import {
   admitStudentByEmail,
   updateClassMode,
   updateAllTeacherClassesMode,
+  updateClassSettings,
 } from '../services/classService';
 import {
   saveScript,
@@ -19,7 +20,18 @@ import {
   updateScript,
   deleteScript,
   getExamSubmissions,
+  gradeExamSubmission,
 } from '../services/scriptService';
+import {
+  subscribeToClassPresence,
+  subscribeToClassMessages,
+  sendClassMessage,
+  subscribeToClassExamAlerts,
+  acknowledgeExamAlert,
+  subscribeToClassLiveStates,
+} from '../services/classroomRealtimeService';
+import { StudentMonitorModal } from './StudentMonitorModal';
+import { ExamGradingModal } from './ExamGradingModal';
 import type {
   ClassItem,
   ClassMemberItem,
@@ -27,6 +39,11 @@ import type {
   SavedScriptItem,
   SavedScriptCategory,
   UserRole,
+  ClassPresenceItem,
+  ClassMessageItem,
+  ExamAlertItem,
+  StudentLiveStateItem,
+  AutoGradeDetails,
 } from '../types';
 
 interface TeacherPanelViewProps {
@@ -74,7 +91,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [activeStudentTab, setActiveStudentTab] = useState<'members' | 'pending' | 'admit'>('members');
-  const [activeResourcePanel, setActiveResourcePanel] = useState<'materials' | 'submissions' | null>(null);
+  const [activeResourcePanel, setActiveResourcePanel] = useState<
+    'materials' | 'submissions' | 'chat' | 'alerts' | null
+  >(null);
 
   // Materiais e Scripts Pedagógicos
   const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
@@ -90,12 +109,32 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [matCategory, setMatCategory] = useState<SavedScriptCategory>('class_database');
   const [matClassIds, setMatClassIds] = useState<string[]>(['all']);
   const [matAllClasses, setMatAllClasses] = useState(true);
+  const [matVisibleNormal, setMatVisibleNormal] = useState(false);
+  const [matVisibleClassroom, setMatVisibleClassroom] = useState(true);
+  const [matVisibleExam, setMatVisibleExam] = useState(false);
+  const [matAnswerKeySql, setMatAnswerKeySql] = useState('');
   const [isSavingMaterial, setIsSavingMaterial] = useState(false);
 
   // Entregas dos Alunos na Avaliação
   const [submissions, setSubmissions] = useState<SavedScriptItem[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [viewingSubmission, setViewingSubmission] = useState<SavedScriptItem | null>(null);
+
+  // Monitoramento em Tempo Real: Presença, Chat Completo, Alertas Anti-Trapaça e Espelho ao Vivo
+  const [presenceList, setPresenceList] = useState<ClassPresenceItem[]>([]);
+  const [classMessages, setClassMessages] = useState<ClassMessageItem[]>([]);
+  const [examAlerts, setExamAlerts] = useState<ExamAlertItem[]>([]);
+  const [liveStates, setLiveStates] = useState<StudentLiveStateItem[]>([]);
+  const [monitoringStudent, setMonitoringStudent] = useState<{
+    uid: string;
+    name: string;
+    email: string;
+  } | null>(null);
+
+  // Envio de mensagem pelo professor no painel Chat & Auditoria
+  const [teacherChatTarget, setTeacherChatTarget] = useState<string>('all');
+  const [teacherChatText, setTeacherChatText] = useState('');
+  const [isSendingTeacherChat, setIsSendingTeacherChat] = useState(false);
 
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -408,6 +447,28 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   // Gestão de Materiais Pedagógicos
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Subscriptions em tempo real quando uma turma é selecionada
+  useEffect(() => {
+    if (!selectedClass?.id) {
+      setPresenceList([]);
+      setClassMessages([]);
+      setExamAlerts([]);
+      setLiveStates([]);
+      return;
+    }
+    const unsubPresence = subscribeToClassPresence(selectedClass.id, setPresenceList);
+    const unsubMsgs = subscribeToClassMessages(selectedClass.id, setClassMessages);
+    const unsubAlerts = subscribeToClassExamAlerts(selectedClass.id, setExamAlerts);
+    const unsubLive = subscribeToClassLiveStates(selectedClass.id, setLiveStates);
+
+    return () => {
+      unsubPresence();
+      unsubMsgs();
+      unsubAlerts();
+      unsubLive();
+    };
+  }, [selectedClass?.id]);
+
   // Zera e reseta todos os campos do modal de material didático
   const resetMaterialModal = () => {
     setEditingMaterial(null);
@@ -417,6 +478,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     setMatCategory('class_database');
     setMatClassIds(selectedClass ? [selectedClass.id] : ['all']);
     setMatAllClasses(false);
+    setMatVisibleNormal(false);
+    setMatVisibleClassroom(true);
+    setMatVisibleExam(false);
+    setMatAnswerKeySql('');
     setModalError(null);
     setIsMaterialModalOpen(false);
   };
@@ -435,8 +500,148 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     const isAll = (item.classIds || []).includes('all');
     setMatAllClasses(isAll);
     setMatClassIds(isAll ? ['all'] : item.classIds || []);
+    setMatVisibleNormal(Boolean(item.visibleInNormal));
+    setMatVisibleClassroom(item.visibleInClassroom !== false);
+    setMatVisibleExam(item.visibleInExam ?? (item.category === 'exam'));
+    setMatAnswerKeySql(item.answerKeySql || '');
     setModalError(null);
     setIsMaterialModalOpen(true);
+  };
+
+  const handleToggleMaterialClassroomVisibility = async (item: SavedScriptItem) => {
+    const nextVal = !(item.visibleInClassroom !== false);
+    setMaterials((prev) =>
+      prev.map((m) => (m.id === item.id ? { ...m, visibleInClassroom: nextVal } : m))
+    );
+    try {
+      await updateScript(item.id, { visibleInClassroom: nextVal });
+      showFeedback(
+        'success',
+        `"${item.title}" agora está ${nextVal ? 'visível' : 'oculto'} no Modo Sala de Aula.`
+      );
+    } catch (err) {
+      showFeedback('error', 'Erro ao atualizar visibilidade no Modo Aula.');
+      loadClassMaterials();
+    }
+  };
+
+  const handleToggleMaterialExamVisibility = async (item: SavedScriptItem) => {
+    const currentVal = item.visibleInExam ?? (item.category === 'exam');
+    const nextVal = !currentVal;
+    setMaterials((prev) =>
+      prev.map((m) => (m.id === item.id ? { ...m, visibleInExam: nextVal } : m))
+    );
+    try {
+      await updateScript(item.id, { visibleInExam: nextVal });
+      showFeedback(
+        'success',
+        `"${item.title}" agora está ${nextVal ? 'visível' : 'oculto'} no Modo Avaliação.`
+      );
+    } catch (err) {
+      showFeedback('error', 'Erro ao atualizar visibilidade no Modo Avaliação.');
+      loadClassMaterials();
+    }
+  };
+
+  const handleToggleClassSetting = async (field: 'chatEnabled' | 'scriptSharingEnabled') => {
+    if (!selectedClass) return;
+    const current =
+      field === 'chatEnabled'
+        ? selectedClass.chatEnabled !== false
+        : selectedClass.scriptSharingEnabled !== false;
+    const nextVal = !current;
+    try {
+      await updateClassSettings(
+        selectedClass.id,
+        { [field]: nextVal },
+        userProfile || undefined
+      );
+      setClasses((prev) =>
+        prev.map((c) => (c.id === selectedClass.id ? { ...c, [field]: nextVal } : c))
+      );
+      setSelectedClass((curr) => (curr ? { ...curr, [field]: nextVal } : null));
+      showFeedback(
+        'success',
+        field === 'chatEnabled'
+          ? `Chat da turma ${nextVal ? 'ativado' : 'desativado'}!`
+          : `Compartilhamento de scripts ${nextVal ? 'ativado' : 'desativado'}!`
+      );
+    } catch (err: any) {
+      showFeedback('error', 'Falha ao atualizar configuração da turma: ' + (err?.message || 'Erro'));
+    }
+  };
+
+  const handleSendTeacherChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !selectedClass || !teacherChatText.trim()) return;
+    const targetName =
+      teacherChatTarget === 'all'
+        ? 'Toda a Turma'
+        : members.find((m) => m.studentUid === teacherChatTarget)?.studentName || 'Aluno';
+
+    try {
+      setIsSendingTeacherChat(true);
+      await sendClassMessage({
+        classId: selectedClass.id,
+        senderUid: user.uid,
+        senderName: userProfile?.displayName || user.displayName || 'Professor',
+        senderRole: userProfile?.role || (isAdmin ? 'admin' : 'professor'),
+        senderPhotoURL: userProfile?.photoURL || user.photoURL || '',
+        recipientUid: teacherChatTarget,
+        recipientName: targetName,
+        text: teacherChatText.trim(),
+        type: 'text',
+      });
+      setTeacherChatText('');
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao enviar mensagem: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsSendingTeacherChat(false);
+    }
+  };
+
+  const handleQuickSaveGradeFromMonitor = async (params: {
+    studentUid: string;
+    studentName: string;
+    studentEmail: string;
+    content: string;
+    grade: number;
+    feedback: string;
+    autoGradeDetails: AutoGradeDetails;
+  }) => {
+    if (!user || !selectedClass) return;
+    // Procura se já existe entrega do aluno nessa turma para atualizar; caso contrário cria um registro de avaliação avaliada
+    const existingSub = submissions.find((s) => s.authorUid === params.studentUid);
+    if (existingSub) {
+      await gradeExamSubmission(existingSub.id, {
+        grade: params.grade,
+        teacherFeedback: params.feedback,
+        gradedBy: user.uid,
+        gradePublished: true,
+        autoGradeDetails: params.autoGradeDetails,
+      });
+    } else {
+      const created = await saveScript({
+        title: `[Avaliação Ao Vivo] ${selectedClass.name} - ${params.studentName}`,
+        description: `Avaliação corrigida diretamente pelo monitoramento em tela pelo professor em ${new Date().toLocaleString('pt-BR')}`,
+        content: params.content || '-- Sem conteúdo',
+        authorUid: params.studentUid,
+        authorName: params.studentName,
+        authorEmail: params.studentEmail,
+        authorRole: 'aluno',
+        category: 'exam_submission',
+        classIds: [selectedClass.id],
+        submittedAt: new Date().toISOString(),
+      });
+      await gradeExamSubmission(created.id, {
+        grade: params.grade,
+        teacherFeedback: params.feedback,
+        gradedBy: user.uid,
+        gradePublished: true,
+        autoGradeDetails: params.autoGradeDetails,
+      });
+    }
+    loadSubmissions(selectedClass.id);
   };
 
   // Carregamento de arquivo (.sql ou .txt) para o modal de material pedagógico
@@ -498,6 +703,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
           content: matContent,
           category: matCategory,
           classIds: cleanClassIds,
+          visibleInNormal: matVisibleNormal,
+          visibleInClassroom: matVisibleClassroom,
+          visibleInExam: matVisibleExam,
+          ...(matCategory === 'exam' ? { answerKeySql: matAnswerKeySql } : {}),
         });
         showFeedback('success', `Material "${matTitle.trim()}" atualizado com sucesso!`);
       } else {
@@ -511,6 +720,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
           authorRole,
           category: matCategory,
           classIds: cleanClassIds,
+          visibleInNormal: matVisibleNormal,
+          visibleInClassroom: matVisibleClassroom,
+          visibleInExam: matVisibleExam,
+          answerKeySql: matCategory === 'exam' ? matAnswerKeySql : undefined,
         });
         showFeedback('success', `Material "${matTitle.trim()}" publicado com sucesso para a turma!`);
       }
@@ -551,6 +764,35 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const pendingMembers = members.filter((m) => m.status === 'pending');
 
   const currentMode = selectedClass?.classroomMode || 'normal';
+  const chatEnabled = selectedClass?.chatEnabled !== false;
+  const scriptSharingEnabled = selectedClass?.scriptSharingEnabled !== false;
+  const unackAlerts = examAlerts.filter((a) => !a.acknowledged);
+  const classDbMaterials = materials.filter(
+    (m) =>
+      m.category === 'class_database' &&
+      selectedClass &&
+      ((m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id))
+  );
+  const classExamMaterials = materials.filter(
+    (m) =>
+      m.category === 'exam' &&
+      selectedClass &&
+      ((m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id))
+  );
+
+  const handleAnswerKeyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (typeof ev.target?.result === 'string') {
+        setMatAnswerKeySql(ev.target.result);
+        showFeedback('success', `Gabarito "${file.name}" carregado!`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--bg-primary)] overflow-y-auto">
@@ -851,7 +1093,46 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                 </div>
               </div>
 
-              {/* DIV DE RECURSOS PEDAGÓGICOS E AVALIAÇÕES (Mesma estética de Modo Operacional: Escrito à Esquerda, Botões à Direita) */}
+              {/* BANNER DE ALERTAS ANTI-TRAPAÇA EM TEMPO REAL (SE HOUVER OCORRÊNCIAS) */}
+              {unackAlerts.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 flex flex-wrap items-center justify-between gap-3 animate-pulse">
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[22px] text-rose-400">warning</span>
+                    <div>
+                      <p className="text-xs font-bold text-rose-300">
+                        ⚠️ {unackAlerts.length} alerta(s) anti-trapaça detectado(s) nesta turma!
+                      </p>
+                      <p className="text-[11px] text-rose-200/80">
+                        Último: <strong>{unackAlerts[0].studentName}</strong> — {unackAlerts[0].details}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveResourcePanel('alerts')}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+                    >
+                      Ver Ocorrências
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMonitoringStudent({
+                          uid: unackAlerts[0].studentUid,
+                          name: unackAlerts[0].studentName,
+                          email: unackAlerts[0].studentEmail,
+                        })
+                      }
+                      className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-rose-500/40 text-rose-300 text-xs font-bold cursor-pointer"
+                    >
+                      Ver Tela do Aluno
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* CONTROLES DE COMUNICAÇÃO E RECURSOS PEDAGÓGICOS */}
               <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {/* Escrito à Esquerda */}
@@ -859,17 +1140,50 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     <span className="material-symbols-outlined text-[22px] text-[#FF6B00]">folder_special</span>
                     <div>
                       <h3 className="text-xs font-bold text-[var(--text-primary)]">
-                        Materiais Didáticos &amp; Avaliações
+                        Materiais, Comunicação &amp; Provas
                       </h3>
                       <p className="text-[11px] text-[var(--text-secondary)]">
-                        Bancos de dados, exemplos, exercícios e entregas de avaliações da turma
+                        Gerencie conteúdos, chat da sala, scripts compartilhados e monitoramento de avaliação
                       </p>
                     </div>
                   </div>
 
-                  {/* Botões à Direita (um ao lado do outro dentro do container pill idêntico ao do Modo Operacional) */}
+                  {/* Controles rápidos de Chat e Compartilhamento */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleClassSetting('chatEnabled')}
+                      title="Ligar ou desligar o Chat dos alunos nesta turma"
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        chatEnabled
+                          ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-400'
+                          : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">
+                        {chatEnabled ? 'chat' : 'speaker_notes_off'}
+                      </span>
+                      <span>Chat: {chatEnabled ? 'ON' : 'OFF'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleClassSetting('scriptSharingEnabled')}
+                      title="Permitir ou bloquear compartilhamento de scripts entre alunos"
+                      className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        scriptSharingEnabled
+                          ? 'bg-sky-500/15 border-sky-500/35 text-sky-400'
+                          : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">
+                        {scriptSharingEnabled ? 'share' : 'block'}
+                      </span>
+                      <span>Scripts: {scriptSharingEnabled ? 'ON' : 'OFF'}</span>
+                    </button>
+
+                    {/* Pill com painéis expansíveis */}
+                    <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)]">
                       {/* Botão Materiais & BDs */}
                       <button
                         type="button"
@@ -887,9 +1201,6 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                         }`}>
                           {filteredMaterials.length}
                         </span>
-                        <span className="material-symbols-outlined text-[14px]">
-                          {activeResourcePanel === 'materials' ? 'expand_less' : 'expand_more'}
-                        </span>
                       </button>
 
                       {/* Botão Entrega de Provas */}
@@ -903,14 +1214,55 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                         }`}
                       >
                         <span className="material-symbols-outlined text-[14px]">assignment_turned_in</span>
-                        <span>Entrega de Provas</span>
+                        <span>Provas</span>
                         <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                           activeResourcePanel === 'submissions' ? 'bg-white/20 text-white' : 'bg-purple-500/15 text-purple-400'
                         }`}>
                           {submissions.length}
                         </span>
-                        <span className="material-symbols-outlined text-[14px]">
-                          {activeResourcePanel === 'submissions' ? 'expand_less' : 'expand_more'}
+                      </button>
+
+                      {/* Botão Chat & Mensagens Trafegadas */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveResourcePanel((prev) => (prev === 'chat' ? null : 'chat'))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeResourcePanel === 'chat'
+                            ? 'bg-[#0288D1] text-white shadow font-bold'
+                            : 'text-[var(--text-muted)] hover:text-[#29B6F6]'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">forum</span>
+                        <span>Chat Geral</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          activeResourcePanel === 'chat' ? 'bg-white/20 text-white' : 'bg-sky-500/15 text-sky-400'
+                        }`}>
+                          {classMessages.length}
+                        </span>
+                      </button>
+
+                      {/* Botão Alertas Anti-Trapaça */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveResourcePanel((prev) => (prev === 'alerts' ? null : 'alerts'))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeResourcePanel === 'alerts'
+                            ? 'bg-rose-600 text-white shadow font-bold'
+                            : unackAlerts.length > 0
+                            ? 'text-rose-400 animate-pulse'
+                            : 'text-[var(--text-muted)] hover:text-rose-400'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">security</span>
+                        <span>Alertas</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          activeResourcePanel === 'alerts'
+                            ? 'bg-white/20 text-white'
+                            : unackAlerts.length > 0
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-zinc-500/15 text-[var(--text-muted)]'
+                        }`}>
+                          {examAlerts.length}
                         </span>
                       </button>
                     </div>
@@ -927,6 +1279,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                           { id: 'class_database', label: 'BDs Sala de Aula' },
                           { id: 'example', label: 'Exemplos' },
                           { id: 'exercise', label: 'Exercícios' },
+                          { id: 'solution', label: 'Soluções' },
                           { id: 'exam', label: 'Avaliações' },
                         ].map((f) => (
                           <button
@@ -968,82 +1321,139 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                           Nenhum material publicado para esta turma nesta categoria.
                         </p>
                         <p className="text-[11px] text-[var(--text-muted)]">
-                          Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios ou Avaliações.
+                          Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios, Soluções ou Avaliações.
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {filteredMaterials.map((mat) => (
-                          <div
-                            key={mat.id}
-                            className="p-2.5 px-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6B00]/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              {/* Tag da categoria */}
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)] shrink-0 flex items-center gap-1">
-                                {mat.category === 'class_database'
-                                  ? '🗄️ BD Aula'
-                                  : mat.category === 'example'
-                                  ? '💡 Exemplo'
-                                  : mat.category === 'exercise'
-                                  ? '📝 Exercício'
-                                  : '🎯 Avaliação'}
-                              </span>
+                        {filteredMaterials.map((mat) => {
+                          const isAulaVisible = mat.visibleInClassroom !== false;
+                          const isExamVisible = mat.visibleInExam ?? (mat.category === 'exam');
+                          return (
+                            <div
+                              key={mat.id}
+                              className="p-2.5 px-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6B00]/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                {/* Tag da categoria */}
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)] shrink-0 flex items-center gap-1">
+                                  {mat.category === 'class_database'
+                                    ? '🗄️ BD Aula'
+                                    : mat.category === 'example'
+                                    ? '💡 Exemplo'
+                                    : mat.category === 'exercise'
+                                    ? '📝 Exercício'
+                                    : mat.category === 'solution'
+                                    ? '✅ Solução'
+                                    : '🎯 Avaliação'}
+                                </span>
 
-                              {/* Título e descrição resumida */}
-                              <div className="min-w-0 flex-1 flex items-center gap-2">
-                                <h4
-                                  className="font-bold text-xs text-[var(--text-primary)] truncate"
-                                  title={mat.title}
-                                >
-                                  {mat.title}
-                                </h4>
-                                {mat.description && (
+                                {mat.visibleInNormal && (
                                   <span
-                                    className="text-[11px] text-[var(--text-secondary)] truncate hidden md:inline max-w-[320px]"
-                                    title={mat.description}
+                                    title="Também disponível no Modo Normal"
+                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 shrink-0"
                                   >
-                                    — {mat.description}
+                                    Normal
                                   </span>
                                 )}
+
+                                {/* Título e descrição resumida */}
+                                <div className="min-w-0 flex-1 flex items-center gap-2">
+                                  <h4
+                                    className="font-bold text-xs text-[var(--text-primary)] truncate"
+                                    title={mat.title}
+                                  >
+                                    {mat.title}
+                                  </h4>
+                                  {mat.description && (
+                                    <span
+                                      className="text-[11px] text-[var(--text-secondary)] truncate hidden md:inline max-w-[280px]"
+                                      title={mat.description}
+                                    >
+                                      — {mat.description}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Metadados: linhas e turmas */}
+                                <div className="hidden sm:flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono shrink-0">
+                                  <span>{mat.content.split('\n').length} linhas</span>
+                                  <span>•</span>
+                                  <span>
+                                    {(mat.classIds || []).includes('all')
+                                      ? '🌐 Todas'
+                                      : `Turmas: ${(mat.classIds || []).length}`}
+                                  </span>
+                                </div>
                               </div>
 
-                              {/* Metadados: linhas e turmas */}
-                              <div className="hidden sm:flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono shrink-0">
-                                <span>{mat.content.split('\n').length} linhas</span>
-                                <span>•</span>
-                                <span>
-                                  {(mat.classIds || []).includes('all')
-                                    ? '🌐 Todas as turmas'
-                                    : `Turmas: ${(mat.classIds || []).length}`}
-                                </span>
+                              {/* Ações: Olho Modo Aula + Olho Modo Avaliação + Editar + Excluir (apenas ícones) */}
+                              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                                {/* Olho Modo Sala de Aula (Verde aberto / Cinza escuro fechado) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleMaterialClassroomVisibility(mat)}
+                                  title={
+                                    isAulaVisible
+                                      ? 'Modo Sala de Aula: VISÍVEL para os alunos (clique para ocultar)'
+                                      : 'Modo Sala de Aula: INVISÍVEL para os alunos (clique para tornar visível)'
+                                  }
+                                  aria-label="Alternar visibilidade no Modo Sala de Aula"
+                                  className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
+                                    isAulaVisible
+                                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                                      : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">
+                                    {isAulaVisible ? 'visibility' : 'visibility_off'}
+                                  </span>
+                                </button>
+
+                                {/* Olho Modo Avaliação (Roxo aberto / Cinza escuro fechado) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleMaterialExamVisibility(mat)}
+                                  title={
+                                    isExamVisible
+                                      ? 'Modo Avaliação: VISÍVEL na prova (clique para ocultar)'
+                                      : 'Modo Avaliação: INVISÍVEL na prova (clique para liberar na prova)'
+                                  }
+                                  aria-label="Alternar visibilidade no Modo Avaliação"
+                                  className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
+                                    isExamVisible
+                                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500/30'
+                                      : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-300'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">
+                                    {isExamVisible ? 'quiz' : 'visibility_off'}
+                                  </span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenEditMaterialModal(mat)}
+                                  type="button"
+                                  title="Editar Material"
+                                  aria-label="Editar Material"
+                                  className="p-1.5 px-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] hover:text-[#0288D1] hover:border-[#0288D1]/40 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">edit</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleDeleteMaterial(mat)}
+                                  type="button"
+                                  title="Excluir Material"
+                                  aria-label="Excluir Material"
+                                  className="p-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">delete</span>
+                                </button>
                               </div>
                             </div>
-
-                            {/* Ações: apenas os ícones (sem texto) */}
-                            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                              <button
-                                onClick={() => handleOpenEditMaterialModal(mat)}
-                                type="button"
-                                title="Editar Material"
-                                aria-label="Editar Material"
-                                className="p-1.5 px-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] hover:text-[#0288D1] hover:border-[#0288D1]/40 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">edit</span>
-                              </button>
-
-                              <button
-                                onClick={() => handleDeleteMaterial(mat)}
-                                type="button"
-                                title="Excluir Material"
-                                aria-label="Excluir Material"
-                                className="p-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">delete</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1075,26 +1485,37 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                           <thead className="bg-[var(--bg-surface)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
                             <tr>
                               <th className="px-4 py-3">Aluno</th>
-                              <th className="px-4 py-3">E-mail</th>
                               <th className="px-4 py-3">Avaliação</th>
-                              <th className="px-4 py-3">Data/Hora da Entrega</th>
-                              <th className="px-4 py-3 text-right">Resolução</th>
+                              <th className="px-4 py-3">Data/Hora</th>
+                              <th className="px-4 py-3">Nota</th>
+                              <th className="px-4 py-3 text-right">Correção</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[var(--border-color)]">
                             {submissions.map((sub) => (
                               <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors">
-                                <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
-                                  {sub.authorName}
+                                <td className="px-4 py-3">
+                                  <div className="font-semibold text-[var(--text-primary)]">{sub.authorName}</div>
+                                  <div className="font-mono text-[10px] text-[var(--text-muted)]">{sub.authorEmail}</div>
                                 </td>
-                                <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
-                                  {sub.authorEmail}
-                                </td>
-                                <td className="px-4 py-3 text-[var(--text-primary)]">
-                                  {sub.title}
-                                </td>
+                                <td className="px-4 py-3 text-[var(--text-primary)]">{sub.title}</td>
                                 <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
                                   {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {sub.grade !== undefined ? (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-lg text-[11px] font-black border ${
+                                        sub.gradePublished
+                                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35'
+                                          : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                      }`}
+                                    >
+                                      {Number(sub.grade).toFixed(1)} {sub.gradePublished ? '✓' : '(rascunho)'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-[var(--text-muted)]">Pendente</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <button
@@ -1102,14 +1523,154 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                     onClick={() => setViewingSubmission(sub)}
                                     className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5 ml-auto"
                                   >
-                                    <span className="material-symbols-outlined text-[14px]">visibility</span>
-                                    <span>Visualizar SQL</span>
+                                    <span className="material-symbols-outlined text-[14px]">grading</span>
+                                    <span>Avaliar / Corrigir</span>
                                   </button>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* PAINEL EXPANSÍVEL: AUDITORIA DE CHAT & MENSAGENS DA TURMA */}
+                {activeResourcePanel === 'chat' && (
+                  <div className="pt-3 border-t border-[var(--border-color)] space-y-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-[#29B6F6] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                        <span>Todas as Mensagens &amp; Scripts Trafegados na Turma (Visão Completa do Professor)</span>
+                      </p>
+                    </div>
+
+                    <div className="max-h-72 overflow-y-auto space-y-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-3">
+                      {classMessages.length === 0 ? (
+                        <p className="text-center text-xs text-[var(--text-muted)] py-6">
+                          Nenhuma mensagem registrada nesta turma ainda.
+                        </p>
+                      ) : (
+                        classMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className="p-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-1 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-[#FF6B00]">{msg.senderName}</span>
+                                <span className="text-[var(--text-muted)]">➔</span>
+                                <span className="font-bold text-[#29B6F6]">
+                                  {msg.recipientUid === 'all' ? '🌐 Toda a Turma' : msg.recipientName || 'Privado'}
+                                </span>
+                                {msg.type === 'script' && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 font-mono">
+                                    📄 Script: {msg.scriptTitle}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-mono text-[var(--text-muted)]">
+                                {new Date(msg.createdAt).toLocaleString('pt-BR')}
+                              </span>
+                            </div>
+                            <p className="text-[var(--text-primary)] whitespace-pre-wrap">{msg.text}</p>
+                            {msg.type === 'script' && msg.scriptContent && (
+                              <pre className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] font-mono text-[10px] text-[var(--text-secondary)] max-h-24 overflow-y-auto">
+                                {msg.scriptContent}
+                              </pre>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <form onSubmit={handleSendTeacherChat} className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={teacherChatTarget}
+                        onChange={(e) => setTeacherChatTarget(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
+                      >
+                        <option value="all">🌐 Para Toda a Turma</option>
+                        {approvedMembers.map((m) => (
+                          <option key={m.studentUid} value={m.studentUid}>
+                            👤 Privado: {m.studentName}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={teacherChatText}
+                        onChange={(e) => setTeacherChatText(e.target.value)}
+                        placeholder="Enviar aviso ou resposta como professor..."
+                        className="flex-1 min-w-[200px] px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSendingTeacherChat || !teacherChatText.trim()}
+                        className="px-4 py-2 rounded-xl bg-[#0288D1] hover:bg-[#0277BD] text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+                      >
+                        Enviar
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* PAINEL EXPANSÍVEL: ALERTAS ANTI-TRAPAÇA */}
+                {activeResourcePanel === 'alerts' && (
+                  <div className="pt-3 border-t border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
+                    {examAlerts.length === 0 ? (
+                      <div className="p-6 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl text-xs text-[var(--text-muted)]">
+                        Nenhuma infração ou comportamento suspeito registrado no Modo Avaliação desta turma.
+                      </div>
+                    ) : (
+                      <div className="max-h-72 overflow-y-auto space-y-2">
+                        {examAlerts.map((al) => (
+                          <div
+                            key={al.id}
+                            className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                              al.acknowledged
+                                ? 'bg-[var(--bg-surface)] border-[var(--border-color)] opacity-65'
+                                : 'bg-rose-500/10 border-rose-500/40'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-[var(--text-primary)]">
+                                {al.studentName}{' '}
+                                <span className="font-mono text-[10px] text-[var(--text-muted)]">({al.studentEmail})</span>{' '}
+                                • <span className="text-rose-400">{al.type}</span>
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)]">{al.details}</p>
+                              <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                                {new Date(al.createdAt).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMonitoringStudent({
+                                    uid: al.studentUid,
+                                    name: al.studentName,
+                                    email: al.studentEmail,
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-[#0288D1]/15 border border-[#0288D1]/40 text-[#29B6F6] text-[11px] font-bold cursor-pointer"
+                              >
+                                Ver Tela
+                              </button>
+                              {!al.acknowledged && (
+                                <button
+                                  type="button"
+                                  onClick={() => acknowledgeExamAlert(al.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold cursor-pointer"
+                                >
+                                  Ciente
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1197,33 +1758,80 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--border-color)]">
-                          {approvedMembers.map((member) => (
-                            <tr key={member.id} className="hover:bg-[var(--bg-hover)] transition-colors">
-                              <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
-                                {member.studentName}
-                              </td>
-                              <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
-                                {member.studentEmail}
-                              </td>
-                              <td className="px-4 py-3 font-mono text-[var(--text-muted)]">
-                                {member.studentRegistration || '---'}
-                              </td>
-                              <td className="px-4 py-3 text-[var(--text-muted)]">
-                                {member.approvedAt
-                                  ? new Date(member.approvedAt).toLocaleDateString('pt-BR')
-                                  : '---'}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveStudent(member)}
-                                  className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-bold transition-colors cursor-pointer"
-                                >
-                                  Remover da Turma
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {approvedMembers.map((member) => {
+                            const pres = presenceList.find((p) => p.uid === member.studentUid);
+                            const live = liveStates.find((s) => s.studentUid === member.studentUid);
+                            const studentAlerts = examAlerts.filter(
+                              (a) => a.studentUid === member.studentUid && !a.acknowledged
+                            );
+                            return (
+                              <tr key={member.id} className="hover:bg-[var(--bg-hover)] transition-colors">
+                                <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                        pres?.isOnline
+                                          ? 'bg-emerald-500 shadow-[0_0_6px_#10B981]'
+                                          : 'bg-zinc-500'
+                                      }`}
+                                      title={pres?.isOnline ? 'Online agora no SQLEditor' : 'Offline'}
+                                    />
+                                    <span>{member.studentName}</span>
+                                    {live?.isFrozen && (
+                                      <span className="px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-400 text-[9px] font-bold">
+                                        ❄️ Congelado
+                                      </span>
+                                    )}
+                                    {studentAlerts.length > 0 && (
+                                      <span
+                                        className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold animate-pulse"
+                                        title={`${studentAlerts.length} alerta(s) anti-trapaça`}
+                                      >
+                                        ⚠️ {studentAlerts.length}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
+                                  {member.studentEmail}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[var(--text-muted)]">
+                                  {member.studentRegistration || '---'}
+                                </td>
+                                <td className="px-4 py-3 text-[var(--text-muted)]">
+                                  {member.approvedAt
+                                    ? new Date(member.approvedAt).toLocaleDateString('pt-BR')
+                                    : '---'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setMonitoringStudent({
+                                          uid: member.studentUid,
+                                          name: member.studentName,
+                                          email: member.studentEmail,
+                                        })
+                                      }
+                                      title="Ver tela e código SQL ao vivo do aluno para avaliação e nota"
+                                      className="px-2.5 py-1 rounded-lg bg-[#0288D1]/15 hover:bg-[#0288D1]/25 text-[#29B6F6] border border-[#0288D1]/35 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">desktop_windows</span>
+                                      <span>Ver Tela</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveStudent(member)}
+                                      className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-bold transition-colors cursor-pointer"
+                                    >
+                                      Remover
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1594,6 +2202,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     <option value="class_database">🗄️ Banco de Dados Sala de Aula</option>
                     <option value="example">💡 Exemplo de Aula</option>
                     <option value="exercise">📝 Exercício Prático</option>
+                    <option value="solution">✅ Solução de Aula</option>
                     <option value="exam">🎯 Avaliação / Prova</option>
                   </select>
                 </div>
@@ -1610,6 +2219,44 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   placeholder="Instruções ou resumo para os alunos"
                   className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00]"
                 />
+              </div>
+
+              {/* Visibilidade por Modo (Normal / Sala de Aula / Avaliação) */}
+              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
+                <p className="text-[11px] font-bold text-[var(--text-secondary)] uppercase">
+                  Disponibilidade &amp; Visibilidade nos Modos da Turma:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={matVisibleNormal}
+                      onChange={() => setMatVisibleNormal(!matVisibleNormal)}
+                      className="rounded accent-sky-500"
+                    />
+                    <span className="text-[var(--text-primary)]">🌐 Modo Normal</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={matVisibleClassroom}
+                      onChange={() => setMatVisibleClassroom(!matVisibleClassroom)}
+                      className="rounded accent-emerald-500"
+                    />
+                    <span className="text-[var(--text-primary)]">👁️ Modo Sala de Aula</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
+                    <input
+                      type="checkbox"
+                      checked={matVisibleExam}
+                      onChange={() => setMatVisibleExam(!matVisibleExam)}
+                      className="rounded accent-purple-500"
+                    />
+                    <span className="text-[var(--text-primary)]">🎯 Modo Avaliação</span>
+                  </label>
+                </div>
               </div>
 
               {/* Vinculação de Turmas */}
@@ -1665,7 +2312,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   </label>
                 </div>
                 <textarea
-                  rows={8}
+                  rows={6}
                   required
                   value={matContent}
                   onChange={(e) => setMatContent(e.target.value)}
@@ -1673,6 +2320,34 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                   className="w-full p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#FF6B00] resize-none"
                 />
               </div>
+
+              {/* Gabarito SQL (apenas para categoria Avaliação) */}
+              {matCategory === 'exam' && (
+                <div className="space-y-1.5 p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-purple-300">
+                      ⚡ Gabarito SQL Oficial (para Correção Automática - opcional)
+                    </label>
+                    <label className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-purple-500/40 text-[11px] font-semibold text-purple-300 cursor-pointer">
+                      <span className="material-symbols-outlined text-[14px]">upload_file</span>
+                      <span>Carregar Gabarito</span>
+                      <input
+                        type="file"
+                        accept=".sql,.txt,text/plain"
+                        className="hidden"
+                        onChange={handleAnswerKeyFileUpload}
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={matAnswerKeySql}
+                    onChange={(e) => setMatAnswerKeySql(e.target.value)}
+                    placeholder="Cole os SELECTs oficiais do gabarito separados por ponto e vírgula (;)..."
+                    className="w-full p-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] focus:outline-none focus:border-purple-500 resize-none"
+                  />
+                </div>
+              )}
 
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-color)]">
                 <button
@@ -1695,58 +2370,51 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         </div>
       )}
 
-      {/* MODAL DE VISUALIZAÇÃO DE ENTREGA DE PROVA */}
-      {viewingSubmission && (
-        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-[var(--bg-surface)] border border-purple-500/40 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                  <span className="material-symbols-outlined text-purple-400">assignment_turned_in</span>
-                  <span>{viewingSubmission.title}</span>
-                </h3>
-                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                  Aluno: <strong>{viewingSubmission.authorName}</strong> ({viewingSubmission.authorEmail}) • Enviado em{' '}
-                  {new Date(viewingSubmission.submittedAt || viewingSubmission.createdAt).toLocaleString('pt-BR')}
-                </p>
-              </div>
-              <button
-                onClick={() => setViewingSubmission(null)}
-                type="button"
-                className="w-7 h-7 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            </div>
+      {/* MODAL DE VISUALIZAÇÃO & CORREÇÃO AUTOMÁTICA DE ENTREGA DE PROVA */}
+      {viewingSubmission && user && (
+        <ExamGradingModal
+          submission={viewingSubmission}
+          classExams={classExamMaterials}
+          classDatabaseScripts={classDbMaterials}
+          teacherUid={user.uid}
+          onClose={() => setViewingSubmission(null)}
+          onSaved={({ grade, gradePublished, teacherFeedback }) => {
+            setSubmissions((prev) =>
+              prev.map((s) =>
+                s.id === viewingSubmission.id
+                  ? { ...s, grade, gradePublished, teacherFeedback }
+                  : s
+              )
+            );
+            setViewingSubmission(null);
+            showFeedback(
+              'success',
+              `Nota ${grade.toFixed(1)} salva${gradePublished ? ' e publicada para o aluno' : ''}!`
+            );
+          }}
+        />
+      )}
 
-            <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl p-3 max-h-96 overflow-y-auto">
-              <pre className="font-mono text-xs text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed">
-                {viewingSubmission.content}
-              </pre>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-color)]">
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(viewingSubmission.content);
-                  showFeedback('success', 'Código da resolução copiado!');
-                }}
-                className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer flex items-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-[15px]">content_copy</span>
-                <span>Copiar SQL</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewingSubmission(null)}
-                className="px-5 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs shadow hover:bg-purple-500 cursor-pointer"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* MODAL DE MONITORAMENTO AO VIVO DA TELA DO ALUNO ("Ver Tela") */}
+      {monitoringStudent && selectedClass && (
+        <StudentMonitorModal
+          studentUid={monitoringStudent.uid}
+          studentName={monitoringStudent.name}
+          studentEmail={monitoringStudent.email}
+          classId={selectedClass.id}
+          liveState={liveStates.find((s) => s.studentUid === monitoringStudent.uid) || null}
+          studentAlerts={examAlerts.filter((a) => a.studentUid === monitoringStudent.uid)}
+          classDatabaseScripts={classDbMaterials}
+          classExams={classExamMaterials}
+          onClose={() => setMonitoringStudent(null)}
+          onAcknowledgeAlert={acknowledgeExamAlert}
+          onOpenDirectMessage={(uid) => {
+            setMonitoringStudent(null);
+            setTeacherChatTarget(uid);
+            setActiveResourcePanel('chat');
+          }}
+          onQuickSaveGrade={handleQuickSaveGradeFromMonitor}
+        />
       )}
     </div>
   );

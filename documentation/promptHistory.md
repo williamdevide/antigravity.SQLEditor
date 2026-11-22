@@ -4073,6 +4073,50 @@ crie esse recurso e já publique com a versão atualizada
 - Atalho `Ctrl+Alt+S` configurado e exibido com sucesso.
 - Repositório no GitHub atualizado.
 
+### Prompt 32
+```text
+/agente-orquestrador /grill-me /goal nosso sqleditor esta funcionando muito bem, mas agora precisamos garantir o proximo nivel de excelencia no laboratorio. ja criamos o acesso como professor e aluno, ja criamos as salas onde o professor pode inserir os alunos, agora precisamos implementar as funções relativas a essas classes.
+- deve haver no sqleditor do aluno a indicação visual de que ele faz parte de uma classe, faremos o seguinte, a bolinha com a foto do perfil receberá uma borda dourada neon (como se estivesse ligada). ao clicar, ao inves de ir direto para meu perfil, vai abrir um menu rapido com duas opções: meu perfil, minha classe. em minha classe ele ve a classe, o professor e os outros alunos. consegue ver quais estão online, consegue mandar mensagens (quando alguem recebe mensagem aparece um sininho verde no canto superior direito da foto do perfil na header), consegue compartilhar scripts. o professor pode a qualquer momento desligar o recurso de chat e/ou  compartilhamento de scripts, alem disso o professor tem acesso a todas as mensagens trafegadas.
+- se o professor setar a classe como normal, os alunos vão ver os bd aula, exemplos, exercicios e soluções gerais da plataforma.
+- se o professor seta a classe como sala de aula eles passam a ver os bd aulas, exemplos, exercicios e soluções somente daquela sala.
+- importante, deve haver na tela de incluir novo material uma opção para o professor adicionar arquivos para a sala que sejam do modo normal. alem disso quando o professor adiciona qualquer conteudo ele ainda pode definir como visivel ou invisivel para os alunos (botão em forma de olho aberto verde para visivel no modo aula e fechado cinza escuro para invisivel no modo aula).
+- por fim, no modo avaliação, existe outro botão de olho visivel ou invisivel, mas agora para os materiais no modo avaliação. alem disso no modo avaliação o serviço de chat e envio de arquivos só fica aberto entre aluno e professor, nunca entre alunos. além disso nos alunos deve ser implementado um recurso anti-trapaça, bloqueando copiar colar, e se o  aluno tentar abrir outras janelas, sair da aba, ou usar extensões como de ia que abrem na mesma aba, em todos esses casos deve ser detectado e avisado ao professor no mesmo momento, alem de tentar impedir isso nos alunos.
+- quero também a qualquer momento poder ver a tela do meu aluno para avaliar seu código. inclusive com recursos de correção automatica pelo professor e disponibilização de notas.
+- por fim lá em nova aba, onde temos criar em branco, carregar scripts salvos, carregar soluções, teremos tambem nas salas, carregar exemplos, carregar exercícios e nas avaliações teremos carregar exemplos e carregar avaliações (carregar soluções e scripts salvos somem no modo avaliação).
+- por ultimo, verifique por que esses dois comandos deram erro no db_ecommerce:
+-- REQ-27:
+SELECT pr.nome_produto, COUNT(it.fk_produto) FROM tb_produtos pr JOIN tb_itens_pedido it ON pr.id_produto = it.fk_produto GROUP BY pr.nome_produto ORDER BY COUNT(it.fk_produto) DESC;
+
+-- REQ-29:
+SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SELECT nome_produto, preco FROM tb_produtos ORDER BY preco ASC LIMIT 3;
+```
+
+### Decisões Técnicas (Grill-Me) e Implementações:
+1. **Identidade Visual de Classe, Sininho e Menu Rápido (`ProfileAvatarButton.tsx`, `Header.tsx`, `LandingPageView.tsx`):**
+   - Alunos matriculados/aprovados em uma classe passam a exibir **borda dourada neon brilhante** ao redor da foto de perfil e, ao receberem mensagens não lidas, exibem um **sininho verde pulsante** no canto superior direito da foto na Header.
+   - O clique na foto abre um **Menu Rápido** com as opções **Meu Perfil** e **Minha Classe**.
+2. **Tela "Minha Classe" (`MyClassView.tsx`) e Comunicação em Tempo Real (`classroomRealtimeService.ts`):**
+   - Exibe dados da classe, professor, colegas matriculados e indicador **Online/Offline** ao vivo (heartbeat de presença em `class_presence`).
+   - Suporta **Chat Geral da Turma + Conversas Diretas (1-para-1)** e **Compartilhamento de Scripts SQL** (com botão "Abrir no Editor").
+   - No **Modo Avaliação**, conversas entre alunos e chat geral são bloqueados automaticamente, restando apenas o canal privado **Aluno ↔ Professor**.
+   - Professores têm toggles para desligar/ligar **Chat** e **Compartilhamento de Scripts** e acesso de auditoria a **todas** as mensagens trafegadas na turma no Painel do Professor.
+3. **Visibilidade por Modo (Olho Aula / Olho Avaliação / Modo Normal) e Menu "Nova Aba" (`TeacherPanelView.tsx`, `NewTabDropdown.tsx`, `ContextMenu.tsx`, `App.tsx`):**
+   - Adicionada categoria **`✅ Solução de Aula` (`solution`)**, opção de visibilidade no **Modo Normal**, botão de **Olho Modo Aula** (verde aberto / cinza escuro fechado) e botão de **Olho Modo Avaliação** na lista de materiais.
+   - **Modo Normal**: aluno vê os BDs, exemplos, exercícios e soluções gerais da plataforma (mais os da sala marcados para Modo Normal).
+   - **Modo Sala de Aula**: aluno vê **somente** os BDs daquela sala e, em Nova Aba, **Carregar Exemplos**, **Carregar Exercícios** e **Carregar Soluções** filtrados exclusivamente daquela sala.
+   - **Modo Avaliação**: somem `Carregar Soluções` e `Carregar Scripts Salvos` em Nova Aba, exibindo apenas **Carregar Exemplos** (liberados com olho de avaliação) e **Carregar Avaliações**.
+4. **Anti-Trapaça no Modo Avaliação (`hooks/useExamAntiCheat.ts` e `App.tsx`):**
+   - Bloqueia copiar/colar/recortar/arrastar e atalhos `Ctrl+C`/`Ctrl+V`/`Ctrl+X`/`F12`, monitora perda de foco/saída de aba (`visibilitychange` e `window.blur`) e detecta/oculta overlays de extensões de IA injetados na página (`MutationObserver` + seletores conhecidos).
+   - Dispara alerta em tempo real na coleção `exam_alerts` para o professor e exibe aviso severo ao aluno, permitindo ainda o **congelamento remoto do editor** pelo professor (`student_live_state.isFrozen`).
+5. **Monitoramento Ao Vivo ("Ver Tela") e Correção Automática com Notas (`StudentMonitorModal.tsx`, `ExamGradingModal.tsx`, `autoGraderService.ts`):**
+   - Professor acompanha o código/abas do aluno ao vivo em `student_live_state`, pode congelar/desbloquear o editor, executar **Correção Automática** em instância isolada do AlaSQL contra o **Gabarito SQL** oficial e publicar **Notas (0 a 10)** + feedback visíveis ao aluno na aba **Minhas Notas** de "Minha Classe".
+6. **Correção dos Erros SQL no `db_ecommerce` (`frontend/src/services/mysqlFunctions.ts`):**
+   - **REQ-27 (`ORDER BY COUNT(it.fk_produto) DESC`):** A regra de proteção de apelidos implícitos em `protectReservedAliases` estava confundindo `) DESC` após fechamento de parênteses com um alias reservado e adicionando crases (`` `DESC` ``), causando erro de sintaxe. Corrigido com lista de exclusão `NON_ALIAS_FOLLOWERS_AFTER_PAREN`.
+   - **REQ-29 (`SELECT ... ORDER BY ... LIMIT 3 UNION SELECT ...`):** O parser do AlaSQL rejeita `ORDER BY` e `LIMIT` aplicados diretamente antes de `UNION`. Adicionado o pré-processador `normalizeUnionBranchesWithOrderOrLimit`, envolvendo ramos de `UNION` com `ORDER BY`/`LIMIT` em subqueries compatíveis (`SELECT * FROM (...) AS _union_branch_n`).
+7. **Regras de Segurança do Firestore (`firestore.rules`):**
+   - Atualizadas via subagente `firestore-rules-author` para suportar visibilidade, notas, gabarito, `solution` e as novas coleções `class_presence`, `class_messages`, `exam_alerts` e `student_live_state`.
+
+
 
 
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { SolutionItem } from '../services/scriptsLoader';
-import type { SavedScriptItem } from '../types';
+import type { SavedScriptItem, ClassroomMode } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface NewTabDropdownProps {
@@ -12,7 +12,9 @@ interface NewTabDropdownProps {
   onSelectSavedScript?: (script: SavedScriptItem) => void;
   classExamples?: SavedScriptItem[];
   classExercises?: SavedScriptItem[];
+  classSolutions?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
+  classroomMode?: ClassroomMode;
   isExamModeActive?: boolean;
   triggerButton: (props: {
     isOpen: boolean;
@@ -31,7 +33,9 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
   onSelectSavedScript,
   classExamples = [],
   classExercises = [],
+  classSolutions = [],
   classExams = [],
+  classroomMode = 'normal',
   isExamModeActive = false,
   triggerButton,
   align = 'left',
@@ -153,35 +157,163 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
           }}
           className="min-w-[230px] bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
         >
-          {/* Se estiver em Modo Avaliação, bloqueia opções gerais */}
-          {isExamModeActive ? (
-            <div className="p-3 text-center space-y-2">
-              <div className="w-8 h-8 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto">
-                <span className="material-symbols-outlined text-[18px]">lock</span>
-              </div>
-              <p className="text-[11px] font-bold text-purple-300">Modo Avaliação Ativo</p>
-              <p className="text-[10px] text-[var(--text-muted)] leading-tight">
-                A criação de novas abas livres e consulta a outros scripts está bloqueada durante a prova.
-              </p>
-              {classExams.length > 0 && (
-                <div className="pt-2 border-t border-[var(--border-color)] text-left">
-                  <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase block mb-1">
-                    Guias da Prova:
+          {/* Se estiver em Modo Avaliação: apenas Carregar Exemplos e Carregar Avaliações (somem Soluções e Scripts Salvos) */}
+          {isExamModeActive || classroomMode === 'exam' ? (
+            <>
+              <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/20 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-purple-400">lock</span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-bold text-purple-300 leading-tight">
+                    Modo Avaliação Ativo
                   </span>
-                  {classExams.map((exam) => (
-                    <button
-                      key={exam.id}
-                      onClick={() => handleSavedScriptClick(exam)}
-                      type="button"
-                      className="w-full text-left p-1.5 rounded hover:bg-[var(--bg-hover)] flex items-center gap-2 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[14px] text-purple-400">quiz</span>
-                      <span className="text-xs truncate text-[var(--text-primary)]">{exam.title}</span>
-                    </button>
-                  ))}
+                  <span className="text-[9.5px] text-[var(--text-muted)]">
+                    Acesso restrito aos itens da prova
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+
+              {/* Carregar Exemplos (Modo Avaliação) */}
+              <div
+                className="relative"
+                onMouseEnter={() => handleMouseEnterSubmenu('examples')}
+                onMouseLeave={handleMouseLeaveSubmenu}
+              >
+                <button
+                  onClick={() => setActiveSubmenu((prev) => (prev === 'examples' ? null : 'examples'))}
+                  type="button"
+                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[17px] text-[#00E5FF] group-hover:scale-110 transition-transform">
+                      lightbulb
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-[12px] text-[var(--text-primary)]">
+                        Carregar Exemplos
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        {classExamples.length}{' '}
+                        {classExamples.length === 1 ? 'exemplo liberado' : 'exemplos liberados'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)]">
+                    chevron_right
+                  </span>
+                </button>
+
+                {activeSubmenu === 'examples' && (
+                  <div
+                    className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md`}
+                    onMouseEnter={() => handleMouseEnterSubmenu('examples')}
+                    onMouseLeave={handleMouseLeaveSubmenu}
+                  >
+                    <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
+                      Exemplos Permitidos na Prova
+                    </div>
+                    {classExamples.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                        Nenhum exemplo liberado para esta avaliação.
+                      </div>
+                    ) : (
+                      classExamples.map((ex) => (
+                        <button
+                          key={ex.id}
+                          onClick={() => handleSavedScriptClick(ex)}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-[#00E5FF] shrink-0 mt-0.5">
+                            code
+                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                              {ex.title}
+                            </span>
+                            {ex.description && (
+                              <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                {ex.description}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Carregar Avaliações */}
+              <div
+                className="relative"
+                onMouseEnter={() => handleMouseEnterSubmenu('exams')}
+                onMouseLeave={handleMouseLeaveSubmenu}
+              >
+                <button
+                  onClick={() => setActiveSubmenu((prev) => (prev === 'exams' ? null : 'exams'))}
+                  type="button"
+                  className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[17px] text-purple-400 group-hover:scale-110 transition-transform">
+                      quiz
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-[12px] text-[var(--text-primary)]">
+                        Carregar Avaliações
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        {classExams.length}{' '}
+                        {classExams.length === 1 ? 'avaliação disponível' : 'avaliações disponíveis'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)]">
+                    chevron_right
+                  </span>
+                </button>
+
+                {activeSubmenu === 'exams' && (
+                  <div
+                    className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[260px] max-w-[340px] max-h-[360px] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md`}
+                    onMouseEnter={() => handleMouseEnterSubmenu('exams')}
+                    onMouseLeave={handleMouseLeaveSubmenu}
+                  >
+                    <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
+                      Avaliações da Turma
+                    </div>
+                    {classExams.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                        Nenhuma avaliação publicada nesta turma.
+                      </div>
+                    ) : (
+                      classExams.map((exam) => (
+                        <button
+                          key={exam.id}
+                          onClick={() => handleSavedScriptClick(exam)}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-purple-400 shrink-0 mt-0.5">
+                            quiz
+                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                              {exam.title}
+                            </span>
+                            {exam.description && (
+                              <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                {exam.description}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <>
               {/* Opção 1: Criar aba em branco */}
@@ -298,7 +430,17 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                               </span>
                               {sc.category && sc.category !== 'student_saved' && (
                                 <span className="text-[8px] font-mono px-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-muted)] shrink-0">
-                                  {sc.category === 'example' ? 'Exemplo' : sc.category === 'exercise' ? 'Exercício' : sc.category === 'class_database' ? 'BD' : sc.category === 'exam' ? 'Prova' : sc.category}
+                                  {sc.category === 'example'
+                                    ? 'Exemplo'
+                                    : sc.category === 'exercise'
+                                    ? 'Exercício'
+                                    : sc.category === 'solution'
+                                    ? 'Solução'
+                                    : sc.category === 'class_database'
+                                    ? 'BD'
+                                    : sc.category === 'exam'
+                                    ? 'Prova'
+                                    : sc.category}
                                 </span>
                               )}
                             </div>
@@ -318,8 +460,8 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                 )}
               </div>
 
-              {/* Opção 3: Exemplos da Turma (se houver) */}
-              {classExamples.length > 0 && (
+              {/* Opção 3: Carregar Exemplos (em Modo Sala de Aula sempre aparece; no Normal aparece se houver marcados p/ Normal) */}
+              {(classroomMode === 'classroom' || classExamples.length > 0) && (
                 <div
                   className="relative"
                   onMouseEnter={() => handleMouseEnterSubmenu('examples')}
@@ -336,11 +478,11 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       </span>
                       <div className="flex flex-col">
                         <span className="font-medium text-[12px] text-[var(--text-primary)]">
-                          Exemplos da Turma
+                          Carregar Exemplos
                         </span>
                         <span className="text-[10px] text-[var(--text-muted)]">
                           {classExamples.length}{' '}
-                          {classExamples.length === 1 ? 'exemplo do professor' : 'exemplos do professor'}
+                          {classExamples.length === 1 ? 'exemplo da turma' : 'exemplos da turma'}
                         </span>
                       </div>
                     </div>
@@ -358,35 +500,41 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
                         Exemplos de Aula
                       </div>
-                      {classExamples.map((ex) => (
-                        <button
-                          key={ex.id}
-                          onClick={() => handleSavedScriptClick(ex)}
-                          type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
-                        >
-                          <span className="material-symbols-outlined text-[15px] text-[#00E5FF] shrink-0 mt-0.5">
-                            code
-                          </span>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
-                              {ex.title}
+                      {classExamples.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                          Nenhum exemplo visível nesta sala.
+                        </div>
+                      ) : (
+                        classExamples.map((ex) => (
+                          <button
+                            key={ex.id}
+                            onClick={() => handleSavedScriptClick(ex)}
+                            type="button"
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
+                          >
+                            <span className="material-symbols-outlined text-[15px] text-[#00E5FF] shrink-0 mt-0.5">
+                              code
                             </span>
-                            {ex.description && (
-                              <span className="text-[10px] text-[var(--text-muted)] truncate">
-                                {ex.description}
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                                {ex.title}
                               </span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                              {ex.description && (
+                                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                  {ex.description}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Opção 4: Exercícios da Turma (se houver) */}
-              {classExercises.length > 0 && (
+              {/* Opção 4: Carregar Exercícios (em Modo Sala de Aula sempre aparece; no Normal aparece se houver marcados p/ Normal) */}
+              {(classroomMode === 'classroom' || classExercises.length > 0) && (
                 <div
                   className="relative"
                   onMouseEnter={() => handleMouseEnterSubmenu('exercises')}
@@ -403,7 +551,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       </span>
                       <div className="flex flex-col">
                         <span className="font-medium text-[12px] text-[var(--text-primary)]">
-                          Exercícios da Turma
+                          Carregar Exercícios
                         </span>
                         <span className="text-[10px] text-[var(--text-muted)]">
                           {classExercises.length}{' '}
@@ -425,34 +573,40 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
                         Exercícios da Turma
                       </div>
-                      {classExercises.map((exe) => (
-                        <button
-                          key={exe.id}
-                          onClick={() => handleSavedScriptClick(exe)}
-                          type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
-                        >
-                          <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)] shrink-0 mt-0.5">
-                            edit_note
-                          </span>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
-                              {exe.title}
+                      {classExercises.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                          Nenhum exercício visível nesta sala.
+                        </div>
+                      ) : (
+                        classExercises.map((exe) => (
+                          <button
+                            key={exe.id}
+                            onClick={() => handleSavedScriptClick(exe)}
+                            type="button"
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
+                          >
+                            <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)] shrink-0 mt-0.5">
+                              edit_note
                             </span>
-                            {exe.description && (
-                              <span className="text-[10px] text-[var(--text-muted)] truncate">
-                                {exe.description}
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                                {exe.title}
                               </span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                              {exe.description && (
+                                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                  {exe.description}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Opção 5: Carregar Soluções com Submenu */}
+              {/* Opção 5: Carregar Soluções (Modo Sala de Aula = SOMENTE soluções daquela sala; Modo Normal = soluções gerais + da sala marcadas p/ Normal) */}
               <div
                 className="relative"
                 onMouseEnter={() => handleMouseEnterSubmenu('solutions')}
@@ -472,7 +626,11 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                         Carregar Soluções
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)]">
-                        {solutions.length} {solutions.length === 1 ? 'arquivo disponível' : 'arquivos disponíveis'}
+                        {classroomMode === 'classroom'
+                          ? `${classSolutions.length} ${classSolutions.length === 1 ? 'solução da sala' : 'soluções da sala'}`
+                          : `${solutions.length + classSolutions.length} ${
+                              solutions.length + classSolutions.length === 1 ? 'arquivo disponível' : 'arquivos disponíveis'
+                            }`}
                       </span>
                     </div>
                   </div>
@@ -489,35 +647,88 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                     onMouseLeave={handleMouseLeaveSubmenu}
                   >
                     <div className="px-3 py-1 text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border-color)]">
-                      Selecione a Solução
+                      {classroomMode === 'classroom' ? 'Soluções da Sala' : 'Selecione a Solução'}
                     </div>
 
-                    {solutions.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
-                        Nenhum arquivo de solução encontrado em data/solutions.
-                      </div>
+                    {classroomMode === 'classroom' ? (
+                      classSolutions.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                          Nenhuma solução visível publicada para esta sala.
+                        </div>
+                      ) : (
+                        classSolutions.map((cSol) => (
+                          <button
+                            key={cSol.id}
+                            onClick={() => handleSavedScriptClick(cSol)}
+                            type="button"
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
+                          >
+                            <span className="material-symbols-outlined text-[15px] text-emerald-400 shrink-0 mt-0.5">
+                              check_circle
+                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                                {cSol.title}
+                              </span>
+                              {cSol.description && (
+                                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                                  {cSol.description}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))
+                      )
                     ) : (
-                      solutions.map((sol) => (
-                        <button
-                          key={sol.id}
-                          onClick={() => handleSolutionClick(sol)}
-                          type="button"
-                          title={sol.fileName}
-                          className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
-                        >
-                          <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)] shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                            description
-                          </span>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-[var(--accent-yellow)] transition-colors">
-                              {sol.displayName}
+                      <>
+                        {classSolutions.map((cSol) => (
+                          <button
+                            key={cSol.id}
+                            onClick={() => handleSavedScriptClick(cSol)}
+                            type="button"
+                            className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 group"
+                          >
+                            <span className="material-symbols-outlined text-[15px] text-emerald-400 shrink-0 mt-0.5">
+                              check_circle
                             </span>
-                            <span className="text-[10px] text-[var(--text-muted)] font-mono truncate">
-                              {sol.fileName}
-                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate">
+                                {cSol.title}
+                              </span>
+                              <span className="text-[9.5px] text-emerald-400/90 font-mono">
+                                Turma (Modo Normal)
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                        {solutions.length === 0 && classSolutions.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px]">
+                            Nenhum arquivo de solução encontrado em data/solutions.
                           </div>
-                        </button>
-                      ))
+                        ) : (
+                          solutions.map((sol) => (
+                            <button
+                              key={sol.id}
+                              onClick={() => handleSolutionClick(sol)}
+                              type="button"
+                              title={sol.fileName}
+                              className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
+                            >
+                              <span className="material-symbols-outlined text-[15px] text-[var(--accent-yellow)] shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                                description
+                              </span>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-[var(--accent-yellow)] transition-colors">
+                                  {sol.displayName}
+                                </span>
+                                <span className="text-[10px] text-[var(--text-muted)] font-mono truncate">
+                                  {sol.fileName}
+                                </span>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </>
                     )}
                   </div>
                 )}

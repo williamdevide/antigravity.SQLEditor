@@ -105,7 +105,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             </button>
           </>
         ) : classroomMode === 'classroom' ? (
-          /* MODO SALA DE AULA: Apenas 'Carregar vazio', 'Carregar BDs Aula' e 'Carregar BDs Aula Professor' */
+          /* MODO SALA DE AULA: Apenas 'Carregar vazio' e os BDs somente daquela sala */
           <>
             <div className="px-3 py-1.5 bg-[var(--status-success)]/10 border-b border-[var(--status-success)]/20 text-[var(--status-success)] text-[10px] flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[14px]">school</span>
@@ -132,50 +132,31 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             </button>
 
             <button
-              id="btn-load-class-dbs"
+              id="btn-load-teacher-dbs"
               onClick={() => {
-                onSelectPreset?.('class');
+                onSelectPreset?.('teacher_class');
                 onClose();
               }}
-              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
-                currentPreset === 'class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
+              disabled={!hasTeacherClassDbs}
+              className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group disabled:opacity-50 ${
+                currentPreset === 'teacher_class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
               }`}
               type="button"
             >
-              <span className="material-symbols-outlined text-[17px] text-[var(--status-success)] group-hover:scale-110 transition-transform">
-                school
+              <span className="material-symbols-outlined text-[17px] text-[#00E5FF] group-hover:scale-110 transition-transform">
+                local_library
               </span>
               <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[var(--text-primary)]">Carregar BDs Aula</span>
-                <span className="text-[10px] text-[var(--text-muted)]">Bancos didáticos nativos de aula</span>
+                <span className="text-[12px] font-medium text-[var(--text-primary)]">
+                  Carregar BDs da Sala
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  {hasTeacherClassDbs
+                    ? 'Bancos cadastrados e visíveis nesta sala'
+                    : 'Nenhum BD visível cadastrado na sala'}
+                </span>
               </div>
             </button>
-
-            {hasTeacherClassDbs && (
-              <button
-                id="btn-load-teacher-dbs"
-                onClick={() => {
-                  onSelectPreset?.('teacher_class');
-                  onClose();
-                }}
-                className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 transition-colors cursor-pointer group ${
-                  currentPreset === 'teacher_class' ? 'bg-[var(--bg-hover)]/40 font-semibold' : ''
-                }`}
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[17px] text-[#00E5FF] group-hover:scale-110 transition-transform">
-                  local_library
-                </span>
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-medium text-[var(--text-primary)]">
-                    Carregar BDs Aula Professor
-                  </span>
-                  <span className="text-[10px] text-[var(--text-muted)]">
-                    Bancos cadastrados pelo seu professor
-                  </span>
-                </div>
-              </button>
-            )}
           </>
         ) : (
           /* MODO NORMAL: Todas as opções disponíveis */

@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -548,4 +549,53 @@ export function subscribeToClass(
       console.warn('[ClassService] Aviso ao escutar turma em tempo real:', err);
     }
   );
+}
+
+/**
+ * Busca uma turma pelo ID
+ */
+export async function getClassById(classId: string): Promise<ClassItem | null> {
+  if (!classId) return null;
+  try {
+    const snap = await getDoc(doc(db, 'classes', classId));
+    if (snap.exists()) {
+      return { id: snap.id, ...(snap.data() as Omit<ClassItem, 'id'>) };
+    }
+  } catch (err) {
+    console.warn('[ClassService] Erro ao buscar turma por ID:', err);
+  }
+  return null;
+}
+
+/**
+ * Atualiza configurações em tempo real da turma (chat e compartilhamento de scripts)
+ */
+export async function updateClassSettings(
+  classId: string,
+  settings: { chatEnabled?: boolean; scriptSharingEnabled?: boolean },
+  teacher?: UserProfile
+): Promise<void> {
+  const classRef = doc(db, 'classes', classId);
+  const payload: Record<string, any> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (settings.chatEnabled !== undefined) payload.chatEnabled = settings.chatEnabled;
+  if (settings.scriptSharingEnabled !== undefined) payload.scriptSharingEnabled = settings.scriptSharingEnabled;
+
+  await updateDoc(classRef, payload);
+
+  if (teacher) {
+    try {
+      await logSystemEvent({
+        type: 'CLASS_UPDATED',
+        authorUid: teacher.uid,
+        authorName: teacher.displayName,
+        authorEmail: teacher.email,
+        targetUid: classId,
+        details: `Configurações da turma atualizadas: Chat=${settings.chatEnabled ?? 'inalterado'}, Compartilhamento=${settings.scriptSharingEnabled ?? 'inalterado'}.`,
+      });
+    } catch (auditErr) {
+      console.warn('[ClassService] Aviso ao registrar auditoria de configurações da turma:', auditErr);
+    }
+  }
 }
