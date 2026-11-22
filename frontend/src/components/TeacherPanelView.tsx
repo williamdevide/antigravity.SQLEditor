@@ -34,6 +34,7 @@ import {
 } from '../services/classroomRealtimeService';
 import { StudentMonitorModal } from './StudentMonitorModal';
 import { ExamGradingModal } from './ExamGradingModal';
+import { formatStudentDisplayName, compareNamesPtBr } from '../utils/studentNameFormatter';
 import type {
   ClassItem,
   ClassMemberItem,
@@ -105,6 +106,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   const [selectedAvailableUids, setSelectedAvailableUids] = useState<string[]>([]);
   const [isAdmittingAvailable, setIsAdmittingAvailable] = useState(false);
   const [admittingSingleUid, setAdmittingSingleUid] = useState<string | null>(null);
+  const [highlightedAvailableUid, setHighlightedAvailableUid] = useState<string | null>(null);
+  const availableHighlightTimerRef = useRef<number | null>(null);
 
   // Materiais e Scripts Pedagógicos
   const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
@@ -333,7 +336,11 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         active: editClassActive,
       };
 
-      setClasses((prev) => prev.map((c) => (c.id === selectedClass.id ? updatedItem : c)));
+      setClasses((prev) =>
+        prev
+          .map((c) => (c.id === selectedClass.id ? updatedItem : c))
+          .sort((a, b) => compareNamesPtBr(a.name, b.name))
+      );
       setSelectedClass(updatedItem);
       setIsEditModalOpen(false);
       showFeedback('success', `Turma "${editClassName}" atualizada com sucesso!`);
@@ -396,7 +403,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         teacherEmail: userProfile.email || user.email || '',
       });
 
-      setClasses((prev) => [created, ...prev]);
+      setClasses((prev) =>
+        [...prev, created].sort((a, b) => compareNamesPtBr(a.name, b.name))
+      );
       setSelectedClass(created);
       setIsCreateModalOpen(false);
       setNewClassName('');
@@ -472,9 +481,52 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     }
   };
 
-  // Inserir aluno disponível individualmente na turma atual
+  // Posiciona foco e scroll suave no próximo aluno da lista Disponíveis após inserção
+  const focusNextAvailableStudent = useCallback((nextUid: string | null) => {
+    if (!nextUid) return;
+
+    setHighlightedAvailableUid(nextUid);
+    if (availableHighlightTimerRef.current) {
+      window.clearTimeout(availableHighlightTimerRef.current);
+    }
+    availableHighlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedAvailableUid(null);
+    }, 2400);
+
+    requestAnimationFrame(() => {
+      const nextBtn = document.querySelector<HTMLButtonElement>(
+        `button[data-admit-uid="${nextUid}"]`
+      );
+      const nextRow = document.querySelector<HTMLTableRowElement>(
+        `tr[data-available-row-uid="${nextUid}"]`
+      );
+      if (nextBtn) {
+        nextBtn.focus({ preventScroll: true });
+      }
+      if (nextRow) {
+        const rect = nextRow.getBoundingClientRect();
+        const isOutOfView = rect.top < 72 || rect.bottom > window.innerHeight - 24;
+        if (isOutOfView) {
+          nextRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+    });
+  }, []);
+
+  // Inserir aluno disponível individualmente na turma atual mantendo posicionado no próximo nome
   const handleAdmitSingleAvailable = async (student: UserProfile) => {
     if (!selectedClass || !userProfile) return;
+    const formattedName = getStudentDisplayName(student);
+
+    // Captura o próximo nome na ordem exibida antes da remoção
+    const currentIndex = filteredAvailableStudents.findIndex((s) => s.uid === student.uid);
+    const nextStudent =
+      currentIndex >= 0
+        ? filteredAvailableStudents[currentIndex + 1] ||
+          filteredAvailableStudents[currentIndex - 1] ||
+          null
+        : null;
+
     try {
       setAdmittingSingleUid(student.uid);
       await admitStudentByProfile({
@@ -482,9 +534,28 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
         student,
         teacher: userProfile,
       });
-      showFeedback('success', `Aluno "${student.displayName || student.email}" inserido na turma!`);
+
+      // Atualiza estado localmente para não desmontar a tabela nem perder a posição do scroll
+      setAvailableStudents((prev) => prev.filter((s) => s.uid !== student.uid));
       setSelectedAvailableUids((prev) => prev.filter((id) => id !== student.uid));
-      await Promise.all([loadClassMembers(selectedClass.id), loadAvailableStudents()]);
+      setClasses((prev) =>
+        prev.map((c) =>
+          c.id === selectedClass.id ? { ...c, studentCount: (c.studentCount ?? 0) + 1 } : c
+        )
+      );
+      setSelectedClass((curr) =>
+        curr && curr.id === selectedClass.id
+          ? { ...curr, studentCount: (curr.studentCount ?? 0) + 1 }
+          : curr
+      );
+
+      // Atualiza os matriculados silenciosamente em segundo plano sem exibir spinner
+      getClassMembers(selectedClass.id)
+        .then((updatedMembers) => setMembers(updatedMembers))
+        .catch(() => {});
+
+      showFeedback('success', `Aluno "${formattedName}" inserido na turma!`);
+      focusNextAvailableStudent(nextStudent?.uid || null);
     } catch (err: any) {
       showFeedback('error', err?.message || 'Erro ao inserir aluno na turma.');
     } finally {
@@ -498,23 +569,56 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     const targets = availableStudents.filter((s) => selectedAvailableUids.includes(s.uid));
     if (targets.length === 0) return;
 
+    const targetUidSet = new Set(targets.map((t) => t.uid));
+    // Identifica o primeiro aluno restante após os selecionados na ordem exibida
+    const lastSelectedIdx = filteredAvailableStudents.reduce(
+      (lastIdx, st, idx) => (targetUidSet.has(st.uid) ? idx : lastIdx),
+      -1
+    );
+    const nextRemaining =
+      filteredAvailableStudents.slice(lastSelectedIdx + 1).find((st) => !targetUidSet.has(st.uid)) ||
+      filteredAvailableStudents.find((st) => !targetUidSet.has(st.uid)) ||
+      null;
+
     try {
       setIsAdmittingAvailable(true);
       let addedCount = 0;
+      const insertedUids: string[] = [];
       for (const student of targets) {
         await admitStudentByProfile({
           classItem: selectedClass,
           student,
           teacher: userProfile,
         });
+        insertedUids.push(student.uid);
         addedCount++;
       }
+
+      const insertedSet = new Set(insertedUids);
+      setAvailableStudents((prev) => prev.filter((s) => !insertedSet.has(s.uid)));
       setSelectedAvailableUids([]);
+      setClasses((prev) =>
+        prev.map((c) =>
+          c.id === selectedClass.id
+            ? { ...c, studentCount: (c.studentCount ?? 0) + addedCount }
+            : c
+        )
+      );
+      setSelectedClass((curr) =>
+        curr && curr.id === selectedClass.id
+          ? { ...curr, studentCount: (curr.studentCount ?? 0) + addedCount }
+          : curr
+      );
+
+      getClassMembers(selectedClass.id)
+        .then((updatedMembers) => setMembers(updatedMembers))
+        .catch(() => {});
+
       showFeedback(
         'success',
         `${addedCount} ${addedCount === 1 ? 'aluno inserido' : 'alunos inseridos'} com sucesso na turma "${selectedClass.name}"!`
       );
-      await Promise.all([loadClassMembers(selectedClass.id), loadAvailableStudents()]);
+      focusNextAvailableStudent(nextRemaining?.uid || null);
     } catch (err: any) {
       showFeedback('error', err?.message || 'Erro ao inserir alunos selecionados.');
     } finally {
@@ -838,20 +942,37 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     return matchesClass;
   });
 
-  const approvedMembers = members.filter((m) => m.status === 'approved');
-  const pendingMembers = members.filter((m) => m.status === 'pending');
+  const getMemberDisplayName = (member: ClassMemberItem) =>
+    formatStudentDisplayName(member.studentName, member.studentEmail);
 
-  // Filtro da aba Disponíveis (alunos sem turma)
-  const filteredAvailableStudents = availableStudents.filter((st) => {
-    const term = availableSearch.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      (st.displayName || '').toLowerCase().includes(term) ||
-      (st.email || '').toLowerCase().includes(term) ||
-      (st.registrationNumber || '').toLowerCase().includes(term) ||
-      (st.course || '').toLowerCase().includes(term)
-    );
-  });
+  const getStudentDisplayName = (student: UserProfile) =>
+    formatStudentDisplayName(student.displayName, student.email);
+
+  const sortedClasses = [...classes].sort((a, b) => compareNamesPtBr(a.name, b.name));
+
+  const approvedMembers = [...members]
+    .filter((m) => m.status === 'approved')
+    .sort((a, b) => compareNamesPtBr(getMemberDisplayName(a), getMemberDisplayName(b)));
+
+  const pendingMembers = [...members]
+    .filter((m) => m.status === 'pending')
+    .sort((a, b) => compareNamesPtBr(getMemberDisplayName(a), getMemberDisplayName(b)));
+
+  // Filtro da aba Disponíveis (alunos sem turma) ordenado alfabeticamente
+  const filteredAvailableStudents = [...availableStudents]
+    .filter((st) => {
+      const term = availableSearch.trim().toLowerCase();
+      if (!term) return true;
+      const formattedName = getStudentDisplayName(st).toLowerCase();
+      return (
+        formattedName.includes(term) ||
+        (st.displayName || '').toLowerCase().includes(term) ||
+        (st.email || '').toLowerCase().includes(term) ||
+        (st.registrationNumber || '').toLowerCase().includes(term) ||
+        (st.course || '').toLowerCase().includes(term)
+      );
+    })
+    .sort((a, b) => compareNamesPtBr(getStudentDisplayName(a), getStudentDisplayName(b)));
 
   const allFilteredAvailableSelected =
     filteredAvailableStudents.length > 0 &&
@@ -989,7 +1110,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
             </div>
           ) : (
             <div className="space-y-2.5">
-              {classes.map((c) => {
+              {sortedClasses.map((c) => {
                 const isSelected = selectedClass?.id === c.id;
                 const cMode = c.classroomMode || 'normal';
                 return (
@@ -1197,7 +1318,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                         ⚠️ {unackAlerts.length} alerta(s) anti-trapaça detectado(s) nesta turma!
                       </p>
                       <p className="text-[11px] text-rose-200/80">
-                        Último: <strong>{unackAlerts[0].studentName}</strong> — {unackAlerts[0].details}
+                        Último: <strong>{formatStudentDisplayName(unackAlerts[0].studentName, unackAlerts[0].studentEmail)}</strong> — {unackAlerts[0].details}
                       </p>
                     </div>
                   </div>
@@ -1214,7 +1335,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                       onClick={() =>
                         setMonitoringStudent({
                           uid: unackAlerts[0].studentUid,
-                          name: unackAlerts[0].studentName,
+                          name: formatStudentDisplayName(unackAlerts[0].studentName, unackAlerts[0].studentEmail),
                           email: unackAlerts[0].studentEmail,
                         })
                       }
@@ -1886,7 +2007,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                       }`}
                                       title={pres?.isOnline ? 'Online agora no SQLEditor' : 'Offline'}
                                     />
-                                    <span>{member.studentName}</span>
+                                    <span>{getMemberDisplayName(member)}</span>
                                     {live?.isFrozen && (
                                       <span className="px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-400 text-[9px] font-bold">
                                         ❄️ Congelado
@@ -1920,7 +2041,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                       onClick={() =>
                                         setMonitoringStudent({
                                           uid: member.studentUid,
-                                          name: member.studentName,
+                                          name: getMemberDisplayName(member),
                                           email: member.studentEmail,
                                         })
                                       }
@@ -1974,7 +2095,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                           <div>
                             <div className="flex items-center gap-2">
                               <h4 className="font-bold text-sm text-[var(--text-primary)]">
-                                {member.studentName}
+                                {getMemberDisplayName(member)}
                               </h4>
                               <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-bold">
                                 Aguardando Aprovação
@@ -2165,11 +2286,17 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                             const isBusy =
                               admittingSingleUid === student.uid ||
                               (isAdmittingAvailable && isChecked);
+                            const isHighlighted = highlightedAvailableUid === student.uid;
                             return (
                               <tr
                                 key={student.uid}
+                                data-available-row-uid={student.uid}
                                 className={`hover:bg-[var(--bg-hover)] transition-colors ${
-                                  isChecked ? 'bg-emerald-500/5' : ''
+                                  isHighlighted
+                                    ? 'bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/40'
+                                    : isChecked
+                                    ? 'bg-emerald-500/5'
+                                    : ''
                                 }`}
                               >
                                 <td className="px-4 py-3">
@@ -2187,7 +2314,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                   />
                                 </td>
                                 <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
-                                  {student.displayName || 'Sem nome'}
+                                  {getStudentDisplayName(student)}
                                 </td>
                                 <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
                                   {student.email}
@@ -2201,9 +2328,10 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                                 <td className="px-4 py-3 text-right">
                                   <button
                                     type="button"
+                                    data-admit-uid={student.uid}
                                     disabled={isBusy || isAdmittingAvailable}
                                     onClick={() => handleAdmitSingleAvailable(student)}
-                                    className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/35 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                                    className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/35 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                                   >
                                     <span className="material-symbols-outlined text-[14px]">
                                       person_add
@@ -2559,7 +2687,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
                 {!matAllClasses && (
                   <div className="space-y-1 max-h-24 overflow-y-auto pl-5 text-xs text-[var(--text-secondary)]">
-                    {classes.map((c) => (
+                    {sortedClasses.map((c) => (
                       <label key={c.id} className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"

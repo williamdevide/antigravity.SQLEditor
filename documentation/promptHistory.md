@@ -4159,3 +4159,21 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 
 
 
+
+---
+
+### Prompt 35
+> /agente-orquestrador /grill-me /goal na tela de minhas turmas: quero os cards a esquerda com as turmas ordenados pelo nome da turma. na parte da direita, em matriculados, exibe os alunos em ordem alfabetica (deixe todos os nomes somente com as primeiras letras de cada palavra em maiusculo, alguns nomes tambem estão errados, estão "Aluno(a) SQLEditor", recalcule pelo email se precisar. no botão disponiveis, quando clicar em inserir elimina ele dessa lista, mas mantem posicionado no proximo nome.
+
+**Ações Executadas:**
+1. **Utilitário de Normalização e Ordenação (`frontend/src/utils/studentNameFormatter.ts`):**
+   - Implementada a função `formatStudentDisplayName(rawName, email)` que identifica nomes genéricos/inválidos (`"Aluno(a) SQLEditor"`, `"Usuário"`, `"Sem nome"`, vazios), recalcula um nome legível a partir da parte local do e-mail institucional/pessoal e aplica formatação Title Case PT-BR (somente a primeira letra de cada palavra em maiúsculo).
+   - Implementado `compareNamesPtBr` utilizando `localeCompare(..., 'pt-BR', { sensitivity: 'base', numeric: true })`.
+2. **Serviço de Turmas (`frontend/src/services/classService.ts`):**
+   - `getClassesByTeacher` e `getAllClasses` passaram a ordenar as turmas alfabeticamente por `name`.
+   - `getClassMembers` passou a normalizar `studentName` com `formatStudentDisplayName` e retornar a lista em ordem alfabética.
+   - `getAvailableStudents` e `admitStudentByProfile` atualizados para ordenar e persistir nomes já normalizados.
+3. **Painel do Professor — Minhas Turmas (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Cards da esquerda ordenados pelo nome da turma (`sortedClasses`) tanto no carregamento inicial quanto após criação ou edição.
+   - Abas `Matriculados`, `Solicitações Pendentes` e `Disponíveis` ordenadas alfabeticamente pelos nomes normalizados em Title Case.
+   - Na aba `Disponíveis`, ao clicar em **"Inserir"** (ou **"Inserir Selecionados"**), o aluno inserido é removido localmente da lista sem acionar spinner nem desmontar a tabela, mantendo o posicionamento visual e transferindo foco/destaque sutil para o próximo nome da lista (`focusNextAvailableStudent`).

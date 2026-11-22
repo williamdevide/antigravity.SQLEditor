@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { logSystemEvent } from './auditService';
+import { formatStudentDisplayName, compareNamesPtBr } from '../utils/studentNameFormatter';
 import type { ClassItem, ClassMemberItem, UserProfile, ClassroomMode } from '../types';
 
 /**
@@ -90,7 +91,7 @@ export async function getClassesByTeacher(teacherId: string): Promise<ClassItem[
     snap.forEach((d) => {
       classes.push({ id: d.id, ...(d.data() as Omit<ClassItem, 'id'>) });
     });
-    return classes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return classes.sort((a, b) => compareNamesPtBr(a.name, b.name));
   } catch (err) {
     console.warn('[ClassService] Erro ao listar turmas do professor:', err);
     return [];
@@ -108,7 +109,7 @@ export async function getAllClasses(): Promise<ClassItem[]> {
     snap.forEach((d) => {
       classes.push({ id: d.id, ...(d.data() as Omit<ClassItem, 'id'>) });
     });
-    return classes.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return classes.sort((a, b) => compareNamesPtBr(a.name, b.name));
   } catch (err) {
     console.warn('[ClassService] Erro ao listar todas as turmas:', err);
     return [];
@@ -207,7 +208,10 @@ export async function getAvailableStudents(): Promise<UserProfile[]> {
       }
     });
     return available.sort((a, b) =>
-      (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'pt-BR')
+      compareNamesPtBr(
+        formatStudentDisplayName(a.displayName, a.email),
+        formatStudentDisplayName(b.displayName, b.email)
+      )
     );
   } catch (err) {
     console.warn('[ClassService] Erro ao listar alunos disponíveis:', err);
@@ -226,6 +230,7 @@ export async function admitStudentByProfile(params: {
   const { student } = params;
   const memberDocId = `${params.classItem.id}_${student.uid}`;
   const now = new Date().toISOString();
+  const formattedStudentName = formatStudentDisplayName(student.displayName, student.email);
 
   const memberPayload: ClassMemberItem = {
     id: memberDocId,
@@ -233,7 +238,7 @@ export async function admitStudentByProfile(params: {
     classCode: params.classItem.code,
     className: params.classItem.name,
     studentUid: student.uid,
-    studentName: student.displayName || student.email || 'Aluno',
+    studentName: formattedStudentName,
     studentEmail: student.email,
     studentRegistration: student.registrationNumber || '',
     status: 'approved',
@@ -266,9 +271,9 @@ export async function admitStudentByProfile(params: {
     authorName: params.teacher.displayName,
     authorEmail: params.teacher.email,
     targetUid: student.uid,
-    targetName: student.displayName || student.email,
+    targetName: formattedStudentName,
     targetEmail: student.email,
-    details: `Professor(a) ${params.teacher.displayName} inseriu diretamente o aluno ${student.displayName || student.email} na turma "${params.classItem.name}".`,
+    details: `Professor(a) ${params.teacher.displayName} inseriu diretamente o aluno ${formattedStudentName} na turma "${params.classItem.name}".`,
   });
 }
 
@@ -510,9 +515,14 @@ export async function getClassMembers(classId: string): Promise<ClassMemberItem[
     const snap = await getDocs(q);
     const members: ClassMemberItem[] = [];
     snap.forEach((d) => {
-      members.push({ id: d.id, ...(d.data() as Omit<ClassMemberItem, 'id'>) });
+      const raw = d.data() as Omit<ClassMemberItem, 'id'>;
+      members.push({
+        id: d.id,
+        ...raw,
+        studentName: formatStudentDisplayName(raw.studentName, raw.studentEmail),
+      });
     });
-    return members.sort((a, b) => (b.requestedAt || '').localeCompare(a.requestedAt || ''));
+    return members.sort((a, b) => compareNamesPtBr(a.studentName, b.studentName));
   } catch (err) {
     console.warn('[ClassService] Erro ao buscar membros da turma:', err);
     return [];
