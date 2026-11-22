@@ -128,6 +128,9 @@ export const App: React.FC = () => {
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
   const [isHubModalOpen, setIsHubModalOpen] = useState<boolean>(() => {
     try {
+      if (window.sessionStorage.getItem('sqleditor_exam_auto_reload_session')) {
+        return false;
+      }
       return (
         preferences.ui.showStartupHub &&
         parseActiveViewFromHash(window.location.hash) === 'workspace'
@@ -139,6 +142,9 @@ export const App: React.FC = () => {
 
   const [activeView, setActiveViewState] = useState<ActiveView>(() => {
     try {
+      if (window.sessionStorage.getItem('sqleditor_exam_auto_reload_session')) {
+        return 'workspace';
+      }
       const fromHash = parseActiveViewFromHash(window.location.hash);
       // Se há rota explícita por hash (ex: #editor, #der, #guia, #feedback), honra o hash
       if (fromHash) return fromHash;
@@ -269,6 +275,9 @@ export const App: React.FC = () => {
   const [activeClassName, setActiveClassName] = useState<string>('');
   const [isExamModeActive, setIsExamModeActive] = useState<boolean>(false);
   const isExamModeActiveRef = useRef<boolean>(false);
+  const lastExamSessionIdRef = useRef<string | null>(null);
+  const suppressExamExitAlertRef = useRef<boolean>(false);
+  const isTriggeringExamReloadRef = useRef<boolean>(false);
   const [teacherClasses, setTeacherClasses] = useState<ClassItem[]>([]);
   const [savedScripts, setSavedScripts] = useState<SavedScriptItem[]>([]);
   const [rawClassScripts, setRawClassScripts] = useState<SavedScriptItem[]>([]);
@@ -1230,82 +1239,134 @@ export const App: React.FC = () => {
 
       const wasInExam = isExamModeActiveRef.current;
       const willBeInExam = newMode === 'exam';
+      const examSessionKey = classData.activeExamSessionId || `exam_${classData.id}`;
 
-      if (willBeInExam && !wasInExam) {
-        // ENTRANDO NO MODO AVALIAÇÃO:
-        isExamModeActiveRef.current = true;
-        setIsExamModeActive(true);
+      if (willBeInExam) {
+        if (isTriggeringExamReloadRef.current) return;
+        const isNewExamSession =
+          !wasInExam || lastExamSessionIdRef.current !== examSessionKey;
 
-        // A. Faz backup de todas as abas abertas no perfil como temporárias
-        try {
-          const currentTabs = tabsRef.current;
-          for (const tab of currentTabs) {
-            await saveScript({
-              title: tab.title,
-              content: tab.content,
-              authorUid: user!.uid,
-              authorName: userProfile.displayName || 'Aluno',
-              authorEmail: userProfile.email || '',
-              authorRole: userProfile.role || 'aluno',
-              category: 'student_saved',
-              isTemporary: true,
-              classIds: [classData.id],
-            });
+        if (isNewExamSession) {
+          lastExamSessionIdRef.current = examSessionKey;
+          violationCountRef.current = 0;
+          setAntiCheatWarning(null);
+
+          let alreadyBackedUp = false;
+          let alreadyReloaded = false;
+          try {
+            alreadyBackedUp =
+              window.sessionStorage.getItem('sqleditor_exam_backed_up_for') === examSessionKey;
+            alreadyReloaded =
+              window.sessionStorage.getItem('sqleditor_exam_reloaded_for') === examSessionKey;
+          } catch (_) {}
+
+          // A. Faz backup único de todas as abas abertas antes do reload no Laboratório SQL
+          if (!alreadyBackedUp) {
+            try {
+              const currentTabs = tabsRef.current;
+              for (const tab of currentTabs) {
+                await saveScript({
+                  title: tab.title,
+                  content: tab.content,
+                  authorUid: user!.uid,
+                  authorName: userProfile.displayName || 'Aluno',
+                  authorEmail: userProfile.email || '',
+                  authorRole: userProfile.role || 'aluno',
+                  category: 'student_saved',
+                  isTemporary: true,
+                  classIds: [classData.id],
+                });
+              }
+              try {
+                window.sessionStorage.setItem('sqleditor_exam_backed_up_for', examSessionKey);
+              } catch (_) {}
+            } catch (backupErr) {
+              console.warn('[Exam Mode Backup Error]', backupErr);
+            }
           }
-        } catch (backupErr) {
-          console.warn('[Exam Mode Backup Error]', backupErr);
-        }
 
-        // B. Fecha todas as abas atuais
-        setTabs([]);
-        setActiveTabId('');
-
-        // C. Carrega scripts oficiais de prova visíveis na turma
-        try {
-          const examScripts = latestClassScripts.filter(
-            (s) => s.category === 'exam' && s.visibleInExam !== false
-          );
-          if (examScripts.length > 0) {
-            const newExamTabs: TabItem[] = examScripts.map((s) => ({
-              id: s.id,
-              title: s.title,
-              content: s.content,
-            }));
-            setTabs(newExamTabs);
-            setActiveTabId(newExamTabs[0].id);
-          } else {
-            const defaultExamTab: TabItem = {
-              id: `tab-exam-${Date.now()}`,
-              title: 'avaliacao_respostas.sql',
-              content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e entregue ao finalizar.\n\n`,
-            };
-            setTabs([defaultExamTab]);
-            setActiveTabId(defaultExamTab.id);
+          // B. Ao iniciar uma avaliação, recarrega automaticamente o aluno direto no Laboratório SQL
+          if (!alreadyReloaded) {
+            isTriggeringExamReloadRef.current = true;
+            suppressExamExitAlertRef.current = true;
+            try {
+              window.sessionStorage.setItem('sqleditor_exam_reloaded_for', examSessionKey);
+              window.sessionStorage.setItem('sqleditor_exam_auto_reload_session', examSessionKey);
+              localStorage.setItem('sqleditor_active_view', 'workspace');
+              window.location.hash = '#editor';
+            } catch (_) {}
+            window.location.reload();
+            return;
           }
-        } catch (loadErr) {
-          console.warn('[Exam Scripts Load Error]', loadErr);
-        }
 
-        // D. Carrega BDs de avaliação (class_database visíveis na prova + exam scripts)
-        try {
-          const examDbScripts = latestClassScripts
-            .filter(
-              (s) =>
-                (s.category === 'class_database' && Boolean(s.visibleInExam)) ||
-                (s.category === 'exam' && s.visibleInExam !== false)
-            )
-            .map((s) => ({
-              title: s.title,
-              content: s.content,
-            }));
-          await handleLoadPreset('exam', examDbScripts);
-        } catch (presetErr) {
-          console.warn('[Exam Preset Load Error]', presetErr);
+          try {
+            window.sessionStorage.removeItem('sqleditor_exam_auto_reload_session');
+          } catch (_) {}
+
+          isExamModeActiveRef.current = true;
+          setIsExamModeActive(true);
+          setIsHubModalOpen(false);
+          setActiveView('workspace');
+
+          // C. Fecha todas as abas atuais
+          setTabs([]);
+          setActiveTabId('');
+
+          // D. Carrega scripts oficiais de prova visíveis na turma
+          try {
+            const examScripts = latestClassScripts.filter(
+              (s) => s.category === 'exam' && s.visibleInExam !== false
+            );
+            if (examScripts.length > 0) {
+              const newExamTabs: TabItem[] = examScripts.map((s) => ({
+                id: s.id,
+                title: s.title,
+                content: s.content,
+              }));
+              setTabs(newExamTabs);
+              setActiveTabId(newExamTabs[0].id);
+            } else {
+              const defaultExamTab: TabItem = {
+                id: `tab-exam-${Date.now()}`,
+                title: 'avaliacao_respostas.sql',
+                content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e entregue ao finalizar.\n\n`,
+              };
+              setTabs([defaultExamTab]);
+              setActiveTabId(defaultExamTab.id);
+            }
+          } catch (loadErr) {
+            console.warn('[Exam Scripts Load Error]', loadErr);
+          }
+
+          // E. Carrega BDs de avaliação (class_database visíveis na prova + exam scripts)
+          try {
+            const examDbScripts = latestClassScripts
+              .filter(
+                (s) =>
+                  (s.category === 'class_database' && Boolean(s.visibleInExam)) ||
+                  (s.category === 'exam' && s.visibleInExam !== false)
+              )
+              .map((s) => ({
+                title: s.title,
+                content: s.content,
+              }));
+            await handleLoadPreset('exam', examDbScripts);
+          } catch (presetErr) {
+            console.warn('[Exam Preset Load Error]', presetErr);
+          }
         }
       } else if (!willBeInExam && wasInExam) {
         // SAINDO DO MODO AVALIAÇÃO:
+        lastExamSessionIdRef.current = null;
         isExamModeActiveRef.current = false;
         setIsExamModeActive(false);
+        setAntiCheatWarning(null);
+        violationCountRef.current = 0;
+        try {
+          window.sessionStorage.removeItem('sqleditor_exam_reloaded_for');
+          window.sessionStorage.removeItem('sqleditor_exam_backed_up_for');
+          window.sessionStorage.removeItem('sqleditor_exam_auto_reload_session');
+        } catch (_) {}
 
         // Verifica se há scripts temporários para restaurar
         try {
@@ -1540,6 +1601,62 @@ export const App: React.FC = () => {
   ]);
 
   // 2.3 Sistema Anti-Trapaça durante Modo Avaliação (Aluno)
+  const pendingExamExitStorageKey = user ? `sqleditor_pending_exam_exit_${user.uid}` : '';
+
+  // Reenvia ocorrência de saída/fechamento de página caso o navegador tenha encerrado antes do upload
+  useEffect(() => {
+    if (!user || userProfile?.role !== 'aluno' || !pendingExamExitStorageKey) return;
+    try {
+      const raw = localStorage.getItem(pendingExamExitStorageKey);
+      if (!raw) return;
+      localStorage.removeItem(pendingExamExitStorageKey);
+      const parsed = JSON.parse(raw);
+      if (parsed?.classId && parsed?.studentUid) {
+        reportExamAlert({
+          classId: parsed.classId,
+          studentUid: parsed.studentUid,
+          studentName: parsed.studentName || userProfile.displayName || 'Aluno',
+          studentEmail: parsed.studentEmail || userProfile.email || '',
+          type: 'page_exit_attempt',
+          details:
+            parsed.details ||
+            'Aluno saiu da página ou fechou a guia durante a avaliação (registro recuperado ao retornar).',
+          examSessionId: parsed.examSessionId || null,
+          examSessionLabel: parsed.examSessionLabel || null,
+        });
+      }
+    } catch (_) {}
+  }, [user, userProfile?.role, userProfile?.displayName, userProfile?.email, pendingExamExitStorageKey]);
+
+  const handlePersistPageExitAttempt = useCallback(
+    (details: string) => {
+      if (!user || !userProfile?.classId || !pendingExamExitStorageKey) return;
+      try {
+        localStorage.setItem(
+          pendingExamExitStorageKey,
+          JSON.stringify({
+            classId: userProfile.classId,
+            studentUid: user.uid,
+            studentName: userProfile.displayName || user.displayName || 'Aluno',
+            studentEmail: userProfile.email || user.email || '',
+            details,
+            examSessionId: activeClassItem?.activeExamSessionId || null,
+            examSessionLabel: activeClassItem?.activeExamSessionLabel || null,
+          })
+        );
+      } catch (_) {}
+    },
+    [
+      user,
+      userProfile?.classId,
+      userProfile?.displayName,
+      userProfile?.email,
+      pendingExamExitStorageKey,
+      activeClassItem?.activeExamSessionId,
+      activeClassItem?.activeExamSessionLabel,
+    ]
+  );
+
   const handleAntiCheatAlert = useCallback(
     (type: ExamAlertType, details: string, severityMessage: string) => {
       if (!user || !userProfile?.classId) return;
@@ -1555,9 +1672,24 @@ export const App: React.FC = () => {
         studentEmail: userProfile.email || user.email || '',
         type,
         details,
+        examSessionId: activeClassItem?.activeExamSessionId || null,
+        examSessionLabel: activeClassItem?.activeExamSessionLabel || null,
+      }).then((sentOk) => {
+        // Evita duplicação ao retornar caso o envio imediato antes de fechar a guia já tenha concluído
+        if (sentOk && type === 'page_exit_attempt' && pendingExamExitStorageKey) {
+          try {
+            localStorage.removeItem(pendingExamExitStorageKey);
+          } catch (_) {}
+        }
       });
     },
-    [user, userProfile]
+    [
+      user,
+      userProfile,
+      activeClassItem?.activeExamSessionId,
+      activeClassItem?.activeExamSessionLabel,
+      pendingExamExitStorageKey,
+    ]
   );
 
   useExamAntiCheat({
@@ -1569,6 +1701,8 @@ export const App: React.FC = () => {
         isExamModeActive
     ),
     onAlert: handleAntiCheatAlert,
+    suppressExitAlertRef: suppressExamExitAlertRef,
+    onPageExitPersist: handlePersistPageExitAttempt,
   });
 
   // 2.4 Congelamento remoto pelo professor + Espelhamento ao vivo do Workspace do aluno

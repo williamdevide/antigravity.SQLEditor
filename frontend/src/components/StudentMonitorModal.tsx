@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   setStudentFrozenState,
   subscribeToOwnLiveState,
+  EXAM_ALERT_TYPE_LABELS,
 } from '../services/classroomRealtimeService';
 import { autoGradeStudentSubmission } from '../services/autoGraderService';
 import type {
@@ -486,20 +487,17 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-rose-300">
-                        {alertItem.type === 'tab_switch'
-                          ? '🔄 Troca de Aba'
-                          : alertItem.type === 'window_blur'
-                          ? '🪟 Saiu da Janela'
-                          : alertItem.type === 'copy_paste_attempt'
-                          ? '📋 Copiar/Colar'
-                          : alertItem.type === 'extension_detected'
-                          ? '🤖 Extensão/Overlay IA'
-                          : '🛠️ Inspeção/DevTools'}
+                        {EXAM_ALERT_TYPE_LABELS[alertItem.type] || '⚠️ Ocorrência'}
                       </span>
                       <span className="font-mono text-[9.5px] text-[var(--text-muted)]">
                         {new Date(alertItem.createdAt).toLocaleTimeString('pt-BR')}
                       </span>
                     </div>
+                    {alertItem.examSessionLabel && (
+                      <p className="text-[10px] font-semibold text-purple-300">
+                        📌 {alertItem.examSessionLabel}
+                      </p>
+                    )}
                     <p className="text-[var(--text-secondary)] leading-snug">{alertItem.details}</p>
                     {!alertItem.acknowledged && onAcknowledgeAlert && (
                       <div className="flex justify-end pt-1">

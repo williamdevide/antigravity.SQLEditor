@@ -529,24 +529,67 @@ export async function getClassMembers(classId: string): Promise<ClassMemberItem[
   }
 }
 
+export interface ExamSessionMetadata {
+  activeExamSessionId: string | null;
+  activeExamSessionLabel: string | null;
+  activeExamStartedAt: string | null;
+}
+
 /**
- * Atualiza o modo de operação de uma turma específica ('normal' | 'classroom' | 'exam')
+ * Gera metadados padrão de sessão de avaliação com data/hora local
+ */
+export function buildDefaultExamSessionLabel(date = new Date()): string {
+  const formatted = date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `Avaliação ${formatted}`;
+}
+
+/**
+ * Atualiza o modo de operação de uma turma específica ('normal' | 'classroom' | 'exam').
+ * Ao iniciar o modo avaliação, cria um novo activeExamSessionId para encapsular as ocorrências.
+ * Ao encerrar o modo avaliação, limpa os ponteiros ativos mantendo as ocorrências encapsuladas no histórico.
  */
 export async function updateClassMode(
   classId: string,
   mode: ClassroomMode,
-  teacher: UserProfile
-): Promise<void> {
+  teacher: UserProfile,
+  options?: { examSessionLabel?: string }
+): Promise<ExamSessionMetadata> {
   const classRef = doc(db, 'classes', classId);
+  const nowIso = new Date().toISOString();
+
+  const sessionMeta: ExamSessionMetadata =
+    mode === 'exam'
+      ? {
+          activeExamSessionId: `exam_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          activeExamSessionLabel: (options?.examSessionLabel?.trim() || buildDefaultExamSessionLabel()).slice(0, 120),
+          activeExamStartedAt: nowIso,
+        }
+      : {
+          activeExamSessionId: null,
+          activeExamSessionLabel: null,
+          activeExamStartedAt: null,
+        };
+
   await updateDoc(classRef, {
     classroomMode: mode,
-    updatedAt: new Date().toISOString(),
+    activeExamSessionId: sessionMeta.activeExamSessionId,
+    activeExamSessionLabel: sessionMeta.activeExamSessionLabel,
+    activeExamStartedAt: sessionMeta.activeExamStartedAt,
+    updatedAt: nowIso,
   });
 
   const modeLabels: Record<ClassroomMode, string> = {
     normal: 'Modo Normal (Padrão)',
     classroom: 'Modo Sala de Aula',
-    exam: 'Modo Avaliação',
+    exam: sessionMeta.activeExamSessionLabel
+      ? `Modo Avaliação (${sessionMeta.activeExamSessionLabel})`
+      : 'Modo Avaliação',
   };
 
   try {
@@ -561,6 +604,8 @@ export async function updateClassMode(
   } catch (auditErr) {
     console.warn('[ClassService] Aviso ao registrar auditoria de modo de turma:', auditErr);
   }
+
+  return sessionMeta;
 }
 
 /**
@@ -569,13 +614,15 @@ export async function updateClassMode(
 export async function updateAllTeacherClassesMode(
   teacherId: string,
   mode: ClassroomMode,
-  teacher: UserProfile
-): Promise<number> {
+  teacher: UserProfile,
+  options?: { examSessionLabel?: string }
+): Promise<Record<string, ExamSessionMetadata>> {
   const classes = await getClassesByTeacher(teacherId);
+  const results: Record<string, ExamSessionMetadata> = {};
   for (const c of classes) {
-    await updateClassMode(c.id, mode, teacher);
+    results[c.id] = await updateClassMode(c.id, mode, teacher, options);
   }
-  return classes.length;
+  return results;
 }
 
 /**

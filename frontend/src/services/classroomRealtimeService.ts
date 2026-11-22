@@ -354,6 +354,86 @@ export async function markClassMessagesAsRead(messageIds: string[], uid: string)
   }
 }
 
+export const EXAM_ALERT_TYPE_LABELS: Record<ExamAlertType, string> = {
+  tab_switch: '🔄 Troca de Aba',
+  window_blur: '🪟 Saiu da Janela',
+  copy_paste_attempt: '📋 Copiar/Colar',
+  extension_detected: '🤖 Extensão/Overlay IA',
+  devtools_or_resize: '🛠️ Inspeção/DevTools',
+  page_exit_attempt: '🚪 Saída / Fechamento da Página',
+};
+
+export interface ExamAlertSessionGroup {
+  sessionId: string;
+  sessionLabel: string;
+  isCurrentActive: boolean;
+  alerts: ExamAlertItem[];
+  unackCount: number;
+  latestAt: string;
+}
+
+/**
+ * Agrupa ocorrências anti-trapaça por sessão de avaliação, mantendo a avaliação ativa
+ * (se existir) no topo mesmo sem ocorrências e separando avaliações anteriores.
+ */
+export function groupExamAlertsBySession(
+  alerts: ExamAlertItem[],
+  activeSession?: {
+    id?: string | null;
+    label?: string | null;
+    startedAt?: string | null;
+    isExamActive?: boolean;
+  }
+): ExamAlertSessionGroup[] {
+  const groupsMap = new Map<string, ExamAlertSessionGroup>();
+  const activeId = activeSession?.isExamActive && activeSession.id ? activeSession.id : null;
+
+  if (activeId) {
+    groupsMap.set(activeId, {
+      sessionId: activeId,
+      sessionLabel: activeSession?.label || 'Avaliação Atual',
+      isCurrentActive: true,
+      alerts: [],
+      unackCount: 0,
+      latestAt: activeSession?.startedAt || new Date().toISOString(),
+    });
+  }
+
+  for (const alert of alerts) {
+    const sid = alert.examSessionId || '__legacy__';
+    const existing = groupsMap.get(sid);
+    if (existing) {
+      existing.alerts.push(alert);
+      if (!alert.acknowledged) existing.unackCount += 1;
+      if ((alert.createdAt || '') > existing.latestAt) {
+        existing.latestAt = alert.createdAt || existing.latestAt;
+      }
+      if (!existing.isCurrentActive && alert.examSessionLabel) {
+        existing.sessionLabel = alert.examSessionLabel;
+      }
+    } else {
+      const label =
+        sid === '__legacy__'
+          ? 'Avaliações Anteriores (Sem Sessão)'
+          : alert.examSessionLabel || `Avaliação (${new Date(alert.createdAt).toLocaleString('pt-BR')})`;
+      groupsMap.set(sid, {
+        sessionId: sid,
+        sessionLabel: label,
+        isCurrentActive: sid === activeId,
+        alerts: [alert],
+        unackCount: alert.acknowledged ? 0 : 1,
+        latestAt: alert.createdAt || '',
+      });
+    }
+  }
+
+  return Array.from(groupsMap.values()).sort((a, b) => {
+    if (a.isCurrentActive && !b.isCurrentActive) return -1;
+    if (!a.isCurrentActive && b.isCurrentActive) return 1;
+    return (b.latestAt || '').localeCompare(a.latestAt || '');
+  });
+}
+
 /**
  * Registra uma ocorrência / alerta anti-trapaça durante o Modo Avaliação
  */
@@ -364,10 +444,12 @@ export async function reportExamAlert(params: {
   studentEmail: string;
   type: ExamAlertType;
   details: string;
-}): Promise<void> {
-  if (!params.classId || !params.studentUid) return;
+  examSessionId?: string | null;
+  examSessionLabel?: string | null;
+}): Promise<boolean> {
+  if (!params.classId || !params.studentUid) return false;
   try {
-    await addDoc(collection(db, 'exam_alerts'), {
+    const payload: Record<string, any> = {
       classId: params.classId,
       studentUid: params.studentUid,
       studentName: params.studentName || 'Aluno',
@@ -376,9 +458,18 @@ export async function reportExamAlert(params: {
       details: params.details,
       createdAt: new Date().toISOString(),
       acknowledged: false,
-    });
+    };
+    if (params.examSessionId) {
+      payload.examSessionId = params.examSessionId.slice(0, 128);
+    }
+    if (params.examSessionLabel) {
+      payload.examSessionLabel = params.examSessionLabel.slice(0, 120);
+    }
+    await addDoc(collection(db, 'exam_alerts'), payload);
+    return true;
   } catch (err) {
     console.warn('[ClassroomRealtime] Erro ao reportar alerta de avaliação:', err);
+    return false;
   }
 }
 
@@ -421,6 +512,24 @@ export async function acknowledgeExamAlert(alertId: string): Promise<void> {
   } catch (err) {
     console.warn('[ClassroomRealtime] Erro ao marcar alerta como ciente:', err);
   }
+}
+
+/**
+ * Marca vários alertas anti-trapaça como cientes em lote
+ */
+export async function acknowledgeExamAlertsBatch(alertIds: string[]): Promise<number> {
+  const uniqueIds = Array.from(new Set(alertIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return 0;
+
+  for (let i = 0; i < uniqueIds.length; i += MESSAGE_BATCH_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + MESSAGE_BATCH_CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((id) => {
+      batch.update(doc(db, 'exam_alerts', id), { acknowledged: true });
+    });
+    await batch.commit();
+  }
+  return uniqueIds.length;
 }
 
 /**

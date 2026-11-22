@@ -211,6 +211,9 @@ export interface ClassItem {
   createdAt: string;
   active: boolean;
   classroomMode?: ClassroomMode; // Modo ativo: 'normal', 'classroom' ou 'exam'
+  activeExamSessionId?: string | null; // Identificador único da avaliação ativa para encapsular ocorrências
+  activeExamSessionLabel?: string | null; // Rótulo da avaliação ativa (ex.: "Avaliação 22/11 16:30")
+  activeExamStartedAt?: string | null; // Timestamp ISO de início da avaliação ativa
   chatEnabled?: boolean; // Habilita ou desabilita o chat para os alunos na turma (default true)
   scriptSharingEnabled?: boolean; // Habilita ou desabilita o compartilhamento de scripts entre alunos (default true)
   studentCount?: number;
@@ -348,7 +351,8 @@ export type ExamAlertType =
   | 'window_blur'
   | 'copy_paste_attempt'
   | 'extension_detected'
-  | 'devtools_or_resize';
+  | 'devtools_or_resize'
+  | 'page_exit_attempt';
 
 export interface ExamAlertItem {
   id: string;
@@ -360,6 +364,8 @@ export interface ExamAlertItem {
   details: string;
   createdAt: string;
   acknowledged?: boolean;
+  examSessionId?: string | null;
+  examSessionLabel?: string | null;
 }
 
 export interface StudentLiveTabSnapshot {

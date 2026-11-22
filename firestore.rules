@@ -43,6 +43,9 @@ rules_version = '2';
 //   - classroomMode: string (opcional, 'normal' | 'classroom' | 'exam') - Modo de operação da sala de aula
 //   - chatEnabled: bool (opcional) - Habilita ou desabilita o chat para os alunos na turma
 //   - scriptSharingEnabled: bool (opcional) - Habilita ou desabilita o compartilhamento de scripts entre alunos
+//   - activeExamSessionId: string (opcional/null, tamanho até 128) - ID da sessão de avaliação ativa (null ao encerrar)
+//   - activeExamSessionLabel: string (opcional/null, tamanho até 120) - Rótulo da sessão de avaliação ativa (null ao encerrar)
+//   - activeExamStartedAt: string (tamanho até 50) ou timestamp (opcional/null) - Data/hora de início da sessão de avaliação ativa (null ao encerrar)
 //   - updatedAt: string (opcional, tamanho até 50) - Data ISO da última atualização
 //
 // 3. Coleção: class_members/{memberId}
@@ -145,8 +148,10 @@ rules_version = '2';
 //   - studentUid: string (obrigatório, tamanho 1 a 128) - UID do aluno monitorado (imutável)
 //   - studentName: string (opcional, tamanho até 100) - Nome do aluno
 //   - studentEmail: string (opcional, tamanho até 150) - E-mail do aluno
-//   - type: string (opcional, 'tab_switch' | 'window_blur' | 'copy_paste_attempt' | 'extension_detected' | 'devtools_or_resize') - Tipo da ocorrência
+//   - type: string (opcional, 'tab_switch' | 'window_blur' | 'copy_paste_attempt' | 'extension_detected' | 'devtools_or_resize' | 'page_exit_attempt') - Tipo da ocorrência
 //   - details: string (opcional, tamanho até 1000) - Descrição detalhada do evento detectado
+//   - examSessionId: string (opcional/null, tamanho até 128) - ID da sessão de avaliação vinculada à ocorrência
+//   - examSessionLabel: string (opcional/null, tamanho até 120) - Rótulo da sessão de avaliação vinculada à ocorrência
 //   - createdAt: string (tamanho até 50) ou timestamp (opcional) - Data/hora da ocorrência (imutável)
 //   - acknowledged: bool (opcional) - Indicador de ciência/confirmação pelo professor
 //
@@ -301,6 +306,9 @@ service cloud.firestore {
         (!('classroomMode' in data) || (data.classroomMode is string && (data.classroomMode in ['normal', 'classroom', 'exam']))) &&
         (!('chatEnabled' in data) || data.chatEnabled == null || data.chatEnabled is bool) &&
         (!('scriptSharingEnabled' in data) || data.scriptSharingEnabled == null || data.scriptSharingEnabled is bool) &&
+        (!('activeExamSessionId' in data) || data.activeExamSessionId == null || (data.activeExamSessionId is string && data.activeExamSessionId.size() <= 128)) &&
+        (!('activeExamSessionLabel' in data) || data.activeExamSessionLabel == null || (data.activeExamSessionLabel is string && data.activeExamSessionLabel.size() <= 120)) &&
+        (!('activeExamStartedAt' in data) || data.activeExamStartedAt == null || (data.activeExamStartedAt is string && data.activeExamStartedAt.size() <= 50) || data.activeExamStartedAt is timestamp) &&
         (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
         (!('id' in data) || (data.id is string && data.id.size() <= 128));
     }
@@ -416,8 +424,10 @@ service cloud.firestore {
         (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128)) &&
         (!('studentName' in data) || data.studentName == null || (data.studentName is string && data.studentName.size() <= 100)) &&
         (!('studentEmail' in data) || data.studentEmail == null || (data.studentEmail is string && data.studentEmail.size() <= 150)) &&
-        (!('type' in data) || data.type == null || (data.type is string && (data.type in ['tab_switch', 'window_blur', 'copy_paste_attempt', 'extension_detected', 'devtools_or_resize']))) &&
+        (!('type' in data) || data.type == null || (data.type is string && (data.type in ['tab_switch', 'window_blur', 'copy_paste_attempt', 'extension_detected', 'devtools_or_resize', 'page_exit_attempt']))) &&
         (!('details' in data) || data.details == null || (data.details is string && data.details.size() <= 1000)) &&
+        (!('examSessionId' in data) || data.examSessionId == null || (data.examSessionId is string && data.examSessionId.size() <= 128)) &&
+        (!('examSessionLabel' in data) || data.examSessionLabel == null || (data.examSessionLabel is string && data.examSessionLabel.size() <= 120)) &&
         (!('createdAt' in data) || data.createdAt == null || (data.createdAt is string && data.createdAt.size() <= 50) || data.createdAt is timestamp) &&
         (!('acknowledged' in data) || data.acknowledged == null || data.acknowledged is bool);
     }

@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { ExamAlertType } from '../types';
 
 interface UseExamAntiCheatOptions {
   enabled: boolean;
   onAlert: (type: ExamAlertType, details: string, severityMessage: string) => void;
+  suppressExitAlertRef?: MutableRefObject<boolean>;
+  onPageExitPersist?: (details: string) => void;
 }
 
 // Seletores comumente injetados por extensões de IA / copilot / tradutores na página
@@ -27,15 +29,25 @@ const KNOWN_AI_EXTENSION_SELECTORS = [
 
 /**
  * Hook anti-trapaça para Modo Avaliação (bloqueia copiar/colar/arrastar,
- * detecta troca de aba/janela e detecta overlays de extensões de IA na página).
+ * detecta troca de aba/janela, tentativas de sair/fechar guia e overlays de extensões de IA).
  */
-export function useExamAntiCheat({ enabled, onAlert }: UseExamAntiCheatOptions) {
+export function useExamAntiCheat({
+  enabled,
+  onAlert,
+  suppressExitAlertRef,
+  onPageExitPersist,
+}: UseExamAntiCheatOptions) {
   const lastAlertTimeRef = useRef<Record<string, number>>({});
   const onAlertRef = useRef(onAlert);
+  const onPageExitPersistRef = useRef(onPageExitPersist);
 
   useEffect(() => {
     onAlertRef.current = onAlert;
   }, [onAlert]);
+
+  useEffect(() => {
+    onPageExitPersistRef.current = onPageExitPersist;
+  }, [onPageExitPersist]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -114,10 +126,52 @@ export function useExamAntiCheat({ enabled, onAlert }: UseExamAntiCheatOptions) 
           `Tentativa de abrir ferramentas de inspeção (${e.key}) detectada.`,
           'A abertura de ferramentas de desenvolvedor/inspeção está bloqueada durante a avaliação.'
         );
+        return;
+      }
+
+      // Intercepta atalhos de recarregamento ou saída pela barra de endereços (F5, Ctrl+R, Ctrl+L, Alt+D)
+      if (
+        e.key === 'F5' ||
+        (ctrlOrCmd && (key === 'r' || key === 'l')) ||
+        (e.altKey && key === 'd')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerThrottledAlert(
+          'page_exit_attempt',
+          `Atalho de saída/recarregamento ou navegação (${e.key.toUpperCase()}) bloqueado durante a avaliação.`,
+          'Sair da página, recarregar ou digitar outro endereço não é permitido durante a avaliação. Ocorrência registrada.'
+        );
       }
     };
 
-    // 2. Detecção de troca de aba ou perda de foco de janela
+    // 2. Detecção de troca de aba, perda de foco ou fechamento/saída da guia
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (suppressExitAlertRef?.current) return;
+      const detail =
+        'Tentativa de fechar a guia, recarregar ou digitar outro endereço para sair da página durante a avaliação.';
+      onPageExitPersistRef.current?.(detail);
+      triggerThrottledAlert(
+        'page_exit_attempt',
+        detail,
+        'Tentativa de sair ou fechar a página durante a avaliação detectada e registrada para o professor.',
+        1500
+      );
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    const handlePageHide = () => {
+      if (suppressExitAlertRef?.current) return;
+      const detail = 'Aluno saiu da página da avaliação ou fechou a guia do navegador.';
+      onPageExitPersistRef.current?.(detail);
+      triggerThrottledAlert(
+        'page_exit_attempt',
+        detail,
+        'Saída da página de avaliação detectada e registrada para o professor.',
+        1500
+      );
+    };
     const handleVisibilityChange = () => {
       if (document.hidden) {
         triggerThrottledAlert(
@@ -218,6 +272,8 @@ export function useExamAntiCheat({ enabled, onAlert }: UseExamAntiCheatOptions) 
     document.addEventListener('keydown', handleKeyDownBlock, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
 
     const periodicExtensionCheck = window.setInterval(scanSuspiciousElements, 4000);
 
@@ -233,6 +289,8 @@ export function useExamAntiCheat({ enabled, onAlert }: UseExamAntiCheatOptions) 
       document.removeEventListener('keydown', handleKeyDownBlock, true);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [enabled]);
+  }, [enabled, suppressExitAlertRef]);
 }

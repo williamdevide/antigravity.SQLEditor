@@ -4274,8 +4274,27 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 
 **Ações Executadas:**
 1. **Menu Suspenso da Foto de Perfil (`frontend/src/components/ProfileAvatarButton.tsx`):**
-   - Calculado `isEffectiveAdmin` (`Boolean(isAdmin || userProfile?.role === 'admin')`) e mantido `isTeacherOrAdmin` cobrindo professores e administradores.
-   - Adicionado o botão **Minhas Turmas** (`onViewChange('teacher-panel')`) para professores e administradores.
-   - Adicionado o botão **Painel do Administrador** (`onViewChange('admin-panel')`) exclusivamente para administradores, funcionando tanto no `Header` quanto na `LandingPageView`.
+   - Adicionado o botão **Minhas Turmas** (`teacher-panel`) para professores/administradores e **Painel do Administrador** (`admin-panel`) para administradores.
+
+---
+
+### Prompt 42
+> /agente-orquestrador /grill-me /goal quando encerro uma avaliação as ocorrencias de trapaças devem ficar encapsuladas nessa avaliação. se eu começar outra avaliação, aparecem separadas.
+> alem disso, ao começar uma avaliação todos os alunos tem a tela automaticamente recarregada no laboratorio sql (atos como fechar a guia, ou digitar outro endereço para sair da pagina tambem geram ocorrencias.) as ocorrencias podem ser vistas na aonde eslas ja estao agora, mas tambem por aluno, na linha do aluno matriculado na turma em um botão ao lado do ver tela
+
+**Ações Executadas:**
+1. **Regras de Segurança do Firestore (`firestore.rules` via `@firestore-rules-author`):**
+   - Atualizadas as validações de `classes` (`activeExamSessionId`, `activeExamSessionLabel`, `activeExamStartedAt`) e `exam_alerts` (`'page_exit_attempt'`, `examSessionId`, `examSessionLabel`).
+2. **Sessões de Avaliação & Ocorrências Encapsuladas (`frontend/src/types/index.ts`, `frontend/src/services/classService.ts`, `frontend/src/services/classroomRealtimeService.ts`):**
+   - Ao ativar o Modo Avaliação (`updateClassMode` / `updateAllTeacherClassesMode`), gera um `activeExamSessionId` único com rótulo editável pelo professor; ao encerrar, limpa apenas os ponteiros ativos preservando todo o histórico encapsulado por sessão em `exam_alerts`.
+   - Criados `EXAM_ALERT_TYPE_LABELS`, `groupExamAlertsBySession`, `acknowledgeExamAlertsBatch` e suporte a `examSessionId`/`examSessionLabel` em `reportExamAlert`.
+3. **Recarregamento Automático no Laboratório SQL & Proteção contra Saída da Guia (`frontend/src/hooks/useExamAntiCheat.ts`, `frontend/src/App.tsx`):**
+   - Ao iniciar ou trocar de sessão de avaliação, os alunos têm backup único das abas executado e a página é recarregada automaticamente direto no Laboratório SQL (`#editor` sem modal inicial).
+   - `useExamAntiCheat` passou a detectar tentativas de fechamento de guia, recarregamento (`F5`/`Ctrl+R`), atalhos da barra de endereços (`Ctrl+L`/`Alt+D`) e saída para outro endereço (`beforeunload` + `pagehide`), com persistência pendente em `localStorage` e envio garantido no retorno caso a aba tenha sido fechada imediatamente.
+4. **Painel de Turmas & Ocorrências por Aluno (`frontend/src/components/TeacherPanelView.tsx`, `frontend/src/components/StudentMonitorModal.tsx`):**
+   - Modal de início do Modo Avaliação com campo pré-preenchido para nomear a sessão de prova.
+   - Painel superior **Alertas** encapsulado por avaliação (exibindo avaliação atual no topo com contagem separada das encerradas, filtro por sessão e ação **"Marcar todas como cientes"**).
+   - Botão **`Ocorrências`** ao lado de **`Ver Tela`** na linha de cada aluno matriculado, abrindo modal dedicado com suas ocorrências separadas por avaliação.
+
 
 

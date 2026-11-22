@@ -15,6 +15,7 @@ import {
   updateClassMode,
   updateAllTeacherClassesMode,
   updateClassSettings,
+  buildDefaultExamSessionLabel,
 } from '../services/classService';
 import {
   saveScript,
@@ -40,6 +41,9 @@ import {
   formatClassMessagesToMarkdown,
   subscribeToClassExamAlerts,
   acknowledgeExamAlert,
+  acknowledgeExamAlertsBatch,
+  groupExamAlertsBySession,
+  EXAM_ALERT_TYPE_LABELS,
   subscribeToClassLiveStates,
 } from '../services/classroomRealtimeService';
 import { StudentMonitorModal } from './StudentMonitorModal';
@@ -102,11 +106,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
   const [isDeletingClass, setIsDeletingClass] = useState(false);
 
-  // Confirmação de Mudança de Modo
+  // Confirmação de Mudança de Modo e Sessão de Avaliação
   const [pendingModeChange, setPendingModeChange] = useState<{
     mode: ClassroomMode;
     applyAll: boolean;
   } | null>(null);
+  const [examSessionLabelInput, setExamSessionLabelInput] = useState<string>(() =>
+    buildDefaultExamSessionLabel()
+  );
   const [isChangingMode, setIsChangingMode] = useState(false);
 
   // Admissão por E-mail
@@ -182,6 +189,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     name: string;
     email: string;
   } | null>(null);
+  const [viewingStudentAlerts, setViewingStudentAlerts] = useState<{
+    uid: string;
+    name: string;
+    email: string;
+  } | null>(null);
+  const [selectedAlertSessionFilter, setSelectedAlertSessionFilter] = useState<string>('all');
+  const [studentAlertSessionFilter, setStudentAlertSessionFilter] = useState<string>('all');
+  const [isAcknowledgingAlerts, setIsAcknowledgingAlerts] = useState(false);
 
   // Envio e gestão de mensagens pelo professor no painel Chat Geral
   const [teacherChatTarget, setTeacherChatTarget] = useState<string>('all');
@@ -335,6 +350,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   // Alteração de Modo de Turma (Normal, Sala de Aula, Avaliação)
   const requestModeChange = (mode: ClassroomMode, applyAll = false) => {
     if (mode === 'exam') {
+      setExamSessionLabelInput(buildDefaultExamSessionLabel());
       setPendingModeChange({ mode, applyAll });
     } else {
       executeModeChange(mode, applyAll);
@@ -343,20 +359,58 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
 
   const executeModeChange = async (mode: ClassroomMode, applyAll: boolean) => {
     if (!user || !userProfile || !selectedClass) return;
+    const sessionOptions =
+      mode === 'exam' ? { examSessionLabel: examSessionLabelInput } : undefined;
     try {
       setIsChangingMode(true);
       if (applyAll) {
-        await updateAllTeacherClassesMode(user.uid, mode, userProfile);
-        setClasses((prev) => prev.map((c) => ({ ...c, classroomMode: mode })));
-        setSelectedClass((curr) => (curr ? { ...curr, classroomMode: mode } : null));
+        const sessionMap = await updateAllTeacherClassesMode(
+          user.uid,
+          mode,
+          userProfile,
+          sessionOptions
+        );
+        setClasses((prev) =>
+          prev.map((c) =>
+            sessionMap[c.id]
+              ? { ...c, classroomMode: mode, ...sessionMap[c.id] }
+              : { ...c, classroomMode: mode }
+          )
+        );
+        setSelectedClass((curr) =>
+          curr
+            ? {
+                ...curr,
+                classroomMode: mode,
+                ...(sessionMap[curr.id] || {}),
+              }
+            : null
+        );
         showFeedback('success', `Modo "${mode.toUpperCase()}" aplicado a todas as suas turmas!`);
       } else {
-        await updateClassMode(selectedClass.id, mode, userProfile);
-        setClasses((prev) =>
-          prev.map((c) => (c.id === selectedClass.id ? { ...c, classroomMode: mode } : c))
+        const sessionMeta = await updateClassMode(
+          selectedClass.id,
+          mode,
+          userProfile,
+          sessionOptions
         );
-        setSelectedClass((curr) => (curr ? { ...curr, classroomMode: mode } : null));
-        showFeedback('success', `Modo da turma "${selectedClass.name}" atualizado para ${mode.toUpperCase()}!`);
+        setClasses((prev) =>
+          prev.map((c) =>
+            c.id === selectedClass.id ? { ...c, classroomMode: mode, ...sessionMeta } : c
+          )
+        );
+        setSelectedClass((curr) =>
+          curr ? { ...curr, classroomMode: mode, ...sessionMeta } : null
+        );
+        if (mode === 'exam' && sessionMeta.activeExamSessionId) {
+          setSelectedAlertSessionFilter(sessionMeta.activeExamSessionId);
+        }
+        showFeedback(
+          'success',
+          mode === 'exam'
+            ? `Avaliação "${sessionMeta.activeExamSessionLabel}" iniciada! Alunos em recarregamento no Laboratório SQL.`
+            : `Modo da turma "${selectedClass.name}" atualizado para ${mode.toUpperCase()}!`
+        );
       }
       setPendingModeChange(null);
     } catch (err: any) {
@@ -700,6 +754,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   // Subscriptions em tempo real quando uma turma é selecionada
   useEffect(() => {
     setChatArchiveTab('active');
+    setViewingStudentAlerts(null);
     if (!selectedClass?.id) {
       setPresenceList([]);
       setClassMessages([]);
@@ -1315,7 +1370,91 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const currentMode = selectedClass?.classroomMode || 'normal';
   const chatEnabled = selectedClass?.chatEnabled !== false;
   const scriptSharingEnabled = selectedClass?.scriptSharingEnabled !== false;
-  const unackAlerts = examAlerts.filter((a) => !a.acknowledged);
+
+  // Encapsulamento das ocorrências anti-trapaça por sessão de avaliação
+  const activeExamSessionInfo = useMemo(
+    () => ({
+      id: selectedClass?.activeExamSessionId || null,
+      label: selectedClass?.activeExamSessionLabel || null,
+      startedAt: selectedClass?.activeExamStartedAt || null,
+      isExamActive: currentMode === 'exam' && Boolean(selectedClass?.activeExamSessionId),
+    }),
+    [
+      currentMode,
+      selectedClass?.activeExamSessionId,
+      selectedClass?.activeExamSessionLabel,
+      selectedClass?.activeExamStartedAt,
+    ]
+  );
+
+  const examAlertSessions = useMemo(
+    () => groupExamAlertsBySession(examAlerts, activeExamSessionInfo),
+    [examAlerts, activeExamSessionInfo]
+  );
+
+  // Sincroniza filtro da aba Alertas para focar na avaliação atual ao iniciar uma nova prova
+  useEffect(() => {
+    if (activeExamSessionInfo.isExamActive && activeExamSessionInfo.id) {
+      setSelectedAlertSessionFilter(activeExamSessionInfo.id);
+    } else {
+      setSelectedAlertSessionFilter('all');
+    }
+  }, [selectedClass?.id, activeExamSessionInfo.isExamActive, activeExamSessionInfo.id]);
+
+  const currentScopeAlerts = useMemo(() => {
+    if (activeExamSessionInfo.isExamActive && activeExamSessionInfo.id) {
+      return examAlerts.filter((a) => a.examSessionId === activeExamSessionInfo.id);
+    }
+    return examAlerts;
+  }, [examAlerts, activeExamSessionInfo.isExamActive, activeExamSessionInfo.id]);
+
+  const unackAlerts = currentScopeAlerts.filter((a) => !a.acknowledged);
+
+  const visiblePanelAlerts = useMemo(() => {
+    if (selectedAlertSessionFilter === 'all') return examAlerts;
+    return examAlerts.filter(
+      (a) => (a.examSessionId || '__legacy__') === selectedAlertSessionFilter
+    );
+  }, [examAlerts, selectedAlertSessionFilter]);
+
+  const viewingStudentAllAlerts = useMemo(
+    () =>
+      viewingStudentAlerts
+        ? examAlerts.filter((a) => a.studentUid === viewingStudentAlerts.uid)
+        : [],
+    [examAlerts, viewingStudentAlerts]
+  );
+
+  const viewingStudentSessions = useMemo(
+    () =>
+      viewingStudentAlerts
+        ? groupExamAlertsBySession(viewingStudentAllAlerts, activeExamSessionInfo)
+        : [],
+    [viewingStudentAlerts, viewingStudentAllAlerts, activeExamSessionInfo]
+  );
+
+  const visibleStudentModalAlerts = useMemo(() => {
+    if (studentAlertSessionFilter === 'all') return viewingStudentAllAlerts;
+    return viewingStudentAllAlerts.filter(
+      (a) => (a.examSessionId || '__legacy__') === studentAlertSessionFilter
+    );
+  }, [viewingStudentAllAlerts, studentAlertSessionFilter]);
+
+  const handleAcknowledgeBatch = async (alertIds: string[]) => {
+    if (alertIds.length === 0 || isAcknowledgingAlerts) return;
+    try {
+      setIsAcknowledgingAlerts(true);
+      const count = await acknowledgeExamAlertsBatch(alertIds);
+      showFeedback(
+        'success',
+        `${count} ${count === 1 ? 'ocorrência marcada' : 'ocorrências marcadas'} como ciente.`
+      );
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao marcar ocorrências como cientes: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsAcknowledgingAlerts(false);
+    }
+  };
   const activeClassMessages = useMemo(
     () => classMessages.filter((m) => !m.archived),
     [classMessages]
@@ -2213,6 +2352,11 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                             ? 'text-rose-400 animate-pulse'
                             : 'text-[var(--text-muted)] hover:text-rose-400'
                         }`}
+                        title={
+                          activeExamSessionInfo.isExamActive
+                            ? `Alertas da avaliação ativa: ${activeExamSessionInfo.label || 'Avaliação Atual'} (histórico total: ${examAlerts.length})`
+                            : 'Histórico de alertas anti-trapaça encapsulado por avaliação'
+                        }
                       >
                         <span className="material-symbols-outlined text-[14px]">security</span>
                         <span>Alertas</span>
@@ -2223,7 +2367,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                             ? 'bg-rose-500 text-white'
                             : 'bg-zinc-500/15 text-[var(--text-muted)]'
                         }`}>
-                          {examAlerts.length}
+                          {currentScopeAlerts.length}
                         </span>
                       </button>
                     </div>
@@ -2527,65 +2671,157 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                   </div>
                 )}
 
-                {/* PAINEL EXPANSÍVEL: ALERTAS ANTI-TRAPAÇA */}
-                {activeResourcePanel === 'alerts' && (
-                  <div className="pt-3 border-t border-[var(--border-color)] space-y-2.5 animate-in fade-in duration-150">
-                    {examAlerts.length === 0 ? (
-                      <div className="p-6 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl text-xs text-[var(--text-muted)]">
-                        Nenhuma infração ou comportamento suspeito registrado no Modo Avaliação desta turma.
-                      </div>
-                    ) : (
-                      <div className="max-h-72 overflow-y-auto space-y-2">
-                        {examAlerts.map((al) => (
-                          <div
-                            key={al.id}
-                            className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
-                              al.acknowledged
-                                ? 'bg-[var(--bg-surface)] border-[var(--border-color)] opacity-65'
-                                : 'bg-rose-500/10 border-rose-500/40'
+                {/* PAINEL EXPANSÍVEL: ALERTAS ANTI-TRAPAÇA ENCAPSULADOS POR AVALIAÇÃO */}
+                {activeResourcePanel === 'alerts' && (() => {
+                  const unackInFilterIds = visiblePanelAlerts
+                    .filter((a) => !a.acknowledged)
+                    .map((a) => a.id);
+                  return (
+                    <div className="pt-3 border-t border-[var(--border-color)] space-y-3 animate-in fade-in duration-150">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-[var(--text-secondary)] mr-1 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[15px] text-purple-400">
+                              inventory_2
+                            </span>
+                            <span>Avaliação:</span>
+                          </span>
+
+                          {examAlertSessions.map((session) => {
+                            const isSelected = selectedAlertSessionFilter === session.sessionId;
+                            return (
+                              <button
+                                key={session.sessionId}
+                                type="button"
+                                onClick={() => setSelectedAlertSessionFilter(session.sessionId)}
+                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-600 text-white border-purple-500 shadow'
+                                    : session.isCurrentActive
+                                    ? 'bg-purple-500/15 border-purple-500/40 text-purple-300 hover:bg-purple-500/25'
+                                    : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                                }`}
+                              >
+                                <span>{session.sessionLabel}</span>
+                                <span
+                                  className={`px-1 py-0.2 rounded text-[9px] font-bold ${
+                                    session.isCurrentActive
+                                      ? isSelected
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-emerald-500/20 text-emerald-300'
+                                      : 'bg-zinc-500/20 text-[var(--text-muted)]'
+                                  }`}
+                                >
+                                  {session.isCurrentActive ? 'Em andamento' : 'Encerrada'}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                    session.unackCount > 0
+                                      ? 'bg-rose-500 text-white'
+                                      : 'bg-black/20 text-current'
+                                  }`}
+                                >
+                                  {session.alerts.length}
+                                </span>
+                              </button>
+                            );
+                          })}
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAlertSessionFilter('all')}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                              selectedAlertSessionFilter === 'all'
+                                ? 'bg-[#0288D1] text-white border-[#0288D1] shadow'
+                                : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                             }`}
                           >
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-[var(--text-primary)]">
-                                {al.studentName}{' '}
-                                <span className="font-mono text-[10px] text-[var(--text-muted)]">({al.studentEmail})</span>{' '}
-                                • <span className="text-rose-400">{al.type}</span>
-                              </p>
-                              <p className="text-[11px] text-[var(--text-secondary)]">{al.details}</p>
-                              <p className="text-[10px] font-mono text-[var(--text-muted)]">
-                                {new Date(al.createdAt).toLocaleString('pt-BR')}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setMonitoringStudent({
-                                    uid: al.studentUid,
-                                    name: al.studentName,
-                                    email: al.studentEmail,
-                                  })
-                                }
-                                className="px-2.5 py-1 rounded-lg bg-[#0288D1]/15 border border-[#0288D1]/40 text-[#29B6F6] text-[11px] font-bold cursor-pointer"
-                              >
-                                Ver Tela
-                              </button>
-                              {!al.acknowledged && (
+                            <span>Todas ({examAlerts.length})</span>
+                          </button>
+                        </div>
+
+                        {unackInFilterIds.length > 0 && (
+                          <button
+                            type="button"
+                            disabled={isAcknowledgingAlerts}
+                            onClick={() => handleAcknowledgeBatch(unackInFilterIds)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">done_all</span>
+                            <span>Marcar todas como cientes ({unackInFilterIds.length})</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {visiblePanelAlerts.length === 0 ? (
+                        <div className="p-6 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl text-xs text-[var(--text-muted)]">
+                          {selectedAlertSessionFilter === 'all'
+                            ? 'Nenhuma infração ou comportamento suspeito registrado nesta turma.'
+                            : 'Nenhuma ocorrência registrada nesta sessão de avaliação até o momento.'}
+                        </div>
+                      ) : (
+                        <div className="max-h-72 overflow-y-auto space-y-2">
+                          {visiblePanelAlerts.map((al) => (
+                            <div
+                              key={al.id}
+                              className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                                al.acknowledged
+                                  ? 'bg-[var(--bg-surface)] border-[var(--border-color)] opacity-65'
+                                  : 'bg-rose-500/10 border-rose-500/40'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="font-bold text-[var(--text-primary)]">
+                                    {al.studentName}{' '}
+                                    <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                                      ({al.studentEmail})
+                                    </span>{' '}
+                                    •{' '}
+                                    <span className="text-rose-400">
+                                      {EXAM_ALERT_TYPE_LABELS[al.type] || al.type}
+                                    </span>
+                                  </p>
+                                  <span className="px-1.5 py-0.2 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-semibold">
+                                    📌 {al.examSessionLabel || 'Avaliações Anteriores'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[var(--text-secondary)]">{al.details}</p>
+                                <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                                  {new Date(al.createdAt).toLocaleString('pt-BR')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => acknowledgeExamAlert(al.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold cursor-pointer"
+                                  onClick={() =>
+                                    setMonitoringStudent({
+                                      uid: al.studentUid,
+                                      name: al.studentName,
+                                      email: al.studentEmail,
+                                    })
+                                  }
+                                  className="px-2.5 py-1 rounded-lg bg-[#0288D1]/15 border border-[#0288D1]/40 text-[#29B6F6] text-[11px] font-bold cursor-pointer"
                                 >
-                                  Ciente
+                                  Ver Tela
                                 </button>
-                              )}
+                                {!al.acknowledged && (
+                                  <button
+                                    type="button"
+                                    onClick={() => acknowledgeExamAlert(al.id)}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Ciente
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ÁREA DE ALUNOS DA TURMA */}
@@ -2688,9 +2924,18 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                           {approvedMembers.map((member) => {
                             const pres = presenceList.find((p) => p.uid === member.studentUid);
                             const live = liveStates.find((s) => s.studentUid === member.studentUid);
-                            const studentAlerts = examAlerts.filter(
-                              (a) => a.studentUid === member.studentUid && !a.acknowledged
+                            const studentAllAlerts = examAlerts.filter(
+                              (a) => a.studentUid === member.studentUid
                             );
+                            const studentSessionAlerts = activeExamSessionInfo.isExamActive
+                              ? studentAllAlerts.filter(
+                                  (a) => a.examSessionId === activeExamSessionInfo.id
+                                )
+                              : studentAllAlerts;
+                            const studentAlerts = studentSessionAlerts.filter((a) => !a.acknowledged);
+                            const studentAlertBadgeCount = activeExamSessionInfo.isExamActive
+                              ? studentSessionAlerts.length
+                              : studentAllAlerts.length;
                             return (
                               <tr key={member.id} className="hover:bg-[var(--bg-hover)] transition-colors">
                                 <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
@@ -2746,6 +2991,47 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                                     >
                                       <span className="material-symbols-outlined text-[14px]">desktop_windows</span>
                                       <span>Ver Tela</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setStudentAlertSessionFilter(
+                                          activeExamSessionInfo.isExamActive && activeExamSessionInfo.id
+                                            ? activeExamSessionInfo.id
+                                            : 'all'
+                                        );
+                                        setViewingStudentAlerts({
+                                          uid: member.studentUid,
+                                          name: getMemberDisplayName(member),
+                                          email: member.studentEmail,
+                                        });
+                                      }}
+                                      title={
+                                        activeExamSessionInfo.isExamActive
+                                          ? `Ocorrências na avaliação atual (${studentSessionAlerts.length}) • Total histórico (${studentAllAlerts.length})`
+                                          : `Ver ocorrências anti-trapaça do aluno encapsuladas por avaliação (${studentAllAlerts.length} no histórico)`
+                                      }
+                                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                                        studentAlerts.length > 0
+                                          ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border-rose-500/40 animate-pulse'
+                                          : studentAlertBadgeCount > 0
+                                          ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/35'
+                                          : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] border-[var(--border-color)]'
+                                      }`}
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">security</span>
+                                      <span>Ocorrências</span>
+                                      {studentAlertBadgeCount > 0 && (
+                                        <span
+                                          className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                                            studentAlerts.length > 0
+                                              ? 'bg-rose-500 text-white'
+                                              : 'bg-amber-500/25 text-amber-200'
+                                          }`}
+                                        >
+                                          {studentAlertBadgeCount}
+                                        </span>
+                                      )}
                                     </button>
                                     <button
                                       type="button"
@@ -3074,9 +3360,24 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 Ativar Modo Avaliação?
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
-                Ao ativar o modo de prova, todas as guias abertas nos navegadores dos alunos desta turma serão{' '}
-                <strong className="text-purple-300">automaticamente salvas como backup temporário no perfil</strong> e fechadas. Apenas as guias e os bancos da prova ficarão disponíveis durante a avaliação.
+                Ao ativar o modo de prova, as guias abertas dos alunos serão{' '}
+                <strong className="text-purple-300">salvas como backup temporário</strong>, a tela de cada aluno será{' '}
+                <strong className="text-purple-300">automaticamente recarregada no Laboratório SQL</strong> e todas as ocorrências ficarão encapsuladas nesta avaliação.
               </p>
+            </div>
+
+            <div className="text-left space-y-1">
+              <label className="text-[11px] font-bold text-[var(--text-secondary)] block">
+                Identificação desta Avaliação (para encapsular ocorrências):
+              </label>
+              <input
+                type="text"
+                maxLength={120}
+                value={examSessionLabelInput}
+                onChange={(e) => setExamSessionLabelInput(e.target.value)}
+                placeholder="Ex.: Prova P1 SQL"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-purple-500/40 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-purple-400"
+              />
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-2">
@@ -3753,6 +4054,159 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
           onQuickSaveGrade={handleQuickSaveGradeFromMonitor}
         />
       )}
+
+      {/* MODAL DE OCORRÊNCIAS ANTI-TRAPAÇA POR ALUNO (ENCAPSULADAS POR AVALIAÇÃO) */}
+      {viewingStudentAlerts && selectedClass && (() => {
+        const unackModalIds = visibleStudentModalAlerts
+          .filter((a) => !a.acknowledged)
+          .map((a) => a.id);
+        return (
+          <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+              <div className="px-5 py-4 border-b border-[var(--border-color)] flex items-center justify-between gap-3 bg-[var(--bg-primary)]/60">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/35 text-rose-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[22px]">security</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                      Ocorrências Anti-Trapaça • {viewingStudentAlerts.name}
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)] font-mono truncate">
+                      {viewingStudentAlerts.email} • {selectedClass.name}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = viewingStudentAlerts;
+                      setViewingStudentAlerts(null);
+                      setMonitoringStudent(target);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#0288D1]/15 hover:bg-[#0288D1]/25 border border-[#0288D1]/40 text-[#29B6F6] text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">desktop_windows</span>
+                    <span>Ver Tela</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewingStudentAlerts(null)}
+                    className="p-1.5 rounded-xl hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                    title="Fechar"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-5 py-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)]/30 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {viewingStudentSessions.map((session) => {
+                    const isSelected = studentAlertSessionFilter === session.sessionId;
+                    return (
+                      <button
+                        key={session.sessionId}
+                        type="button"
+                        onClick={() => setStudentAlertSessionFilter(session.sessionId)}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-purple-600 text-white border-purple-500 shadow'
+                            : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                        }`}
+                      >
+                        <span>{session.sessionLabel}</span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-black">
+                          {session.alerts.length}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setStudentAlertSessionFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                      studentAlertSessionFilter === 'all'
+                        ? 'bg-[#0288D1] text-white border-[#0288D1] shadow'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    Todas ({viewingStudentAllAlerts.length})
+                  </button>
+                </div>
+
+                {unackModalIds.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isAcknowledgingAlerts}
+                    onClick={() => handleAcknowledgeBatch(unackModalIds)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">done_all</span>
+                    <span>Marcar todas como cientes ({unackModalIds.length})</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
+                {visibleStudentModalAlerts.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-[var(--text-muted)] space-y-2">
+                    <span className="material-symbols-outlined text-[36px] text-emerald-400/70">
+                      verified_user
+                    </span>
+                    <p className="font-semibold text-[var(--text-secondary)]">
+                      Nenhuma ocorrência registrada para este aluno neste filtro.
+                    </p>
+                  </div>
+                ) : (
+                  visibleStudentModalAlerts.map((al) => (
+                    <div
+                      key={al.id}
+                      className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                        al.acknowledged
+                          ? 'bg-[var(--bg-primary)]/40 border-[var(--border-color)] opacity-70'
+                          : 'bg-rose-500/10 border-rose-500/40'
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-rose-400">
+                            {EXAM_ALERT_TYPE_LABELS[al.type] || al.type}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-semibold">
+                            📌 {al.examSessionLabel || 'Avaliações Anteriores'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-primary)]">{al.details}</p>
+                        <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                          {new Date(al.createdAt).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+
+                      {!al.acknowledged ? (
+                        <button
+                          type="button"
+                          onClick={() => acknowledgeExamAlert(al.id)}
+                          className="px-3 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold cursor-pointer shrink-0"
+                        >
+                          Ciente
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold shrink-0">
+                          ✓ Ciente
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
