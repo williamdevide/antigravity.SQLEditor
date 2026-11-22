@@ -4308,6 +4308,24 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Em `subscribeToClass`, o desligamento do Modo Avaliação (`isExamModeActiveRef.current = false`, `setIsExamModeActive(false)`, limpeza dos dados de sessão e aviso visual) agora ocorre de forma síncrona **antes** do `await getClassScripts(classId)`.
    - Adicionadas guardas em `handleAntiCheatAlert` e `handlePersistPageExitAttempt` verificando `activeClassItemRef.current?.classroomMode === 'exam'`, bloqueando qualquer ocorrência tardia após encerrar a avaliação.
 
+---
+
+### Prompt 44
+> /agente-orquestrador /grill-me /goal não mudou nada no firebase.rules e ainda não funcionou, verifique. alem disso o botão alertas deve exibir Alertas x/y, onde x é quantos estão ativos e y quantos existiram.
+> aproveite e atualize a versão para 4.1.3
+> atualize tambem nossa pagina inicial para mostrar todos esses recursos que desenvolvemos hoje, crie changelogs ocupando os espaços até 4.1.3
+
+**Ações Executadas:**
+1. **Verificação de `firestore.rules` e Tolerância Anti-Trapaça (`frontend/src/hooks/useExamAntiCheat.ts`, `firestore.rules`):**
+   - Confirmado via histórico Git (`4781a1d` e `f0c89e3`) que `firestore.rules` já contém todas as validações para `classes` (`activeExamSessionId`, `activeExamSessionLabel`, `activeExamStartedAt`), `class_messages` (`archived*`) e `exam_alerts` (`page_exit_attempt`, `examSession*`), restando publicação no Firebase caso ainda esteja pendente no projeto remoto.
+   - Aumentada a janela de tolerância de `blurTimer` em `useExamAntiCheat.ts` de `300ms` para `1200ms` para garantir cancelamento antes de falso positivo ao alternar rapidamente ou encerrar a prova.
+2. **Botão `Alertas x/y` (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Badge do botão **Alertas** atualizada para `{unackAlerts.length}/{currentScopeAlerts.length}` exibindo ativos sobre o total registrado no escopo atual.
+3. **Atualização de Versão (`4.1.3`), Página Inicial & Changelogs (`frontend/src/config/version.ts`, `frontend/package.json`, `frontend/src/components/LandingPageView.tsx`):**
+   - Versão atualizada para `4.1.3` (`APP_VERSION` e `package.json`).
+   - Expandida a Seção `#recursos` da Página Inicial para 15 Pilares incorporando os novos recursos de Salas/Chat, Modo Avaliação/Anti-Trapaça e Gestão de Materiais/UX, e adicionados os changelogs sequenciais `v4.1.0`, `v4.1.1`, `v4.1.2` e `v4.1.3` em `CHANGELOG_HISTORY`.
+
+
 
 
 

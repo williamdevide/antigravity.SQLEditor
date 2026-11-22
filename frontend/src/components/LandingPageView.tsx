@@ -30,12 +30,65 @@ interface ChangelogEntry {
 
 const CHANGELOG_HISTORY: ChangelogEntry[] = [
   {
+    version: 'v4.1.3',
+    date: '22/11/2026',
+    title:
+      'Avaliações Encapsuladas por Sessão, Reload Direto no Laboratório, Ocorrências por Aluno & Indicador Alertas x/y',
+    isLatest: true,
+    tag: 'Lançamento Atual • v4.1.3',
+    items: [
+      'Ocorrências Encapsuladas por Avaliação: Cada início de Modo Avaliação gera uma sessão identificável (ex.: "Prova P1") isolando suas ocorrências das avaliações encerradas e de novas provas.',
+      'Recarregamento Automático Direto no Laboratório SQL: Ao ativar uma avaliação, os alunos têm backup automático das abas e recarregam direto no editor (#editor) com bancos e scripts da prova.',
+      'Detecção de Fechamento de Guia e Saída da Página: Interceptação de atalhos de recarregamento/navegação e captura de saída (beforeunload/pagehide) com persistência garantida ao retornar.',
+      'Botão "Ocorrências" por Aluno & Contador Alertas x/y: Acompanhamento individual ao lado de "Ver Tela" na lista de matriculados, modal encapsulado por prova e badge x/y (ativos/total) com cancelamento síncrono anti-residuais.',
+    ],
+  },
+  {
+    version: 'v4.1.2',
+    date: '22/11/2026',
+    title:
+      'Sininho Verde Sincronizado por Aluno, Gestão & Arquivamento no Chat Geral e Atalhos no Menu do Perfil',
+    isLatest: false,
+    tag: 'Atualização v4.1.2',
+    items: [
+      'Paridade do Sininho Verde & Cards em Tempo Real: Correção da contagem para ignorar DMs privados entre alunos na conta do professor/admin, exibindo sino animado e elevando cards com mensagens não lidas ao topo.',
+      'Gestão Completa do Chat Geral (Soft-Archive & Limpeza): Abas "Ativas" e "Arquivadas" em Minhas Turmas com exclusão individual, restauração, arquivar/excluir em lote e download do histórico em Markdown (.md).',
+      'Atalhos por Papel no Avatar do Perfil: Menu suspenso da foto agora inclui "Minhas Turmas" para Professores e Administradores e "Painel do Administrador" para Administradores.',
+    ],
+  },
+  {
+    version: 'v4.1.1',
+    date: '22/11/2026',
+    title:
+      'Catálogo Geral (Modo Normal) para Admin, Cópia/Exclusão em Lote de Materiais & Cabeçalho Compacto Configurável',
+    isLatest: false,
+    tag: 'Atualização v4.1.1',
+    items: [
+      'Card "Geral (Modo Normal)" Exclusivo do Administrador: Gestão centralizada dos BDs de aula e soluções exibidos no Modo Normal e para visitantes sem login, preservando todos os materiais nativos.',
+      'Seleção Múltipla & Cópia do Modo Normal: Exclusão em lote de materiais por checkboxes e importação seletiva de materiais globais diretamente para qualquer turma como cópias independentes.',
+      'Header Compacto & Central de Início Configurável: Botões do cabeçalho apenas com ícones por padrão (rótulos opcionais em Configurações), checkbox na Central de Início e "Minha Classe / Chat" multi-turma para docentes.',
+    ],
+  },
+  {
+    version: 'v4.1.0',
+    date: '22/11/2026',
+    title:
+      'Presença & Vínculo Automático Sem F5, Espelho Multi-Aluno no SQLEditor e Ordenação Alfabética em Turmas',
+    isLatest: false,
+    tag: 'Atualização v4.1.0',
+    items: [
+      'Vínculo Instantâneo na Conta do Aluno: Toast automático ao ser inserido em uma turma, ativando imediatamente a borda dourada neon e o menu rápido sem exigir recarregar a página.',
+      'Espelho ao Vivo no SQLEditor Principal: Nova opção de enviar a tela ao vivo de um ou mais alunos diretamente para abas dedicadas no laboratório do professor ("Jogar Tela no SQLEditor").',
+      'Turmas & Matrículas Organizadas: Turmas e alunos matriculados ordenados alfabeticamente (PT-BR) com normalização de nomes e manutenção da posição da lista ao admitir alunos disponíveis.',
+    ],
+  },
+  {
     version: 'v4.0.0',
     date: '22/11/2026',
     title:
       'Ecossistema Completo de Classes em Tempo Real, Chat, Anti-Trapaça, Monitoramento Ao Vivo, Correção Automática & Alunos Disponíveis',
-    isLatest: true,
-    tag: 'Lançamento Atual • Marco Major v4.0.0',
+    isLatest: false,
+    tag: 'Marco Major v4.0.0',
     items: [
       'Identidade Visual de Classe, Sininho Verde & Menu Rápido: Alunos vinculados recebem borda dourada neon no avatar, notificação em tempo real via sininho verde pulsante ao receber mensagens e Menu Rápido ("Meu Perfil" e "Minha Classe").',
       'Tela "Minha Classe" & Comunicação Ao Vivo: Visualização da turma, professor e colegas com indicador Online/Offline, Chat Geral da Turma + Mensagens Diretas (1-para-1), compartilhamento de scripts SQL com abertura direta no editor e aba "Minhas Notas".',
@@ -1218,7 +1271,7 @@ CREATE TABLE itens_pedido (
             Arquitetura v{APP_VERSION}
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[var(--text-primary)] tracking-tight">
-            12 Pilares de Engenharia para <span className="text-[#FF8533]">Aprender e Projetar</span>
+            15 Pilares de Engenharia para <span className="text-[#FF8533]">Aprender e Projetar</span>
           </h2>
         </div>
 
@@ -1295,6 +1348,24 @@ CREATE TABLE itens_pedido (
               color: '#FFA726',
               title: 'Super-Backup Portátil (.sqleditor.json)',
               desc: 'Exporte e restaure em 1 arquivo todos os seus bancos, abas de scripts, layouts DER, dicionários 1FN–3FN, notas e progresso nos exercícios.',
+            },
+            {
+              icon: 'forum',
+              color: '#10B981',
+              title: 'Salas em Tempo Real & Chat Unificado',
+              desc: 'Borda dourada neon no perfil, presença Online/Offline, sininho verde sincronizado por aluno/turma e painel docente com arquivamento e exportação em .md.',
+            },
+            {
+              icon: 'security',
+              color: '#F43F5E',
+              title: 'Modo Avaliação, Anti-Trapaça & Espelho Ao Vivo',
+              desc: 'Reload direto no laboratório ao iniciar prova, proteção anti-colagem/saída, ocorrências encapsuladas por avaliação, Ver Tela no SQLEditor e correção automática.',
+            },
+            {
+              icon: 'folder_special',
+              color: '#A855F7',
+              title: 'Gestão de Materiais, Modo Normal & UX Configurável',
+              desc: 'Catálogo Geral (Modo Normal) para Admin, visibilidade granular por olho verde/roxo, cópia seletiva para turmas, exclusão em lote e cabeçalho compacto.',
             },
           ].map((card) => (
             <div

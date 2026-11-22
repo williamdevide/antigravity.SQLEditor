@@ -2,7 +2,7 @@
  * Versão do SQL Editor
  * Single source of truth para a versão da aplicação.
  */
-export const APP_VERSION = '4.0.0';
+export const APP_VERSION = '4.1.3';
 
 /**
  * Compara se a versão atual é mais recente que a versão salva no armazenamento local.

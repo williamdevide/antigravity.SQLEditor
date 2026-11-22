@@ -236,7 +236,7 @@ export function useExamAntiCheat({
           'Mudança de janela ou aplicativo detectada! Mantenha o foco exclusivo na janela da avaliação.',
           2500
         );
-      }, 300);
+      }, 1200);
     };
 
     // 3. Detecção e neutralização de extensões de IA / sidebars injetadas na página

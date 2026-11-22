@@ -2354,8 +2354,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                         }`}
                         title={
                           activeExamSessionInfo.isExamActive
-                            ? `Alertas da avaliação ativa: ${activeExamSessionInfo.label || 'Avaliação Atual'} (histórico total: ${examAlerts.length})`
-                            : 'Histórico de alertas anti-trapaça encapsulado por avaliação'
+                            ? `Alertas na avaliação ativa (${activeExamSessionInfo.label || 'Avaliação Atual'}): ${unackAlerts.length} pendente(s) de ${currentScopeAlerts.length} registrada(s) • Histórico total: ${examAlerts.length}`
+                            : `Alertas anti-trapaça: ${unackAlerts.length} pendente(s) de ${currentScopeAlerts.length} registrada(s)`
                         }
                       >
                         <span className="material-symbols-outlined text-[14px]">security</span>
@@ -2367,7 +2367,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                             ? 'bg-rose-500 text-white'
                             : 'bg-zinc-500/15 text-[var(--text-muted)]'
                         }`}>
-                          {currentScopeAlerts.length}
+                          {unackAlerts.length}/{currentScopeAlerts.length}
                         </span>
                       </button>
                     </div>
