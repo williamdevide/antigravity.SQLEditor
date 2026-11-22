@@ -4296,5 +4296,18 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Painel superior **Alertas** encapsulado por avaliação (exibindo avaliação atual no topo com contagem separada das encerradas, filtro por sessão e ação **"Marcar todas como cientes"**).
    - Botão **`Ocorrências`** ao lado de **`Ver Tela`** na linha de cada aluno matriculado, abrindo modal dedicado com suas ocorrências separadas por avaliação.
 
+---
+
+### Prompt 43
+> /agente-orquestrador /grill-me /goal abri uma avaliação, um alno deu copiar/colar, a ocorrencia apareceu paara mim, mas quando cliquei em ciente, piscou o alerta para o aluno e gerou mais uma ocorrencia de saida de tela, dai fechei a avaliação e gerou mais uma ocorrencia de saida de tela.
+
+**Ações Executadas:**
+1. **Cancelamento Seguro de Timers e Prevenção de Alertas Duplicados (`frontend/src/hooks/useExamAntiCheat.ts`):**
+   - Adicionados controle de ciclo de vida (`isDisposed`), cancelamento explícito de `blurTimer` no cleanup e no evento `focus`, estado `hasLostFocus`, verificação de `!document.hidden` e cooldown compartilhado com `tab_switch`/`page_exit_attempt` para impedir disparos duplicados ou residuais após encerrar a prova.
+2. **Eliminação da Condição de Corrida no Encerramento (`frontend/src/App.tsx`):**
+   - Em `subscribeToClass`, o desligamento do Modo Avaliação (`isExamModeActiveRef.current = false`, `setIsExamModeActive(false)`, limpeza dos dados de sessão e aviso visual) agora ocorre de forma síncrona **antes** do `await getClassScripts(classId)`.
+   - Adicionadas guardas em `handleAntiCheatAlert` e `handlePersistPageExitAttempt` verificando `activeClassItemRef.current?.classroomMode === 'exam'`, bloqueando qualquer ocorrência tardia após encerrar a avaliação.
+
+
 
 

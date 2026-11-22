@@ -52,12 +52,24 @@ export function useExamAntiCheat({
   useEffect(() => {
     if (!enabled) return;
 
+    let isDisposed = false;
+    let blurTimer: number | null = null;
+    let hasLostFocus = false;
+
+    const clearBlurTimer = () => {
+      if (blurTimer !== null) {
+        window.clearTimeout(blurTimer);
+        blurTimer = null;
+      }
+    };
+
     const triggerThrottledAlert = (
       type: ExamAlertType,
       details: string,
       severityMessage: string,
       cooldownMs = 2500
     ) => {
+      if (isDisposed) return;
       const now = Date.now();
       const prev = lastAlertTimeRef.current[type] || 0;
       if (now - prev < cooldownMs) return;
@@ -173,28 +185,58 @@ export function useExamAntiCheat({
       );
     };
     const handleVisibilityChange = () => {
+      if (isDisposed || suppressExitAlertRef?.current) return;
       if (document.hidden) {
+        clearBlurTimer();
+        hasLostFocus = true;
         triggerThrottledAlert(
           'tab_switch',
           'Aluno trocou de aba do navegador ou minimizou a janela durante a avaliação.',
           'Você saiu da aba da avaliação! Essa ocorrência foi notificada em tempo real ao professor.',
           1500
         );
+      } else {
+        hasLostFocus = false;
       }
     };
 
+    const handleWindowFocus = () => {
+      clearBlurTimer();
+      hasLostFocus = false;
+    };
+
     const handleWindowBlur = () => {
-      // Pequeno delay para diferenciar troca real de janela de cliques internos em iframes/dialogs
-      setTimeout(() => {
-        if (!document.hasFocus()) {
-          triggerThrottledAlert(
-            'window_blur',
-            'A janela do navegador perdeu foco (abertura de outro aplicativo ou janela paralela).',
-            'Mudança de janela ou aplicativo detectada! Mantenha o foco exclusivo na janela da avaliação.',
-            2000
-          );
+      if (isDisposed || suppressExitAlertRef?.current || hasLostFocus || document.hidden) {
+        return;
+      }
+      clearBlurTimer();
+      // Delay curto para diferenciar troca real de janela de cliques internos em diálogos/monaco
+      blurTimer = window.setTimeout(() => {
+        blurTimer = null;
+        if (
+          isDisposed ||
+          suppressExitAlertRef?.current ||
+          document.hidden ||
+          document.hasFocus()
+        ) {
+          return;
         }
-      }, 180);
+        // Evita duplicar alerta caso tab_switch ou page_exit_attempt já tenha disparado no mesmo gesto
+        const now = Date.now();
+        const recentExitOrTab = Math.max(
+          lastAlertTimeRef.current.tab_switch || 0,
+          lastAlertTimeRef.current.page_exit_attempt || 0
+        );
+        if (now - recentExitOrTab < 1500) return;
+
+        hasLostFocus = true;
+        triggerThrottledAlert(
+          'window_blur',
+          'A janela do navegador perdeu foco (abertura de outro aplicativo ou janela paralela).',
+          'Mudança de janela ou aplicativo detectada! Mantenha o foco exclusivo na janela da avaliação.',
+          2500
+        );
+      }, 300);
     };
 
     // 3. Detecção e neutralização de extensões de IA / sidebars injetadas na página
@@ -271,6 +313,7 @@ export function useExamAntiCheat({
     document.addEventListener('contextmenu', handleContextMenuBlock, true);
     document.addEventListener('keydown', handleKeyDownBlock, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
@@ -278,6 +321,8 @@ export function useExamAntiCheat({
     const periodicExtensionCheck = window.setInterval(scanSuspiciousElements, 4000);
 
     return () => {
+      isDisposed = true;
+      clearBlurTimer();
       observer.disconnect();
       window.clearInterval(periodicExtensionCheck);
       document.removeEventListener('copy', handleClipboardBlock, true);
@@ -288,6 +333,7 @@ export function useExamAntiCheat({
       document.removeEventListener('contextmenu', handleContextMenuBlock, true);
       document.removeEventListener('keydown', handleKeyDownBlock, true);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);

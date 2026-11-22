@@ -271,6 +271,7 @@ export const App: React.FC = () => {
 
   // Estados de Sala de Aula, Modo Avaliação e Materiais/Scripts Salvos
   const [activeClassItem, setActiveClassItem] = useState<ClassItem | null>(null);
+  const activeClassItemRef = useRef<ClassItem | null>(null);
   const [activeClassroomMode, setActiveClassroomMode] = useState<ClassroomMode>('normal');
   const [activeClassName, setActiveClassName] = useState<string>('');
   const [isExamModeActive, setIsExamModeActive] = useState<boolean>(false);
@@ -1210,6 +1211,7 @@ export const App: React.FC = () => {
     const isStudent = userProfile?.role === 'aluno';
 
     if (!classId || !isApprovedMember) {
+      activeClassItemRef.current = null;
       setActiveClassItem(null);
       setActiveClassroomMode('normal');
       setActiveClassName('');
@@ -1220,8 +1222,28 @@ export const App: React.FC = () => {
 
     const unsubscribe = subscribeToClass(classId, async (classData) => {
       if (!classData) return;
+      activeClassItemRef.current = classData;
       setActiveClassItem(classData);
       setActiveClassName(classData.name || '');
+
+      const newMode: ClassroomMode = isStudent ? classData.classroomMode || 'normal' : 'normal';
+      const wasInExam = isExamModeActiveRef.current;
+      const willBeInExam = isStudent && newMode === 'exam';
+
+      // Encerramento imediato e síncrono antes de qualquer await para impedir alertas residuais
+      if (!willBeInExam && wasInExam) {
+        lastExamSessionIdRef.current = null;
+        isExamModeActiveRef.current = false;
+        setIsExamModeActive(false);
+        setActiveClassroomMode(newMode);
+        setAntiCheatWarning(null);
+        violationCountRef.current = 0;
+        try {
+          window.sessionStorage.removeItem('sqleditor_exam_reloaded_for');
+          window.sessionStorage.removeItem('sqleditor_exam_backed_up_for');
+          window.sessionStorage.removeItem('sqleditor_exam_auto_reload_session');
+        } catch (_) {}
+      }
 
       // Recarrega scripts da turma para refletir mudanças imediatas nos olhos de visibilidade
       const latestClassScripts = await getClassScripts(classId);
@@ -1234,11 +1256,7 @@ export const App: React.FC = () => {
         return;
       }
 
-      const newMode: ClassroomMode = classData.classroomMode || 'normal';
       setActiveClassroomMode(newMode);
-
-      const wasInExam = isExamModeActiveRef.current;
-      const willBeInExam = newMode === 'exam';
       const examSessionKey = classData.activeExamSessionId || `exam_${classData.id}`;
 
       if (willBeInExam) {
@@ -1355,20 +1373,8 @@ export const App: React.FC = () => {
             console.warn('[Exam Preset Load Error]', presetErr);
           }
         }
-      } else if (!willBeInExam && wasInExam) {
-        // SAINDO DO MODO AVALIAÇÃO:
-        lastExamSessionIdRef.current = null;
-        isExamModeActiveRef.current = false;
-        setIsExamModeActive(false);
-        setAntiCheatWarning(null);
-        violationCountRef.current = 0;
-        try {
-          window.sessionStorage.removeItem('sqleditor_exam_reloaded_for');
-          window.sessionStorage.removeItem('sqleditor_exam_backed_up_for');
-          window.sessionStorage.removeItem('sqleditor_exam_auto_reload_session');
-        } catch (_) {}
-
-        // Verifica se há scripts temporários para restaurar
+      } else if (wasInExam) {
+        // Verifica se há scripts temporários para restaurar após o desligamento síncrono
         try {
           const userScripts = await getUserSavedScripts(user!.uid);
           const tempOnly = userScripts.filter(s => s.isTemporary);
@@ -1630,7 +1636,16 @@ export const App: React.FC = () => {
 
   const handlePersistPageExitAttempt = useCallback(
     (details: string) => {
-      if (!user || !userProfile?.classId || !pendingExamExitStorageKey) return;
+      const latestClass = activeClassItemRef.current;
+      if (
+        !user ||
+        !userProfile?.classId ||
+        !pendingExamExitStorageKey ||
+        !isExamModeActiveRef.current ||
+        latestClass?.classroomMode !== 'exam'
+      ) {
+        return;
+      }
       try {
         localStorage.setItem(
           pendingExamExitStorageKey,
@@ -1640,8 +1655,9 @@ export const App: React.FC = () => {
             studentName: userProfile.displayName || user.displayName || 'Aluno',
             studentEmail: userProfile.email || user.email || '',
             details,
-            examSessionId: activeClassItem?.activeExamSessionId || null,
-            examSessionLabel: activeClassItem?.activeExamSessionLabel || null,
+            examSessionId: latestClass?.activeExamSessionId || activeClassItem?.activeExamSessionId || null,
+            examSessionLabel:
+              latestClass?.activeExamSessionLabel || activeClassItem?.activeExamSessionLabel || null,
           })
         );
       } catch (_) {}
@@ -1659,7 +1675,15 @@ export const App: React.FC = () => {
 
   const handleAntiCheatAlert = useCallback(
     (type: ExamAlertType, details: string, severityMessage: string) => {
-      if (!user || !userProfile?.classId) return;
+      const latestClass = activeClassItemRef.current;
+      if (
+        !user ||
+        !userProfile?.classId ||
+        !isExamModeActiveRef.current ||
+        latestClass?.classroomMode !== 'exam'
+      ) {
+        return;
+      }
       violationCountRef.current += 1;
       setAntiCheatWarning({
         message: severityMessage,
@@ -1672,8 +1696,9 @@ export const App: React.FC = () => {
         studentEmail: userProfile.email || user.email || '',
         type,
         details,
-        examSessionId: activeClassItem?.activeExamSessionId || null,
-        examSessionLabel: activeClassItem?.activeExamSessionLabel || null,
+        examSessionId: latestClass?.activeExamSessionId || activeClassItem?.activeExamSessionId || null,
+        examSessionLabel:
+          latestClass?.activeExamSessionLabel || activeClassItem?.activeExamSessionLabel || null,
       }).then((sentOk) => {
         // Evita duplicação ao retornar caso o envio imediato antes de fechar a guia já tenha concluído
         if (sentOk && type === 'page_exit_attempt' && pendingExamExitStorageKey) {
