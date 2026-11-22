@@ -4267,3 +4267,15 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Adicionadas abas **Ativas** e **Arquivadas** no painel `Chat Geral` em **Minhas Turmas**.
    - Incluído botão individual para excluir (e restaurar quando arquivada) em cada mensagem, além dos botões globais **Baixar (.md)**, **Arquivar Todas / Restaurar Todas** e **Excluir Todas**.
 
+---
+
+### Prompt 41
+> /agente-orquestrador /grill-me /goal no menu suspenso do professor na foto do perfil insira tambem a opção Minhas Turmas, na do administrador insira Minhas Turmas e Painel do Administrador. 
+
+**Ações Executadas:**
+1. **Menu Suspenso da Foto de Perfil (`frontend/src/components/ProfileAvatarButton.tsx`):**
+   - Calculado `isEffectiveAdmin` (`Boolean(isAdmin || userProfile?.role === 'admin')`) e mantido `isTeacherOrAdmin` cobrindo professores e administradores.
+   - Adicionado o botão **Minhas Turmas** (`onViewChange('teacher-panel')`) para professores e administradores.
+   - Adicionado o botão **Painel do Administrador** (`onViewChange('admin-panel')`) exclusivamente para administradores, funcionando tanto no `Header` quanto na `LandingPageView`.
+
+

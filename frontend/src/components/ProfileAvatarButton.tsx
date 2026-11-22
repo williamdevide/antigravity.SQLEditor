@@ -18,7 +18,8 @@ interface ProfileAvatarButtonProps {
  * Quando o aluno está aprovado em uma classe ou o usuário é Professor/Admin:
  *  - exibe borda dourada neon brilhante (alunos em classe ou docente com turmas);
  *  - exibe sininho verde pulsante no canto superior direito quando há mensagens não lidas;
- *  - ao clicar, abre menu rápido com "Meu Perfil" e "Minha Classe / Chat".
+ *  - ao clicar, abre menu rápido com "Meu Perfil", "Minha Classe / Chat" e, conforme o papel,
+ *    "Minhas Turmas" (Professor/Admin) e "Painel do Administrador" (Admin).
  */
 export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
   user,
@@ -35,8 +36,9 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isInClass = Boolean(userProfile?.classId && userProfile?.classStatus === 'approved');
+  const isEffectiveAdmin = Boolean(isAdmin || userProfile?.role === 'admin');
   const isTeacherOrAdmin = Boolean(
-    isAdmin || isProfessor || userProfile?.role === 'professor' || userProfile?.role === 'admin'
+    isEffectiveAdmin || isProfessor || userProfile?.role === 'professor'
   );
   const hasClassMenu = isInClass || isTeacherOrAdmin;
   const hasGoldenBorder = isInClass || (isTeacherOrAdmin && teacherClassesCount > 0);
@@ -188,6 +190,46 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
               </span>
             )}
           </button>
+
+          {isTeacherOrAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onViewChange('teacher-panel');
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 text-xs text-[var(--text-primary)] transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#29B6F6]">groups</span>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold">Minhas Turmas</span>
+                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                  Gestão de turmas, alunos e materiais
+                </span>
+              </div>
+            </button>
+          )}
+
+          {isEffectiveAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onViewChange('admin-panel');
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center gap-2.5 text-xs text-[var(--text-primary)] transition-colors cursor-pointer border-t border-[var(--border-color)]/60 mt-1 pt-2"
+            >
+              <span className="material-symbols-outlined text-[16px] text-purple-400">
+                admin_panel_settings
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold">Painel do Administrador</span>
+                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                  Usuários, permissões e auditoria
+                </span>
+              </div>
+            </button>
+          )}
         </div>
       )}
     </div>
