@@ -48,6 +48,8 @@ interface HeaderProps {
   onWorkspaceLayoutModeChange?: (mode: 'editor' | 'split' | 'der') => void;
   confirmBeforeCloseAllTabs?: boolean;
   onOpenHub?: () => void;
+  showButtonLabels?: boolean;
+  teacherClassesCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -84,6 +86,8 @@ export const Header: React.FC<HeaderProps> = ({
   onWorkspaceLayoutModeChange,
   confirmBeforeCloseAllTabs = true,
   onOpenHub,
+  showButtonLabels = false,
+  teacherClassesCount = 0,
 }) => {
   const { user, userProfile, isAdmin, isProfessor, openAuthModal, logout } = useAuth();
   const [runDropdownOpen, setRunDropdownOpen] = useState(false);
@@ -195,7 +199,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Exibir apenas o Editor de Scripts SQL"
             >
               <span className="material-symbols-outlined text-[13px]">code</span>
-              <span className="hidden xl:inline text-[9.5px]">Editor</span>
+              {showButtonLabels && <span className="hidden xl:inline text-[9.5px]">Editor</span>}
             </button>
             <button
               type="button"
@@ -208,7 +212,9 @@ export const Header: React.FC<HeaderProps> = ({
               title="Split-View Reativo: Editor SQL ↔ Estúdio DER lado a lado"
             >
               <span className="material-symbols-outlined text-[13px]">vertical_split</span>
-              <span className="font-semibold text-[9.5px] whitespace-nowrap">SQL ↔ DER</span>
+              {showButtonLabels && (
+                <span className="font-semibold text-[9.5px] whitespace-nowrap">SQL ↔ DER</span>
+              )}
             </button>
             <button
               type="button"
@@ -221,7 +227,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Exibir DER em destaque no Workspace"
             >
               <span className="material-symbols-outlined text-[13px]">schema</span>
-              <span className="hidden xl:inline text-[9.5px]">DER</span>
+              {showButtonLabels && <span className="hidden xl:inline text-[9.5px]">DER</span>}
             </button>
           </div>
         )}
@@ -236,17 +242,28 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onRunQuery}
                 disabled={isExecuting}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-[11px] font-semibold rounded-l transition-all cursor-pointer disabled:opacity-50"
+                className={`flex items-center ${
+                  showButtonLabels ? 'gap-1.5 px-2.5' : 'px-2'
+                } py-1 bg-[#FF6B00] hover:bg-[#FF8533] active:scale-95 text-white text-[11px] font-semibold rounded-l transition-all cursor-pointer disabled:opacity-50`}
                 title="Executar Script SQL Completo (Ctrl+Enter)"
+                aria-label="Executar Script SQL Completo"
                 type="button"
               >
-                <span className="material-symbols-outlined text-[16px]">
+                <span
+                  className={`material-symbols-outlined text-[16px] ${
+                    isExecuting ? 'animate-spin' : ''
+                  }`}
+                >
                   {isExecuting ? 'sync' : 'play_arrow'}
                 </span>
-                <span>{isExecuting ? 'Executando...' : 'Executar'}</span>
-                <span className="hidden 2xl:inline text-[10px] text-white/80 font-mono font-normal">
-                  (Ctrl+↵)
-                </span>
+                {showButtonLabels && (
+                  <>
+                    <span>{isExecuting ? 'Executando...' : 'Executar'}</span>
+                    <span className="hidden 2xl:inline text-[10px] text-white/80 font-mono font-normal">
+                      (Ctrl+↵)
+                    </span>
+                  </>
+                )}
               </button>
 
               {/* Divisor vertical sutil */}
@@ -303,12 +320,15 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] rounded transition-colors shadow-sm">
               <button
                 onClick={onNewBlankTab}
-                className="flex items-center gap-1 px-2 py-1 text-[var(--text-primary)] hover:text-[var(--accent-yellow)] text-[11px] font-medium rounded-l transition-colors cursor-pointer"
+                className={`flex items-center ${
+                  showButtonLabels ? 'gap-1 px-2' : 'px-1.5'
+                } py-1 text-[var(--text-primary)] hover:text-[var(--accent-yellow)] text-[11px] font-medium rounded-l transition-colors cursor-pointer`}
                 title="Nova Aba em Branco (Ctrl+T)"
+                aria-label="Nova Aba em Branco"
                 type="button"
               >
                 <span className="material-symbols-outlined text-[15px] text-[#FFE600]">add</span>
-                <span className="hidden sm:inline">Nova Aba</span>
+                {showButtonLabels && <span className="hidden sm:inline">Nova Aba</span>}
               </button>
 
               <div className="w-[1px] h-4 bg-[var(--border-color)] self-center"></div>
@@ -346,34 +366,43 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Limpar */}
             <button
               onClick={onClearEditor}
-              className="hidden md:flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-[11px] font-medium rounded transition-colors cursor-pointer"
+              className={`hidden md:flex items-center ${
+                showButtonLabels ? 'gap-1 px-2' : 'px-1.5'
+              } py-1 bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)] text-[11px] font-medium rounded transition-colors cursor-pointer`}
               title="Limpar Conteúdo do Editor Atual (com confirmação)"
+              aria-label="Limpar Conteúdo do Editor"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px]">clear_all</span>
-              <span>Limpar</span>
+              {showButtonLabels && <span>Limpar</span>}
             </button>
 
             {/* Excluir / Fechar Todas as Guias com Confirmação Segura */}
             <button
               onClick={handleSafeCloseAllTabs}
-              className="hidden lg:flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-[11px] font-medium rounded transition-all cursor-pointer"
+              className={`hidden lg:flex items-center ${
+                showButtonLabels ? 'gap-1 px-2' : 'px-1.5'
+              } py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/10 text-[var(--text-secondary)] hover:text-[#FF3366] border border-[var(--border-color)] hover:border-[#FF3366]/50 text-[11px] font-medium rounded transition-all cursor-pointer`}
               title="Fechar todas as guias de scripts abertas (com confirmação)"
+              aria-label="Fechar Todas as Abas"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px] text-[#FF3366]">delete_sweep</span>
-              <span>Fechar Todas</span>
+              {showButtonLabels && <span>Fechar Todas</span>}
             </button>
 
             {/* Resetar Banco */}
             <button
               onClick={onResetDb}
-              className="flex items-center gap-1 px-2 py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/15 text-[#FF3366] border border-[#FF3366]/40 hover:border-[#FF3366] text-[11px] font-medium rounded transition-all cursor-pointer shadow-[0_0_8px_rgba(255,51,102,0.15)]"
+              className={`flex items-center ${
+                showButtonLabels ? 'gap-1 px-2' : 'px-1.5'
+              } py-1 bg-[var(--bg-surface)] hover:bg-[#FF3366]/15 text-[#FF3366] border border-[#FF3366]/40 hover:border-[#FF3366] text-[11px] font-medium rounded transition-all cursor-pointer shadow-[0_0_8px_rgba(255,51,102,0.15)]`}
               title="Restaurar Padrões e Bancos Iniciais"
+              aria-label="Resetar Banco"
               type="button"
             >
               <span className="material-symbols-outlined text-[15px]">restart_alt</span>
-              <span className="hidden sm:inline">Resetar Banco</span>
+              {showButtonLabels && <span className="hidden sm:inline">Resetar Banco</span>}
             </button>
 
             <div className="h-4 w-px bg-[var(--border-color)] mx-1"></div>
@@ -463,6 +492,7 @@ export const Header: React.FC<HeaderProps> = ({
                 unreadClassMessagesCount={unreadClassMessagesCount}
                 size="sm"
                 activeClassName={activeClassName}
+                teacherClassesCount={teacherClassesCount}
               />
 
               <button

@@ -6,12 +6,16 @@ interface NavigationHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectView: (view: ActiveView) => void;
+  showOnStartup?: boolean;
+  onToggleShowOnStartup?: (checked: boolean) => void;
 }
 
 export const NavigationHubModal: React.FC<NavigationHubModalProps> = ({
   isOpen,
   onClose,
   onSelectView,
+  showOnStartup = true,
+  onToggleShowOnStartup,
 }) => {
   const { userProfile, isAdmin, isProfessor, isTeacherApproved } = useAuth();
 
@@ -326,6 +330,24 @@ export const NavigationHubModal: React.FC<NavigationHubModalProps> = ({
                 </span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* 5. Preferência de Abertura Automática */}
+        {onToggleShowOnStartup && (
+          <div className="pt-3 border-t border-[var(--border-color)] flex flex-wrap items-center justify-between gap-2">
+            <label className="inline-flex items-center gap-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showOnStartup}
+                onChange={(e) => onToggleShowOnStartup(e.target.checked)}
+                className="w-4 h-4 rounded border-[var(--border-color)] accent-[#FF6B00] cursor-pointer"
+              />
+              <span className="font-medium">Exibir Central de Início ao carregar</span>
+            </label>
+            <span className="text-[10px] text-[var(--text-muted)]">
+              Alterável em Configurações
+            </span>
           </div>
         )}
       </div>

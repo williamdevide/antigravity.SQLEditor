@@ -529,6 +529,60 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </p>
                 </div>
               </label>
+
+              {/* Toggle: Exibir textos nos botões do cabeçalho (Header) */}
+              <label className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-start gap-3 cursor-pointer hover:border-[#FF6B00]/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={currentPrefs.ui.showHeaderButtonLabels}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    updatePrefs((p) => ({
+                      ...p,
+                      ui: { ...p.ui, showHeaderButtonLabels: checked },
+                    }));
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border-[var(--border-color)] text-[#FF6B00] focus:ring-[#FF6B00] cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                    <span>Exibir textos nos botões do cabeçalho (Header)</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#29B6F6]/15 text-[#29B6F6]">
+                      Padrão: Ícones
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Quando desativado (padrão), o cabeçalho exibe apenas os ícones dos botões com dicas ao passar o mouse. Ative para exibir também os textos ao lado de cada ícone.
+                  </p>
+                </div>
+              </label>
+
+              {/* Toggle: Exibir Central de Início ao carregar */}
+              <label className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-start gap-3 cursor-pointer hover:border-[#FF6B00]/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={currentPrefs.ui.showStartupHub}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    updatePrefs((p) => ({
+                      ...p,
+                      ui: { ...p.ui, showStartupHub: checked },
+                    }));
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border-[var(--border-color)] text-[#FF6B00] focus:ring-[#FF6B00] cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                    <span>Exibir Central de Início ao carregar</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-400">
+                      Padrão: Ativo
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Abre automaticamente a tela rápida da Central de Início ao entrar no Laboratório SQL. Você também pode abrir manualmente pelo menu principal.
+                  </p>
+                </div>
+              </label>
             </div>
           </section>
         )}

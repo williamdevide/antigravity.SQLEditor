@@ -16,6 +16,7 @@ interface LandingPageViewProps {
   onInstantiateTemplate?: (templateId: string) => void;
   unreadClassMessagesCount?: number;
   activeClassName?: string;
+  teacherClassesCount?: number;
 }
 
 interface ChangelogEntry {
@@ -332,6 +333,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onInstantiateTemplate,
   unreadClassMessagesCount = 0,
   activeClassName = '',
+  teacherClassesCount = 0,
 }) => {
   const { user, userProfile, isAdmin, isProfessor, openAuthModal, logout } = useAuth();
   const [activeShowcaseTab, setActiveShowcaseTab] = useState<
@@ -584,6 +586,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   unreadClassMessagesCount={unreadClassMessagesCount}
                   size="md"
                   activeClassName={activeClassName}
+                  teacherClassesCount={teacherClassesCount}
                 />
               </div>
             ) : (

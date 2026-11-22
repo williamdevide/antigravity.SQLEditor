@@ -19,6 +19,10 @@ export interface UIPreferences {
   showQuickModulePills: boolean;
   /** Modo Leve para Laboratório: desativa filtros blur pesados e animações contínuas */
   reducedMotionAndGlow: boolean;
+  /** Exibir textos descritivos ao lado dos ícones nos botões do cabeçalho (padrão false = somente ícones) */
+  showHeaderButtonLabels: boolean;
+  /** Exibir modal da Central de Início ao carregar/entrar no Laboratório SQL */
+  showStartupHub: boolean;
 }
 
 export interface EditorAutomationPreferences {
@@ -73,6 +77,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     defaultErZoom: 100,
     showQuickModulePills: false,
     reducedMotionAndGlow: false,
+    showHeaderButtonLabels: false,
+    showStartupHub: true,
   },
   editor: {
     autoUppercaseKeywords: true,

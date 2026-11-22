@@ -10,14 +10,15 @@ interface ProfileAvatarButtonProps {
   unreadClassMessagesCount?: number;
   size?: 'sm' | 'md';
   activeClassName?: string;
+  teacherClassesCount?: number;
 }
 
 /**
  * Botão circular de avatar compartilhado entre Header e LandingPageView.
- * Quando o aluno está aprovado em uma classe:
- *  - exibe borda dourada neon brilhante;
+ * Quando o aluno está aprovado em uma classe ou o usuário é Professor/Admin:
+ *  - exibe borda dourada neon brilhante (alunos em classe ou docente com turmas);
  *  - exibe sininho verde pulsante no canto superior direito quando há mensagens não lidas;
- *  - ao clicar, abre menu rápido com "Meu Perfil" e "Minha Classe".
+ *  - ao clicar, abre menu rápido com "Meu Perfil" e "Minha Classe / Chat".
  */
 export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
   user,
@@ -28,12 +29,22 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
   unreadClassMessagesCount = 0,
   size = 'sm',
   activeClassName,
+  teacherClassesCount = 0,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isInClass = Boolean(userProfile?.classId && userProfile?.classStatus === 'approved');
-  const displayClassName = activeClassName || userProfile?.className || 'Minha Turma';
+  const isTeacherOrAdmin = Boolean(
+    isAdmin || isProfessor || userProfile?.role === 'professor' || userProfile?.role === 'admin'
+  );
+  const hasClassMenu = isInClass || isTeacherOrAdmin;
+  const hasGoldenBorder = isInClass || (isTeacherOrAdmin && teacherClassesCount > 0);
+  const displayClassName = isTeacherOrAdmin
+    ? teacherClassesCount > 0
+      ? `Todas as Turmas (${teacherClassesCount})`
+      : 'Chat de Turmas (Professor)'
+    : activeClassName || userProfile?.className || 'Minha Turma';
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -65,7 +76,7 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
   const textSize = size === 'md' ? 'text-xs' : 'text-[10px]';
 
   const handleClick = () => {
-    if (isInClass) {
+    if (hasClassMenu) {
       setMenuOpen((prev) => !prev);
     } else {
       onViewChange('profile');
@@ -78,18 +89,18 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
         type="button"
         onClick={handleClick}
         className={`${dimensions} rounded-full flex items-center justify-center p-0.5 transition-all cursor-pointer hover:scale-105 active:scale-95 shrink-0 ${
-          isInClass
+          hasGoldenBorder
             ? 'bg-[#FFD700]/15 border-2 border-[#FFD700] shadow-[0_0_12px_rgba(255,215,0,0.85),0_0_4px_rgba(255,230,0,0.9)] ring-1 ring-[#FFE600]/60'
             : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] hover:border-[#FF6B00] shadow-sm'
         }`}
         title={
-          isInClass
-            ? `${userProfile?.displayName || user?.displayName || user?.email} • Turma: ${displayClassName}${
+          hasClassMenu
+            ? `${userProfile?.displayName || user?.displayName || user?.email} • ${displayClassName}${
                 unreadClassMessagesCount > 0 ? ` (${unreadClassMessagesCount} mensagem(ns) não lida(s))` : ''
               }`
             : `Perfil: ${userProfile?.displayName || user?.displayName || user?.email} (${roleLabel})`
         }
-        aria-label={isInClass ? 'Menu Rápido de Perfil e Classe' : 'Acessar Meu Perfil'}
+        aria-label={hasClassMenu ? 'Menu Rápido de Perfil e Classe / Chat' : 'Acessar Meu Perfil'}
       >
         <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
           {photo ? (
@@ -109,14 +120,14 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
       </button>
 
       {/* Sininho verde no canto superior direito quando houver mensagens não lidas */}
-      {isInClass && unreadClassMessagesCount > 0 && (
+      {hasClassMenu && unreadClassMessagesCount > 0 && (
         <button
           type="button"
           onClick={() => {
             setMenuOpen(false);
             onViewChange('my-class');
           }}
-          title={`${unreadClassMessagesCount} nova(s) mensagem(ns) na classe ${displayClassName}`}
+          title={`${unreadClassMessagesCount} nova(s) mensagem(ns) em ${displayClassName}`}
           aria-label="Abrir mensagens não lidas da classe"
           className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow-[0_0_10px_rgba(16,185,129,0.95)] border border-[#0F1117] animate-pulse cursor-pointer z-10"
         >
@@ -124,12 +135,12 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
         </button>
       )}
 
-      {/* Menu Rápido para aluno vinculado a classe */}
-      {isInClass && menuOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.5)] py-1.5 z-[999999] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+      {/* Menu Rápido para aluno vinculado a classe ou professor/admin */}
+      {hasClassMenu && menuOpen && (
+        <div className="absolute right-0 top-full mt-2 w-60 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.5)] py-1.5 z-[999999] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
           <div className="px-3 py-2 border-b border-[var(--border-color)]/70">
             <p className="text-xs font-bold text-[var(--text-primary)] truncate">
-              {userProfile?.displayName || user?.displayName || 'Aluno'}
+              {userProfile?.displayName || user?.displayName || roleLabel}
             </p>
             <p className="text-[10px] text-[#FFD700] font-semibold flex items-center gap-1 truncate mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] shadow-[0_0_6px_#FFD700] shrink-0" />
@@ -163,9 +174,11 @@ export const ProfileAvatarButton: React.FC<ProfileAvatarButtonProps> = ({
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="material-symbols-outlined text-[16px] text-[#FFD700]">school</span>
               <div className="flex flex-col min-w-0">
-                <span className="font-semibold">Minha Classe</span>
+                <span className="font-semibold">Minha Classe / Chat</span>
                 <span className="text-[10px] text-[var(--text-muted)] truncate">
-                  Colegas, chat, scripts e notas
+                  {isTeacherOrAdmin
+                    ? 'Todas as turmas ou turma específica'
+                    : 'Colegas, chat, scripts e notas'}
                 </span>
               </div>
             </div>

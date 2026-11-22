@@ -120,13 +120,16 @@ function parseActiveViewFromHash(rawHash: string): ActiveView | null {
 }
 
 export const App: React.FC = () => {
-  const { user, userProfile, authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
+  const { user, userProfile, isAdmin, authModalOpen, authModalInitialTab, closeAuthModal } = useAuth();
   const [preferences, setPreferencesState] = useState<AppPreferences>(() => loadAppPreferences());
   const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState<'editor' | 'split' | 'der'>('editor');
   const [activeExercise, setActiveExercise] = useState<PracticeExerciseItem | null>(null);
   const [isHubModalOpen, setIsHubModalOpen] = useState<boolean>(() => {
     try {
-      return parseActiveViewFromHash(window.location.hash) === 'workspace';
+      return (
+        preferences.ui.showStartupHub &&
+        parseActiveViewFromHash(window.location.hash) === 'workspace'
+      );
     } catch {
       return false;
     }
@@ -1392,27 +1395,64 @@ export const App: React.FC = () => {
     sendPresenceHeartbeat(true);
   }, [activeView, user?.uid, presenceClassIdsKey, sendPresenceHeartbeat]);
 
-  // 2.2 Escuta mensagens da classe para atualizar sininho verde na Header/Landing
+  // 2.2 Escuta mensagens da classe (aluno) ou de todas as turmas (professor/admin) para o sininho verde
+  const messageClassIdsKey = useMemo(() => {
+    if (!user || !userProfile) return '';
+    const ids = new Set<string>();
+    if (userProfile.classId && userProfile.classStatus === 'approved') {
+      ids.add(userProfile.classId);
+    }
+    if (isAdmin || userProfile.role === 'professor' || userProfile.role === 'admin') {
+      teacherClasses.forEach((c) => {
+        if (c.id) ids.add(c.id);
+      });
+    }
+    return Array.from(ids).sort().join(',');
+  }, [user, userProfile, isAdmin, teacherClasses]);
+
   useEffect(() => {
-    if (!user || !userProfile?.classId || userProfile?.classStatus !== 'approved') {
+    const classIds = messageClassIdsKey ? messageClassIdsKey.split(',').filter(Boolean) : [];
+    if (!user || classIds.length === 0) {
       setClassMessages([]);
       return;
     }
-    const unsub = subscribeToClassMessages(userProfile.classId, setClassMessages);
-    return () => unsub();
-  }, [user, userProfile?.classId, userProfile?.classStatus]);
+
+    const byClass: Record<string, ClassMessageItem[]> = {};
+    const emitCombined = () => {
+      const merged = Object.values(byClass).flat();
+      merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      setClassMessages(merged);
+    };
+
+    const unsubs = classIds.map((cId) =>
+      subscribeToClassMessages(cId, (msgs) => {
+        byClass[cId] = msgs;
+        emitCombined();
+      })
+    );
+
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [user, messageClassIdsKey]);
 
   const unreadClassMessagesCount = useMemo(() => {
     if (!user || classMessages.length === 0) return 0;
+    const isTeacherOrAdmin = Boolean(
+      isAdmin || userProfile?.role === 'professor' || userProfile?.role === 'admin'
+    );
     return classMessages.filter((m) => {
       if (m.senderUid === user.uid) return false;
       if ((m.readBy || []).includes(user.uid)) return false;
-      if (isExamModeActive && activeClassItem?.teacherId) {
+      if (!isTeacherOrAdmin && isExamModeActive && activeClassItem?.teacherId) {
         return m.senderUid === activeClassItem.teacherId && m.recipientUid === user.uid;
+      }
+      if (isTeacherOrAdmin) {
+        return m.recipientUid === 'all' || m.recipientUid === user.uid || isAdmin;
       }
       return m.recipientUid === 'all' || m.recipientUid === user.uid;
     }).length;
-  }, [user, classMessages, isExamModeActive, activeClassItem?.teacherId]);
+  }, [user, userProfile?.role, isAdmin, classMessages, isExamModeActive, activeClassItem?.teacherId]);
 
   // 2.3 Sistema Anti-Trapaça durante Modo Avaliação (Aluno)
   const handleAntiCheatAlert = useCallback(
@@ -2226,13 +2266,16 @@ export const App: React.FC = () => {
           <LandingPageView
             onOpenEditor={() => {
               setActiveView('workspace');
-              setIsHubModalOpen(true);
+              if (preferences.ui.showStartupHub) {
+                setIsHubModalOpen(true);
+              }
             }}
             onOpenView={(view) => setActiveView(view)}
             theme={theme}
             onToggleTheme={handleToggleTheme}
             unreadClassMessagesCount={unreadClassMessagesCount}
             activeClassName={activeClassName}
+            teacherClassesCount={teacherClasses.length}
             onInstantiateTemplate={(tplId) => {
               const found = solutions.find((s) => s.id === tplId);
               if (found) {
@@ -2280,6 +2323,8 @@ export const App: React.FC = () => {
             onWorkspaceLayoutModeChange={setWorkspaceLayoutMode}
             confirmBeforeCloseAllTabs={preferences.editor.confirmBeforeCloseAllTabs}
             onOpenHub={() => setIsHubModalOpen(true)}
+            showButtonLabels={preferences.ui.showHeaderButtonLabels}
+            teacherClassesCount={teacherClasses.length}
           />
 
           {/* Banner de Desafio Ativo Acoplado ao Topo da Tela */}
@@ -2383,7 +2428,9 @@ export const App: React.FC = () => {
               onNavigateToLanding={() => setActiveView('landing')}
               onSaveComplete={() => {
                 setActiveView('workspace');
-                setIsHubModalOpen(true);
+                if (preferences.ui.showStartupHub) {
+                  setIsHubModalOpen(true);
+                }
               }}
               onOpenSavedScript={(script) => {
                 handleNewTab(script.content, script.title, script.id);
@@ -2400,6 +2447,7 @@ export const App: React.FC = () => {
           ) : activeView === 'my-class' ? (
             <MyClassView
               classItem={activeClassItem}
+              teacherClasses={teacherClasses}
               onBackToWorkspace={() => setActiveView('workspace')}
               onOpenScriptInEditor={(title, content) => handleNewTab(content, title)}
               openTabs={tabs}
@@ -2800,7 +2848,9 @@ export const App: React.FC = () => {
         initialTab={authModalInitialTab}
         onAuthSuccess={() => {
           setActiveView('workspace');
-          setIsHubModalOpen(true);
+          if (preferences.ui.showStartupHub) {
+            setIsHubModalOpen(true);
+          }
         }}
       />
 
@@ -2809,6 +2859,13 @@ export const App: React.FC = () => {
         isOpen={isHubModalOpen}
         onClose={() => setIsHubModalOpen(false)}
         onSelectView={(view) => setActiveView(view)}
+        showOnStartup={preferences.ui.showStartupHub}
+        onToggleShowOnStartup={(checked) =>
+          handleUpdatePreferences({
+            ...preferences,
+            ui: { ...preferences.ui, showStartupHub: checked },
+          })
+        }
       />
 
       {/* Modal de Recuperação Pós-Avaliação */}

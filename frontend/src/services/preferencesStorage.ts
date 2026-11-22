@@ -41,6 +41,14 @@ export function normalizeAppPreferences(raw: unknown): AppPreferences {
         typeof ui.reducedMotionAndGlow === 'boolean'
           ? ui.reducedMotionAndGlow
           : DEFAULT_APP_PREFERENCES.ui.reducedMotionAndGlow,
+      showHeaderButtonLabels:
+        typeof ui.showHeaderButtonLabels === 'boolean'
+          ? ui.showHeaderButtonLabels
+          : DEFAULT_APP_PREFERENCES.ui.showHeaderButtonLabels,
+      showStartupHub:
+        typeof ui.showStartupHub === 'boolean'
+          ? ui.showStartupHub
+          : DEFAULT_APP_PREFERENCES.ui.showStartupHub,
     },
     editor: {
       autoUppercaseKeywords:

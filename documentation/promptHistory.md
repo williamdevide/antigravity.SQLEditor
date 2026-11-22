@@ -4198,3 +4198,22 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Substituído o debounce simples de `syncStudentLiveState` por throttle com trailing flush de `1000ms` lendo o conteúdo ativo direto do `editorRef`, além de reforço periódico a cada `10s`.
    - `StudentMonitorModal` passou a assinar diretamente `subscribeToOwnLiveState(classId, studentUid)` e ganhou o botão **"Abrir no SQLEditor"**.
    - Adicionado suporte a `studentMirror` em `TabItem`, abrindo uma aba dedicada por aluno no SQLEditor (`[Nome] • [arquivo.sql]`) com badge `AO VIVO` / `TESTE`, barra contextual identificando o aluno, sincronização simultânea de múltiplos alunos e botões **"Pausar Ao Vivo" / "Retomar Ao Vivo"** e **"Voltar às Turmas"**.
+
+---
+
+### Prompt 37
+> /agente-orquestrador /grill-me /goal vamos melhorar nossa interatividade, quero que os botões do header tenham a versão com texto (como estão hoje e a versão sem texto (somente os icones), isso deve ser configuravel e estar lá em configurações (por padrão para todos os usuarios exibiremos a versão sem texto).
+> a central de início também deve ter um check no finaal dela (exibir Central de Início ao carregar), por padrão ligado, mas se for desligado, deixa de exibir essa tela. também estará lá em configurações.
+> no menu suspenso da foto de perfil, a opção Minha Classe virá Minha Classe / Chat. na conta do professor deve exibir da mesma forma, mas podendo ver todas as turmas ou somente alguma a sua escolha.
+
+**Ações Executadas:**
+1. **Preferências Globais e Normalização (`frontend/src/types/preferences.ts`, `frontend/src/services/preferencesStorage.ts`, `frontend/src/components/SettingsView.tsx`):**
+   - Adicionadas as chaves `ui.showHeaderButtonLabels` (padrão `false`, exibindo apenas os ícones no cabeçalho para todos os usuários) e `ui.showStartupHub` (padrão `true`).
+   - Disponibilizados os dois novos checkboxes em **Configurações → Interface, Tipografia & Modo Leve**.
+2. **Cabeçalho Compacto por Padrão (`frontend/src/components/Header.tsx`, `frontend/src/App.tsx`):**
+   - Botões de ação e seletor de layout no `Header` passaram a respeitar `showButtonLabels`, ocultando os textos por padrão e preservando todos os ícones e tooltips.
+3. **Central de Início Configurável (`frontend/src/components/NavigationHubModal.tsx`, `frontend/src/App.tsx`):**
+   - Adicionado o checkbox **"Exibir Central de Início ao carregar"** no rodapé da Central de Início, sincronizado com `preferences.ui.showStartupHub` e respeitado nas aberturas automáticas (mantendo abertura manual pelo menu principal).
+4. **"Minha Classe / Chat" Unificado para Aluno e Professor Multi-Turma (`frontend/src/components/ProfileAvatarButton.tsx`, `frontend/src/components/LandingPageView.tsx`, `frontend/src/components/MyClassView.tsx`, `frontend/src/App.tsx`):**
+   - Menu rápido da foto de perfil renomeado para **`Minha Classe / Chat`**, habilitado também para professores e administradores (com borda dourada neon quando possuem turmas e sininho verde para mensagens não lidas em todas as suas turmas).
+   - `MyClassView` agora oferece ao professor seletor de filtro entre **`Todas as Turmas`** (feed unificado em tempo real com escolha da turma de envio direcionado) ou qualquer turma específica, com nomes normalizados e ordenação alfabética.
