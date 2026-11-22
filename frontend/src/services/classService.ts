@@ -186,27 +186,44 @@ export async function requestJoinClass(params: {
 }
 
 /**
- * O professor admite diretamente um aluno na turma pelo endereço de e-mail
+ * Lista todos os alunos cadastrados na plataforma que ainda não estão vinculados a nenhuma turma
  */
-export async function admitStudentByEmail(params: {
+export async function getAvailableStudents(): Promise<UserProfile[]> {
+  try {
+    const q = query(collection(db, 'users'), where('role', '==', 'aluno'));
+    const snap = await getDocs(q);
+    const available: UserProfile[] = [];
+    snap.forEach((d) => {
+      const data = { uid: d.id, ...(d.data() as Omit<UserProfile, 'uid'>) } as UserProfile;
+      const isRejected = data.status === 'rejected';
+      const hasNoClass =
+        !data.classId ||
+        data.classId.trim() === '' ||
+        !data.classStatus ||
+        data.classStatus === 'none';
+
+      if (!isRejected && hasNoClass) {
+        available.push(data);
+      }
+    });
+    return available.sort((a, b) =>
+      (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '', 'pt-BR')
+    );
+  } catch (err) {
+    console.warn('[ClassService] Erro ao listar alunos disponíveis:', err);
+    return [];
+  }
+}
+
+/**
+ * O professor admite diretamente um aluno na turma a partir do seu objeto de perfil (UserProfile)
+ */
+export async function admitStudentByProfile(params: {
   classItem: ClassItem;
-  studentEmail: string;
+  student: UserProfile;
   teacher: UserProfile;
 }): Promise<void> {
-  const cleanEmail = params.studentEmail.trim().toLowerCase();
-
-  // 1. Localiza o aluno pelo e-mail
-  const usersRef = collection(db, 'users');
-  const q = query(usersRef, where('email', '==', cleanEmail));
-  const snap = await getDocs(q);
-
-  if (snap.empty) {
-    throw new Error(`Nenhum aluno cadastrado no SQLEditor com o e-mail "${cleanEmail}". Peça ao aluno para criar a conta primeiro.`);
-  }
-
-  const studentDoc = snap.docs[0];
-  const student = studentDoc.data() as UserProfile;
-
+  const { student } = params;
   const memberDocId = `${params.classItem.id}_${student.uid}`;
   const now = new Date().toISOString();
 
@@ -216,7 +233,7 @@ export async function admitStudentByEmail(params: {
     classCode: params.classItem.code,
     className: params.classItem.name,
     studentUid: student.uid,
-    studentName: student.displayName,
+    studentName: student.displayName || student.email || 'Aluno',
     studentEmail: student.email,
     studentRegistration: student.registrationNumber || '',
     status: 'approved',
@@ -224,10 +241,10 @@ export async function admitStudentByEmail(params: {
     approvedAt: now,
   };
 
-  // 2. Grava membro aprovado
+  // 1. Grava membro aprovado
   await setDoc(doc(db, 'class_members', memberDocId), memberPayload);
 
-  // 3. Atualiza o perfil do aluno
+  // 2. Atualiza o perfil do aluno
   await updateDoc(doc(db, 'users', student.uid), {
     classId: params.classItem.id,
     className: params.classItem.name,
@@ -237,21 +254,49 @@ export async function admitStudentByEmail(params: {
     updatedAt: now,
   });
 
-  // 4. Incrementa contador da turma
+  // 3. Incrementa contador da turma
   await updateDoc(doc(db, 'classes', params.classItem.id), {
     studentCount: increment(1),
   });
 
-  // 5. Auditoria
+  // 4. Auditoria
   await logSystemEvent({
     type: 'CLASS_STUDENT_APPROVED',
     authorUid: params.teacher.uid,
     authorName: params.teacher.displayName,
     authorEmail: params.teacher.email,
     targetUid: student.uid,
-    targetName: student.displayName,
+    targetName: student.displayName || student.email,
     targetEmail: student.email,
-    details: `Professor(a) ${params.teacher.displayName} admitiu diretamente o aluno ${student.displayName} na turma "${params.classItem.name}".`,
+    details: `Professor(a) ${params.teacher.displayName} inseriu diretamente o aluno ${student.displayName || student.email} na turma "${params.classItem.name}".`,
+  });
+}
+
+/**
+ * O professor admite diretamente um aluno na turma pelo endereço de e-mail
+ */
+export async function admitStudentByEmail(params: {
+  classItem: ClassItem;
+  studentEmail: string;
+  teacher: UserProfile;
+}): Promise<void> {
+  const cleanEmail = params.studentEmail.trim().toLowerCase();
+
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('email', '==', cleanEmail));
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    throw new Error(`Nenhum aluno cadastrado no SQLEditor com o e-mail "${cleanEmail}". Peça ao aluno para criar a conta primeiro.`);
+  }
+
+  const studentDoc = snap.docs[0];
+  const student = { uid: studentDoc.id, ...(studentDoc.data() as Omit<UserProfile, 'uid'>) } as UserProfile;
+
+  await admitStudentByProfile({
+    classItem: params.classItem,
+    student,
+    teacher: params.teacher,
   });
 }
 

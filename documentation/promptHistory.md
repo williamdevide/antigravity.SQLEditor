@@ -4116,6 +4116,20 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 7. **Regras de Segurança do Firestore (`firestore.rules`):**
    - Atualizadas via subagente `firestore-rules-author` para suportar visibilidade, notas, gabarito, `solution` e as novas coleções `class_presence`, `class_messages`, `exam_alerts` e `student_live_state`.
 
+### Prompt 33
+```text
+/agente-orquestrador /grill-me /goal quero outro recurso para os professores: lá em minhas turmas alem de ver os matriculados, solicitações pendentes, admitir por email, quero uma quarta opção (disponiveis), que mostra todos os alunos que estão cadastrados na plataforma mas que não estão em nenhuma turma, e apartir dali posso inseri-los direto na turma que estiver sendo editada
+```
+
+### Decisões Técnicas (Grill-Me) e Implementações:
+1. **Busca de Alunos Sem Turma (`frontend/src/services/classService.ts`):**
+   - Criada `getAvailableStudents()` consultando alunos (`role === 'aluno'`) na coleção `users` e filtrando em memória os que não possuem vínculo em nenhuma turma (`!classId || classStatus === 'none'`, excluindo rejeitados), ordenados alfabeticamente.
+   - Refatorada e extraída `admitStudentByProfile()` para evitar duplicação com `admitStudentByEmail()`, gravando vínculo aprovado em `class_members`, atualizando o perfil do aluno, incrementando `studentCount` da turma e registrando log de auditoria.
+2. **4ª Aba "Disponíveis" em Minhas Turmas (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Adicionada a aba **`Disponíveis ({availableStudents.length})`** com busca instantânea por nome, e-mail, matrícula ou curso.
+   - Suporte a **inserção individual** (botão "Inserir" em cada aluno) e **inserção em lote via checkboxes** (selecionar individualmente ou "selecionar todos filtrados" + botão **"Inserir Selecionados (N)"**), sincronizando automaticamente as abas e contadores após cada operação.
+
+
 
 
 

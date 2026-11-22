@@ -10,6 +10,8 @@ import {
   approveStudentRequest,
   removeStudentFromClass,
   admitStudentByEmail,
+  admitStudentByProfile,
+  getAvailableStudents,
   updateClassMode,
   updateAllTeacherClassesMode,
   updateClassSettings,
@@ -38,6 +40,7 @@ import type {
   ClassroomMode,
   SavedScriptItem,
   SavedScriptCategory,
+  UserProfile,
   UserRole,
   ClassPresenceItem,
   ClassMessageItem,
@@ -90,10 +93,18 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
   // Feedback e Toasts
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [activeStudentTab, setActiveStudentTab] = useState<'members' | 'pending' | 'admit'>('members');
+  const [activeStudentTab, setActiveStudentTab] = useState<'members' | 'pending' | 'admit' | 'available'>('members');
   const [activeResourcePanel, setActiveResourcePanel] = useState<
     'materials' | 'submissions' | 'chat' | 'alerts' | null
   >(null);
+
+  // Alunos Disponíveis (sem turma)
+  const [availableStudents, setAvailableStudents] = useState<UserProfile[]>([]);
+  const [isLoadingAvailable, setIsLoadingAvailable] = useState(false);
+  const [availableSearch, setAvailableSearch] = useState('');
+  const [selectedAvailableUids, setSelectedAvailableUids] = useState<string[]>([]);
+  const [isAdmittingAvailable, setIsAdmittingAvailable] = useState(false);
+  const [admittingSingleUid, setAdmittingSingleUid] = useState<string | null>(null);
 
   // Materiais e Scripts Pedagógicos
   const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
@@ -211,9 +222,24 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
     }
   }, []);
 
+  // Carrega alunos disponíveis na plataforma (sem turma)
+  const loadAvailableStudents = useCallback(async () => {
+    try {
+      setIsLoadingAvailable(true);
+      const list = await getAvailableStudents();
+      setAvailableStudents(list);
+      setSelectedAvailableUids((prev) => prev.filter((uid) => list.some((s) => s.uid === uid)));
+    } catch (err) {
+      console.error('[TeacherPanel] Erro ao carregar alunos disponíveis:', err);
+    } finally {
+      setIsLoadingAvailable(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadTeacherClasses();
-  }, [loadTeacherClasses]);
+    loadAvailableStudents();
+  }, [loadTeacherClasses, loadAvailableStudents]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -417,6 +443,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
       });
       showFeedback('success', `Aluno "${member.studentName}" removido.`);
       loadClassMembers(selectedClass.id);
+      loadAvailableStudents();
     } catch (err: any) {
       showFeedback('error', 'Erro ao remover aluno.');
     }
@@ -436,11 +463,62 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
       showFeedback('success', `Aluno com e-mail "${admitEmail.trim()}" matriculado com sucesso!`);
       setAdmitEmail('');
       loadClassMembers(selectedClass.id);
+      loadAvailableStudents();
       setActiveStudentTab('members');
     } catch (err: any) {
       showFeedback('error', err?.message || 'Falha ao admitir aluno.');
     } finally {
       setIsAdmittingEmail(false);
+    }
+  };
+
+  // Inserir aluno disponível individualmente na turma atual
+  const handleAdmitSingleAvailable = async (student: UserProfile) => {
+    if (!selectedClass || !userProfile) return;
+    try {
+      setAdmittingSingleUid(student.uid);
+      await admitStudentByProfile({
+        classItem: selectedClass,
+        student,
+        teacher: userProfile,
+      });
+      showFeedback('success', `Aluno "${student.displayName || student.email}" inserido na turma!`);
+      setSelectedAvailableUids((prev) => prev.filter((id) => id !== student.uid));
+      await Promise.all([loadClassMembers(selectedClass.id), loadAvailableStudents()]);
+    } catch (err: any) {
+      showFeedback('error', err?.message || 'Erro ao inserir aluno na turma.');
+    } finally {
+      setAdmittingSingleUid(null);
+    }
+  };
+
+  // Inserir múltiplos alunos disponíveis selecionados via checkbox na turma atual
+  const handleAdmitSelectedAvailable = async () => {
+    if (!selectedClass || !userProfile || selectedAvailableUids.length === 0) return;
+    const targets = availableStudents.filter((s) => selectedAvailableUids.includes(s.uid));
+    if (targets.length === 0) return;
+
+    try {
+      setIsAdmittingAvailable(true);
+      let addedCount = 0;
+      for (const student of targets) {
+        await admitStudentByProfile({
+          classItem: selectedClass,
+          student,
+          teacher: userProfile,
+        });
+        addedCount++;
+      }
+      setSelectedAvailableUids([]);
+      showFeedback(
+        'success',
+        `${addedCount} ${addedCount === 1 ? 'aluno inserido' : 'alunos inseridos'} com sucesso na turma "${selectedClass.name}"!`
+      );
+      await Promise.all([loadClassMembers(selectedClass.id), loadAvailableStudents()]);
+    } catch (err: any) {
+      showFeedback('error', err?.message || 'Erro ao inserir alunos selecionados.');
+    } finally {
+      setIsAdmittingAvailable(false);
     }
   };
 
@@ -762,6 +840,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
 
   const approvedMembers = members.filter((m) => m.status === 'approved');
   const pendingMembers = members.filter((m) => m.status === 'pending');
+
+  // Filtro da aba Disponíveis (alunos sem turma)
+  const filteredAvailableStudents = availableStudents.filter((st) => {
+    const term = availableSearch.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      (st.displayName || '').toLowerCase().includes(term) ||
+      (st.email || '').toLowerCase().includes(term) ||
+      (st.registrationNumber || '').toLowerCase().includes(term) ||
+      (st.course || '').toLowerCase().includes(term)
+    );
+  });
+
+  const allFilteredAvailableSelected =
+    filteredAvailableStudents.length > 0 &&
+    filteredAvailableStudents.every((s) => selectedAvailableUids.includes(s.uid));
 
   const currentMode = selectedClass?.classroomMode || 'normal';
   const chatEnabled = selectedClass?.chatEnabled !== false;
@@ -1723,6 +1817,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                     <span className="material-symbols-outlined text-[16px]">person_add</span>
                     <span>Admitir por E-mail</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveStudentTab('available');
+                      loadAvailableStudents();
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeStudentTab === 'available'
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'text-[var(--text-secondary)] hover:text-emerald-400 hover:bg-[var(--bg-hover)]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">how_to_reg</span>
+                    <span>Disponíveis ({availableStudents.length})</span>
+                  </button>
                 </div>
 
               {/* 1. ABA DE MATRICULADOS */}
@@ -1936,6 +2046,182 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({ onBackToWork
                       </button>
                     </form>
                   </div>
+                </div>
+              )}
+
+              {/* 4. ABA DE ALUNOS DISPONÍVEIS (SEM TURMA) */}
+              {activeStudentTab === 'available' && (
+                <div className="space-y-3">
+                  {/* Barra de Busca + Ação em Lote */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="relative flex-1 min-w-[220px]">
+                      <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        value={availableSearch}
+                        onChange={(e) => setAvailableSearch(e.target.value)}
+                        placeholder="Buscar por nome, e-mail, matrícula ou curso..."
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={loadAvailableStudents}
+                        disabled={isLoadingAvailable}
+                        title="Atualizar lista de alunos disponíveis"
+                        className="p-2 rounded-xl bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-colors"
+                      >
+                        <span
+                          className={`material-symbols-outlined text-[16px] ${
+                            isLoadingAvailable ? 'animate-spin' : ''
+                          }`}
+                        >
+                          refresh
+                        </span>
+                      </button>
+
+                      {selectedAvailableUids.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={isAdmittingAvailable}
+                          onClick={handleAdmitSelectedAvailable}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">group_add</span>
+                          <span>
+                            {isAdmittingAvailable
+                              ? 'Inserindo...'
+                              : `Inserir Selecionados (${selectedAvailableUids.length})`}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isLoadingAvailable ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                      <span className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin inline-block" />
+                      <p>Buscando alunos disponíveis sem turma...</p>
+                    </div>
+                  ) : filteredAvailableStudents.length === 0 ? (
+                    <div className="p-8 text-center bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                      <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
+                        {availableStudents.length === 0 ? 'done_all' : 'person_off'}
+                      </span>
+                      <p className="text-xs text-[var(--text-secondary)] font-medium">
+                        {availableStudents.length === 0
+                          ? 'Todos os alunos cadastrados na plataforma já estão vinculados a uma turma!'
+                          : 'Nenhum aluno encontrado para o filtro digitado.'}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        {availableStudents.length === 0
+                          ? 'Assim que novos alunos se cadastrarem ou saírem de turmas, aparecerão automaticamente aqui.'
+                          : 'Tente limpar a busca para visualizar todos os alunos disponíveis.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[var(--bg-primary)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
+                          <tr>
+                            <th className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={allFilteredAvailableSelected}
+                                onChange={() => {
+                                  if (allFilteredAvailableSelected) {
+                                    const filteredSet = new Set(
+                                      filteredAvailableStudents.map((s) => s.uid)
+                                    );
+                                    setSelectedAvailableUids((prev) =>
+                                      prev.filter((id) => !filteredSet.has(id))
+                                    );
+                                  } else {
+                                    const merged = new Set([
+                                      ...selectedAvailableUids,
+                                      ...filteredAvailableStudents.map((s) => s.uid),
+                                    ]);
+                                    setSelectedAvailableUids(Array.from(merged));
+                                  }
+                                }}
+                                title="Selecionar todos da lista"
+                                className="rounded accent-emerald-500 cursor-pointer"
+                              />
+                            </th>
+                            <th className="px-4 py-3">Aluno</th>
+                            <th className="px-4 py-3">E-mail</th>
+                            <th className="px-4 py-3">Matrícula</th>
+                            <th className="px-4 py-3">Curso</th>
+                            <th className="px-4 py-3 text-right">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-color)]">
+                          {filteredAvailableStudents.map((student) => {
+                            const isChecked = selectedAvailableUids.includes(student.uid);
+                            const isBusy =
+                              admittingSingleUid === student.uid ||
+                              (isAdmittingAvailable && isChecked);
+                            return (
+                              <tr
+                                key={student.uid}
+                                className={`hover:bg-[var(--bg-hover)] transition-colors ${
+                                  isChecked ? 'bg-emerald-500/5' : ''
+                                }`}
+                              >
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setSelectedAvailableUids((prev) =>
+                                        prev.includes(student.uid)
+                                          ? prev.filter((id) => id !== student.uid)
+                                          : [...prev, student.uid]
+                                      );
+                                    }}
+                                    className="rounded accent-emerald-500 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">
+                                  {student.displayName || 'Sem nome'}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[var(--text-secondary)]">
+                                  {student.email}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-[var(--text-muted)]">
+                                  {student.registrationNumber || '---'}
+                                </td>
+                                <td className="px-4 py-3 text-[var(--text-muted)] truncate max-w-[180px]">
+                                  {student.course || '---'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    type="button"
+                                    disabled={isBusy || isAdmittingAvailable}
+                                    onClick={() => handleAdmitSingleAvailable(student)}
+                                    className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/35 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      person_add
+                                    </span>
+                                    <span>
+                                      {admittingSingleUid === student.uid
+                                        ? 'Inserindo...'
+                                        : 'Inserir'}
+                                    </span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
