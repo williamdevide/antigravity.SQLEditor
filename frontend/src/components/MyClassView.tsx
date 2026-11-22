@@ -245,22 +245,106 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
     };
   }, [effectiveClassIdsKey]);
 
-  // Alunos listados na barra esquerda ordenados alfabeticamente
+  // Verifica se uma mensagem conta como não lida para o usuário atual (espelha o sininho da header)
+  const isMessageRelevantUnread = (m: ClassMessageItem, cls: ClassItem): boolean => {
+    if (!user) return false;
+    if (m.senderUid === user.uid) return false;
+    if ((m.readBy || []).includes(user.uid)) return false;
+
+    if (!isTeacherOrAdmin && isExamMode) {
+      return m.senderUid === cls.teacherId && m.recipientUid === user.uid;
+    }
+    if (isTeacherOrAdmin) {
+      return (
+        m.recipientUid === 'all' ||
+        m.recipientUid === user.uid ||
+        (isAdmin && Boolean(cls.teacherId) && m.recipientUid === cls.teacherId)
+      );
+    }
+    return m.recipientUid === 'all' || m.recipientUid === user.uid;
+  };
+
+  // Alunos listados na barra esquerda (alunos com mensagens não lidas sobem para o topo; depois ordem alfabética)
   const listedStudents = useMemo(() => {
-    const list: Array<ClassMemberItem & { displayName: string }> = [];
+    const list: Array<ClassMemberItem & { displayName: string; unreadCount: number; isExternalSender?: boolean }> = [];
+    const seenMemberKeys = new Set<string>();
+
+    const countDirectUnreadFrom = (senderUid: string, cls: ClassItem): number => {
+      if (!user) return 0;
+      const msgs = messagesByClass[cls.id] || [];
+      return msgs.filter(
+        (m) =>
+          isMessageRelevantUnread(m, cls) &&
+          m.senderUid === senderUid &&
+          m.recipientUid !== 'all'
+      ).length;
+    };
+
     visibleScopeClasses.forEach((cls) => {
       const clsMembers = membersByClass[cls.id] || [];
       clsMembers.forEach((m) => {
         if (!isTeacherOrAdmin && m.studentUid === user?.uid) return;
+        const memberKey = `${cls.id}:${m.studentUid}`;
+        seenMemberKeys.add(memberKey);
         list.push({
           ...m,
           className: m.className || cls.name,
           displayName: formatStudentDisplayName(m.studentName, m.studentEmail),
+          unreadCount: countDirectUnreadFrom(m.studentUid, cls),
         });
       });
+
+      // Garante card visível caso exista DM não lida (ou conversa selecionada) de remetente fora da lista atual de membros
+      if (isTeacherOrAdmin && user) {
+        const msgs = messagesByClass[cls.id] || [];
+        msgs.forEach((m) => {
+          if (m.senderUid === user.uid || m.recipientUid === 'all') return;
+          const isDirectToTeacher =
+            m.recipientUid === user.uid ||
+            (isAdmin && Boolean(cls.teacherId) && m.recipientUid === cls.teacherId);
+          if (!isDirectToTeacher) return;
+
+          const isSelectedFallback =
+            selectedTarget.uid === m.senderUid &&
+            (!selectedTarget.classId || selectedTarget.classId === cls.id);
+          if (!isMessageRelevantUnread(m, cls) && !isSelectedFallback) return;
+
+          const memberKey = `${cls.id}:${m.senderUid}`;
+          if (seenMemberKeys.has(memberKey)) return;
+          seenMemberKeys.add(memberKey);
+          list.push({
+            id: `fallback-${cls.id}-${m.senderUid}`,
+            classId: cls.id,
+            classCode: cls.code,
+            className: cls.name,
+            studentUid: m.senderUid,
+            studentName: m.senderName || 'Remetente',
+            studentEmail: '',
+            status: 'approved',
+            requestedAt: m.createdAt || '',
+            displayName: formatStudentDisplayName(m.senderName || 'Remetente', ''),
+            unreadCount: countDirectUnreadFrom(m.senderUid, cls),
+            isExternalSender: true,
+          });
+        });
+      }
     });
-    return list.sort((a, b) => compareNamesPtBr(a.displayName, b.displayName));
-  }, [visibleScopeClasses, membersByClass, isTeacherOrAdmin, user?.uid]);
+
+    return list.sort((a, b) => {
+      if (b.unreadCount !== a.unreadCount) return b.unreadCount - a.unreadCount;
+      return compareNamesPtBr(a.displayName, b.displayName);
+    });
+  }, [
+    visibleScopeClasses,
+    membersByClass,
+    messagesByClass,
+    isTeacherOrAdmin,
+    isExamMode,
+    isAdmin,
+    user?.uid,
+    selectedTarget.uid,
+    selectedTarget.classId,
+  ]);
 
   const getPresenceForUser = (cId: string, uid: string): ClassPresenceItem | undefined => {
     const list = presenceByClass[cId] || [];
@@ -299,7 +383,8 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
         const isDirectPair =
           (m.senderUid === user.uid && m.recipientUid === selectedTarget.uid) ||
           (m.senderUid === selectedTarget.uid &&
-            (m.recipientUid === user.uid || (isAdmin && m.recipientUid === cls.teacherId)));
+            (m.recipientUid === user.uid || (isAdmin && m.recipientUid === cls.teacherId))) ||
+          (isAdmin && m.senderUid === cls.teacherId && m.recipientUid === selectedTarget.uid);
         if (isDirectPair) {
           collected.push({ ...m, classNameLabel: cls.name });
         }
@@ -340,10 +425,7 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
     visibleScopeClasses.forEach((cls) => {
       const msgs = messagesByClass[cls.id] || [];
       total += msgs.filter(
-        (m) =>
-          m.senderUid !== user.uid &&
-          !(m.readBy || []).includes(user.uid) &&
-          m.recipientUid === 'all'
+        (m) => isMessageRelevantUnread(m, cls) && m.recipientUid === 'all'
       ).length;
     });
     return total;
@@ -359,12 +441,51 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
       const msgs = messagesByClass[cls.id] || [];
       total += msgs.filter(
         (m) =>
-          !(m.readBy || []).includes(user.uid) &&
+          isMessageRelevantUnread(m, cls) &&
           m.senderUid === targetUid &&
-          (m.recipientUid === user.uid || (isAdmin && m.recipientUid === cls.teacherId))
+          m.recipientUid !== 'all'
       ).length;
     });
     return total;
+  };
+
+  const countUnreadForClass = (cls: ClassItem): number => {
+    const msgs = messagesByClass[cls.id] || [];
+    return msgs.filter((m) => isMessageRelevantUnread(m, cls)).length;
+  };
+
+  const totalUnreadAllClasses = useMemo(() => {
+    if (!user) return 0;
+    return effectiveClasses.reduce((sum, cls) => sum + countUnreadForClass(cls), 0);
+  }, [effectiveClasses, messagesByClass, user, isTeacherOrAdmin, isExamMode, isAdmin]);
+
+  const unreadIdsInScope = useMemo(() => {
+    if (!user) return [] as string[];
+    const ids: string[] = [];
+    visibleScopeClasses.forEach((cls) => {
+      const msgs = messagesByClass[cls.id] || [];
+      msgs.forEach((m) => {
+        if (isMessageRelevantUnread(m, cls)) {
+          ids.push(m.id);
+        }
+      });
+    });
+    return ids;
+  }, [visibleScopeClasses, messagesByClass, user, isTeacherOrAdmin, isExamMode, isAdmin]);
+
+  const renderUnreadBellBadge = (count: number) => {
+    if (count <= 0) return null;
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-black shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.55)]"
+        title={`${count} ${count === 1 ? 'mensagem não lida' : 'mensagens não lidas'}`}
+      >
+        <span className="material-symbols-outlined text-[12px] animate-pulse">
+          notifications_active
+        </span>
+        <span>{count}</span>
+      </span>
+    );
   };
 
   const canSendToSelectedTarget = useMemo(() => {
@@ -633,12 +754,16 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
             >
               <option value="all">
                 🌐 Todas as Turmas ({sortedTeacherClasses.length})
+                {totalUnreadAllClasses > 0 ? ` • 🔔 ${totalUnreadAllClasses}` : ''}
               </option>
-              {sortedTeacherClasses.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  🏫 {cls.name} [{cls.code}]
-                </option>
-              ))}
+              {sortedTeacherClasses.map((cls) => {
+                const clsUnread = countUnreadForClass(cls);
+                return (
+                  <option key={cls.id} value={cls.id}>
+                    🏫 {cls.name} [{cls.code}]{clsUnread > 0 ? ` • 🔔 ${clsUnread}` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
         ) : (
@@ -780,98 +905,104 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
 
             <div className="p-2 space-y-1">
               {/* Canal Geral */}
-              <button
-                type="button"
-                disabled={isExamMode}
-                onClick={() => setSelectedTarget({ uid: 'all' })}
-                className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
-                  selectedTarget.uid === 'all' && !isExamMode
-                    ? 'bg-[#FF6B00]/15 border border-[#FF6B00]/40 text-[var(--text-primary)]'
-                    : 'hover:bg-[var(--bg-hover)] border border-transparent text-[var(--text-secondary)]'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-[#FF6B00]/20 text-[#FF6B00] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[18px]">
-                      {isExamMode ? 'lock' : 'groups'}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold truncate">
-                      {isTeacherOrAdmin && selectedClassFilter === 'all'
-                        ? 'Chat Geral (Todas)'
-                        : 'Chat Geral da Turma'}
-                    </p>
-                    <p className="text-[10px] text-[var(--text-muted)] truncate">
-                      {isExamMode
-                        ? 'Bloqueado no Modo Avaliação'
-                        : `${listedStudents.length + (isTeacherOrAdmin ? 0 : 1)} participantes`}
-                    </p>
-                  </div>
-                </div>
-                {!isExamMode && countUnreadGeneral() > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-black">
-                    {countUnreadGeneral()}
-                  </span>
-                )}
-              </button>
-
-              {/* Professor da Turma (exibido para o aluno) */}
-              {!isTeacherOrAdmin && classItem && (
-                <>
-                  <div className="pt-2 pb-1 px-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                      Docente Responsável
-                    </p>
-                  </div>
+              {(() => {
+                const generalUnread = !isExamMode ? countUnreadGeneral() : 0;
+                const isGeneralSelected = selectedTarget.uid === 'all' && !isExamMode;
+                return (
                   <button
                     type="button"
-                    onClick={() => setSelectedTarget({ uid: classItem.teacherId, classId: classItem.id })}
-                    className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer ${
-                      selectedTarget.uid === classItem.teacherId
-                        ? 'bg-[#0288D1]/15 border border-[#0288D1]/40 text-[var(--text-primary)]'
+                    disabled={isExamMode}
+                    onClick={() => setSelectedTarget({ uid: 'all' })}
+                    className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                      isGeneralSelected
+                        ? 'bg-[#FF6B00]/15 border border-[#FF6B00]/40 text-[var(--text-primary)]'
+                        : generalUnread > 0
+                        ? 'bg-emerald-500/10 border border-emerald-500/45 text-[var(--text-primary)] hover:bg-emerald-500/15'
                         : 'hover:bg-[var(--bg-hover)] border border-transparent text-[var(--text-secondary)]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="relative shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0288D1] to-[#29B6F6] text-white text-xs font-black flex items-center justify-center overflow-hidden">
-                          {teacherPresence?.photoURL ? (
-                            <img
-                              src={teacherPresence.photoURL}
-                              alt={classItem.teacherName}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            (classItem.teacherName || 'P')[0].toUpperCase()
-                          )}
-                        </div>
-                        <span
-                          className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[var(--bg-surface)] ${
-                            teacherPresence?.isOnline
-                              ? 'bg-emerald-500 shadow-[0_0_6px_#10B981]'
-                              : 'bg-zinc-500'
-                          }`}
-                          title={teacherPresence?.isOnline ? 'Online agora' : 'Offline'}
-                        />
+                      <div className="w-8 h-8 rounded-full bg-[#FF6B00]/20 text-[#FF6B00] flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[18px]">
+                          {isExamMode ? 'lock' : 'groups'}
+                        </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-bold truncate flex items-center gap-1">
-                          <span className="truncate">{classItem.teacherName}</span>
+                        <p className="text-xs font-bold truncate">
+                          {isTeacherOrAdmin && selectedClassFilter === 'all'
+                            ? 'Chat Geral (Todas)'
+                            : 'Chat Geral da Turma'}
                         </p>
-                        <p className="text-[10px] text-[#29B6F6] font-semibold">
-                          Professor {teacherPresence?.isOnline ? '• Online' : '• Offline'}
+                        <p className="text-[10px] text-[var(--text-muted)] truncate">
+                          {isExamMode
+                            ? 'Bloqueado no Modo Avaliação'
+                            : `${listedStudents.length + (isTeacherOrAdmin ? 0 : 1)} participantes`}
                         </p>
                       </div>
                     </div>
-                    {countUnreadFrom(classItem.teacherId, classItem.id) > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-black">
-                        {countUnreadFrom(classItem.teacherId, classItem.id)}
-                      </span>
-                    )}
+                    {!isExamMode && renderUnreadBellBadge(generalUnread)}
                   </button>
-                </>
-              )}
+                );
+              })()}
+
+              {/* Professor da Turma (exibido para o aluno) */}
+              {!isTeacherOrAdmin && classItem && (() => {
+                const teacherUnread = countUnreadFrom(classItem.teacherId, classItem.id);
+                const isTeacherSelected = selectedTarget.uid === classItem.teacherId;
+                return (
+                  <>
+                    <div className="pt-2 pb-1 px-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                        Docente Responsável
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTarget({ uid: classItem.teacherId, classId: classItem.id })}
+                      className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer ${
+                        isTeacherSelected
+                          ? 'bg-[#0288D1]/15 border border-[#0288D1]/40 text-[var(--text-primary)]'
+                          : teacherUnread > 0
+                          ? 'bg-emerald-500/10 border border-emerald-500/45 text-[var(--text-primary)] hover:bg-emerald-500/15'
+                          : 'hover:bg-[var(--bg-hover)] border border-transparent text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0288D1] to-[#29B6F6] text-white text-xs font-black flex items-center justify-center overflow-hidden">
+                            {teacherPresence?.photoURL ? (
+                              <img
+                                src={teacherPresence.photoURL}
+                                alt={classItem.teacherName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              (classItem.teacherName || 'P')[0].toUpperCase()
+                            )}
+                          </div>
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[var(--bg-surface)] ${
+                              teacherPresence?.isOnline
+                                ? 'bg-emerald-500 shadow-[0_0_6px_#10B981]'
+                                : 'bg-zinc-500'
+                            }`}
+                            title={teacherPresence?.isOnline ? 'Online agora' : 'Offline'}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate flex items-center gap-1">
+                            <span className="truncate">{classItem.teacherName}</span>
+                          </p>
+                          <p className="text-[10px] text-[#29B6F6] font-semibold">
+                            Professor {teacherPresence?.isOnline ? '• Online' : '• Offline'}
+                          </p>
+                        </div>
+                      </div>
+                      {renderUnreadBellBadge(teacherUnread)}
+                    </button>
+                  </>
+                );
+              })()}
 
               {/* Colegas de Turma / Alunos */}
               <div className="pt-3 pb-1 px-2 flex items-center justify-between">
@@ -895,7 +1026,7 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
               ) : (
                 listedStudents.map((mate) => {
                   const pres = getPresenceForUser(mate.classId, mate.studentUid);
-                  const unread = countUnreadFrom(mate.studentUid, mate.classId);
+                  const unread = mate.unreadCount;
                   const isSelected =
                     selectedTarget.uid === mate.studentUid &&
                     (!selectedTarget.classId || selectedTarget.classId === mate.classId);
@@ -910,9 +1041,11 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
                         setSelectedTarget({ uid: mate.studentUid, classId: mate.classId });
                         setComposeClassId(mate.classId);
                       }}
-                      className={`w-full p-2 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                      className={`w-full p-2 rounded-xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
                         isSelected && !isExamMode
                           ? 'bg-[#FF6B00]/15 border border-[#FF6B00]/40 text-[var(--text-primary)]'
+                          : !isExamMode && unread > 0
+                          ? 'bg-emerald-500/10 border border-emerald-500/45 text-[var(--text-primary)] hover:bg-emerald-500/15'
                           : 'hover:bg-[var(--bg-hover)] border border-transparent text-[var(--text-secondary)]'
                       }`}
                     >
@@ -943,7 +1076,13 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
                             {mate.displayName}
                           </p>
                           <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
-                            <span>{pres?.isOnline ? '🟢 Online' : 'Offline'}</span>
+                            <span>
+                              {mate.isExternalSender
+                                ? 'Remetente anterior'
+                                : pres?.isOnline
+                                ? '🟢 Online'
+                                : 'Offline'}
+                            </span>
                             {isTeacherOrAdmin && selectedClassFilter === 'all' && mateClassName && (
                               <span className="px-1.5 py-0.2 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[9px] font-semibold truncate max-w-[100px]">
                                 {mateClassName}
@@ -952,11 +1091,7 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
                           </div>
                         </div>
                       </div>
-                      {!isExamMode && unread > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-black shrink-0">
-                          {unread}
-                        </span>
-                      )}
+                      {!isExamMode && renderUnreadBellBadge(unread)}
                     </button>
                   );
                 })
@@ -996,11 +1131,25 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
                 </div>
               </div>
 
-              {!isTeacherOrAdmin && !chatEnabled && (
-                <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[11px] font-bold">
-                  🔇 Chat desativado pelo professor
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {isTeacherOrAdmin && user && unreadIdsInScope.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => markClassMessagesAsRead(unreadIdsInScope, user.uid)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Marcar todas as mensagens visíveis deste filtro como lidas"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">done_all</span>
+                    <span>Marcar todas como lidas ({unreadIdsInScope.length})</span>
+                  </button>
+                )}
+
+                {!isTeacherOrAdmin && !chatEnabled && (
+                  <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[11px] font-bold">
+                    🔇 Chat desativado pelo professor
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Lista de Mensagens */}

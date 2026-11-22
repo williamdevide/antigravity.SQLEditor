@@ -1500,6 +1500,18 @@ export const App: React.FC = () => {
     const isTeacherOrAdmin = Boolean(
       isAdmin || userProfile?.role === 'professor' || userProfile?.role === 'admin'
     );
+
+    // Mapeia o professor responsável de cada turma para não contar DMs privados entre alunos
+    const teacherIdByClassId = new Map<string, string>();
+    teacherClasses.forEach((cls) => {
+      if (cls.id && cls.teacherId) {
+        teacherIdByClassId.set(cls.id, cls.teacherId);
+      }
+    });
+    if (activeClassItem?.id && activeClassItem.teacherId) {
+      teacherIdByClassId.set(activeClassItem.id, activeClassItem.teacherId);
+    }
+
     return classMessages.filter((m) => {
       if (m.senderUid === user.uid) return false;
       if ((m.readBy || []).includes(user.uid)) return false;
@@ -1507,11 +1519,25 @@ export const App: React.FC = () => {
         return m.senderUid === activeClassItem.teacherId && m.recipientUid === user.uid;
       }
       if (isTeacherOrAdmin) {
-        return m.recipientUid === 'all' || m.recipientUid === user.uid || isAdmin;
+        const classTeacherId = teacherIdByClassId.get(m.classId);
+        return (
+          m.recipientUid === 'all' ||
+          m.recipientUid === user.uid ||
+          (isAdmin && Boolean(classTeacherId) && m.recipientUid === classTeacherId)
+        );
       }
       return m.recipientUid === 'all' || m.recipientUid === user.uid;
     }).length;
-  }, [user, userProfile?.role, isAdmin, classMessages, isExamModeActive, activeClassItem?.teacherId]);
+  }, [
+    user,
+    userProfile?.role,
+    isAdmin,
+    classMessages,
+    isExamModeActive,
+    activeClassItem?.id,
+    activeClassItem?.teacherId,
+    teacherClasses,
+  ]);
 
   // 2.3 Sistema Anti-Trapaça durante Modo Avaliação (Aluno)
   const handleAntiCheatAlert = useCallback(

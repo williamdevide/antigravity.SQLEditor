@@ -4237,3 +4237,17 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Card fixo **`Geral (Modo Normal)`** no topo da coluna esquerda exclusivo para `isAdmin`, abrindo visão limpa focada apenas nos materiais globais (sem abas de alunos, modos ou entregas).
    - Helper compartilhado `renderMaterialsSection` com checkboxes individuais, **"Selecionar todos"** e botão **"Excluir Selecionados (N)"**.
    - Botão e modal **"Copiar do Modo Normal"** dentro das turmas com busca, filtro por categoria, selo `"Já na turma"` e cópia individual independente.
+
+---
+
+### Prompt 39
+> /agente-orquestrador /grill-me /goal no chat do professor esta aparecendo o sino verde sobre a foto do perfil, mas não há nenhum card de aluno com sino indicando haver mensagem
+
+**Ações Executadas:**
+1. **Sincronização do Sininho Verde na Header (`frontend/src/App.tsx`):**
+   - Corrigida a lógica de `unreadClassMessagesCount` para professores/administradores: removido o `|| isAdmin` irrestrito que fazia mensagens privadas entre alunos (`aluno A -> aluno B`) acenderem um sino verde fantasma na foto de perfil do professor/admin. Agora apenas mensagens direcionadas à turma (`recipientUid === 'all'`), ao próprio usuário (`user.uid`) ou (para admin) ao `teacherId` da respectiva turma contabilizam no sininho.
+2. **Sino Verde nos Cards de Alunos, Seletor de Turmas e Marcação Rápida (`frontend/src/components/MyClassView.tsx`):**
+   - Criado helper único `isMessageRelevantUnread` garantindo paridade de 100% com o contador da barra superior.
+   - Alunos com mensagens não lidas agora sobem automaticamente para o topo da lista, recebem destaque visual verde e exibem o badge com sino animado (`notifications_active`) + quantidade de mensagens não lidas (incluindo fallback caso um remetente com DM não lida não esteja mais listado entre os membros ativos).
+   - Seletor de turmas do professor exibe `• 🔔 N` por turma quando há mensagens pendentes e barra superior do chat oferece ação **"Marcar todas como lidas"** quando existem notificações no escopo.
+
