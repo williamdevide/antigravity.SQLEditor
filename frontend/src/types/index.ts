@@ -338,6 +338,9 @@ export interface ClassMessageItem {
   scriptContent?: string;
   createdAt: string;
   readBy: string[];
+  archived?: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 }
 
 export type ExamAlertType =

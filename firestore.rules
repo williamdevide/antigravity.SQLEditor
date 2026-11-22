@@ -133,6 +133,9 @@ rules_version = '2';
 //   - scriptContent: string (opcional, tamanho até 1000000) - Conteúdo SQL do script compartilhado
 //   - createdAt: string (tamanho até 50) ou timestamp (opcional) - Data de envio (imutável)
 //   - readBy: list (opcional, máx 1000 elementos) - Lista de UIDs que visualizaram a mensagem
+//   - archived: bool (opcional) - Indica se a mensagem foi arquivada pelo professor/admin
+//   - archivedAt: string (tamanho até 50) ou timestamp (opcional/null) - Data do arquivamento
+//   - archivedBy: string (tamanho até 128, opcional/null) - UID de quem arquivou
 //
 // 8. Coleção: exam_alerts/{alertId} (Alertas de Monitoramento em Modo Avaliação)
 // Document ID: ID único gerado automaticamente pelo Firestore
@@ -400,7 +403,10 @@ service cloud.firestore {
         (!('scriptTitle' in data) || data.scriptTitle == null || (data.scriptTitle is string && data.scriptTitle.size() <= 250)) &&
         (!('scriptContent' in data) || data.scriptContent == null || (data.scriptContent is string && data.scriptContent.size() <= 1000000)) &&
         (!('createdAt' in data) || data.createdAt == null || (data.createdAt is string && data.createdAt.size() <= 50) || data.createdAt is timestamp) &&
-        (!('readBy' in data) || data.readBy == null || (data.readBy is list && data.readBy.size() <= 1000));
+        (!('readBy' in data) || data.readBy == null || (data.readBy is list && data.readBy.size() <= 1000)) &&
+        (!('archived' in data) || data.archived == null || data.archived is bool) &&
+        (!('archivedAt' in data) || data.archivedAt == null || (data.archivedAt is string && data.archivedAt.size() <= 50) || data.archivedAt is timestamp) &&
+        (!('archivedBy' in data) || data.archivedBy == null || (data.archivedBy is string && data.archivedBy.size() <= 128));
     }
 
     // Validador de esquema e limites para a coleção 'exam_alerts'
@@ -701,21 +707,47 @@ service cloud.firestore {
       allow get, list: if isAuthenticated();
 
       // Criação: o próprio remetente autenticado ou Administrador
+      // Remetentes não docentes/não administradores não podem pré-arquivar mensagens ou forjar metadados de arquivamento na criação
       allow create: if isAuthenticated() &&
                        isValidClassMessage(request.resource.data) &&
-                       (request.resource.data.senderUid == request.auth.uid || isAdmin());
+                       (request.resource.data.senderUid == request.auth.uid || isAdmin()) &&
+                       (
+                         (
+                           (!('archived' in request.resource.data) || request.resource.data.archived == null || request.resource.data.archived == false) &&
+                           (!('archivedAt' in request.resource.data) || request.resource.data.archivedAt == null) &&
+                           (!('archivedBy' in request.resource.data) || request.resource.data.archivedBy == null)
+                         ) ||
+                         isAdmin() ||
+                         isClassTeacher(request.resource.data.classId)
+                       );
 
-      // Atualização: Administrador, professor da turma, remetente original (sem alterar remetente/turma/data)
-      // ou confirmação de leitura (readBy) pelo destinatário ou em mensagens coletivas ('all')
+      // Atualização:
+      // - Administrador (acesso total, sujeito ao validador de esquema)
+      // - Professor da turma (pode arquivar/desarquivar e editar mantendo senderUid, classId e createdAt imutáveis, sem forjar archivedBy de terceiros)
+      // - Remetente original (mantendo senderUid, classId e createdAt imutáveis, proibido de alterar archived/archivedAt/archivedBy)
+      // - Confirmação de leitura (readBy) pelo destinatário ou em mensagens coletivas ('all')
       allow update: if isAuthenticated() &&
                        isValidClassMessage(request.resource.data) &&
                        (
                          isAdmin() ||
                          (
-                           (isClassTeacher(resource.data.classId) || resource.data.senderUid == request.auth.uid) &&
+                           isClassTeacher(resource.data.classId) &&
                            request.resource.data.senderUid == resource.data.senderUid &&
                            request.resource.data.classId == resource.data.classId &&
-                           (!('createdAt' in resource.data) || resource.data.createdAt == null || request.resource.data.createdAt == resource.data.createdAt)
+                           (!('createdAt' in resource.data) || resource.data.createdAt == null || request.resource.data.createdAt == resource.data.createdAt) &&
+                           (
+                             !request.resource.data.diff(resource.data).affectedKeys().hasAny(['archivedBy']) ||
+                             !('archivedBy' in request.resource.data) ||
+                             request.resource.data.archivedBy == null ||
+                             request.resource.data.archivedBy == request.auth.uid
+                           )
+                         ) ||
+                         (
+                           resource.data.senderUid == request.auth.uid &&
+                           request.resource.data.senderUid == resource.data.senderUid &&
+                           request.resource.data.classId == resource.data.classId &&
+                           (!('createdAt' in resource.data) || resource.data.createdAt == null || request.resource.data.createdAt == resource.data.createdAt) &&
+                           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['archived', 'archivedAt', 'archivedBy'])
                          ) ||
                          (
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&

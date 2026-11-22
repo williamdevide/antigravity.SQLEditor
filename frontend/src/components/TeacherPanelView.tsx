@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   createClass,
@@ -34,6 +34,10 @@ import {
   subscribeToClassPresence,
   subscribeToClassMessages,
   sendClassMessage,
+  deleteClassMessage,
+  deleteClassMessagesBatch,
+  archiveClassMessagesBatch,
+  formatClassMessagesToMarkdown,
   subscribeToClassExamAlerts,
   acknowledgeExamAlert,
   subscribeToClassLiveStates,
@@ -179,10 +183,12 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     email: string;
   } | null>(null);
 
-  // Envio de mensagem pelo professor no painel Chat & Auditoria
+  // Envio e gestão de mensagens pelo professor no painel Chat Geral
   const [teacherChatTarget, setTeacherChatTarget] = useState<string>('all');
   const [teacherChatText, setTeacherChatText] = useState('');
   const [isSendingTeacherChat, setIsSendingTeacherChat] = useState(false);
+  const [chatArchiveTab, setChatArchiveTab] = useState<'active' | 'archived'>('active');
+  const [isProcessingChatAction, setIsProcessingChatAction] = useState(false);
 
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -693,6 +699,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
 
   // Subscriptions em tempo real quando uma turma é selecionada
   useEffect(() => {
+    setChatArchiveTab('active');
     if (!selectedClass?.id) {
       setPresenceList([]);
       setClassMessages([]);
@@ -701,7 +708,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       return;
     }
     const unsubPresence = subscribeToClassPresence(selectedClass.id, setPresenceList);
-    const unsubMsgs = subscribeToClassMessages(selectedClass.id, setClassMessages);
+    const unsubMsgs = subscribeToClassMessages(selectedClass.id, setClassMessages, {
+      includeArchived: true,
+    });
     const unsubAlerts = subscribeToClassExamAlerts(selectedClass.id, setExamAlerts);
     const unsubLive = subscribeToClassLiveStates(selectedClass.id, setLiveStates);
 
@@ -933,6 +942,97 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     } finally {
       setIsSendingTeacherChat(false);
     }
+  };
+
+  const handleDeleteSingleMessage = async (msg: ClassMessageItem) => {
+    if (!user || isProcessingChatAction) return;
+    if (
+      !window.confirm(
+        `Excluir permanentemente a mensagem de "${msg.senderName}"? Esta ação não pode ser desfeita.`
+      )
+    ) {
+      return;
+    }
+    try {
+      setIsProcessingChatAction(true);
+      await deleteClassMessage(msg.id);
+      showFeedback('success', 'Mensagem excluída com sucesso.');
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao excluir mensagem: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsProcessingChatAction(false);
+    }
+  };
+
+  const handleToggleArchiveMessages = async (
+    ids: string[],
+    shouldArchive: boolean,
+    confirmMessage?: string
+  ) => {
+    if (!user || isProcessingChatAction || ids.length === 0) return;
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    try {
+      setIsProcessingChatAction(true);
+      const count = await archiveClassMessagesBatch(ids, user.uid, shouldArchive);
+      showFeedback(
+        'success',
+        shouldArchive
+          ? `${count} ${count === 1 ? 'mensagem arquivada' : 'mensagens arquivadas'} com sucesso!`
+          : `${count} ${count === 1 ? 'mensagem restaurada' : 'mensagens restauradas'} para o chat ativo!`
+      );
+    } catch (err: any) {
+      showFeedback(
+        'error',
+        `Erro ao ${shouldArchive ? 'arquivar' : 'restaurar'} mensagens: ` + (err?.message || 'Erro')
+      );
+    } finally {
+      setIsProcessingChatAction(false);
+    }
+  };
+
+  const handleDeleteAllMessagesInTab = async (msgs: ClassMessageItem[], tabLabel: string) => {
+    if (!user || isProcessingChatAction || msgs.length === 0) return;
+    if (
+      !window.confirm(
+        `Deseja excluir PERMANENTEMENTE todas as ${msgs.length} mensagens ${tabLabel} desta turma? Esta ação não pode ser desfeita.`
+      )
+    ) {
+      return;
+    }
+    try {
+      setIsProcessingChatAction(true);
+      const count = await deleteClassMessagesBatch(msgs.map((m) => m.id));
+      showFeedback(
+        'success',
+        `${count} ${count === 1 ? 'mensagem excluída' : 'mensagens excluídas'} permanentemente.`
+      );
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao excluir mensagens: ' + (err?.message || 'Erro'));
+    } finally {
+      setIsProcessingChatAction(false);
+    }
+  };
+
+  const handleExportChatMarkdown = (msgs: ClassMessageItem[], tabLabel: string) => {
+    if (!selectedClass || msgs.length === 0) return;
+    const md = formatClassMessagesToMarkdown(
+      selectedClass.name,
+      selectedClass.code,
+      msgs,
+      tabLabel
+    );
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const safeCode = (selectedClass.code || 'turma').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const slugTab = tabLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat_${safeCode}_${slugTab}_${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showFeedback('success', `Histórico (${tabLabel}) baixado em Markdown (.md)!`);
   };
 
   const handleQuickSaveGradeFromMonitor = async (params: {
@@ -1216,6 +1316,16 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const chatEnabled = selectedClass?.chatEnabled !== false;
   const scriptSharingEnabled = selectedClass?.scriptSharingEnabled !== false;
   const unackAlerts = examAlerts.filter((a) => !a.acknowledged);
+  const activeClassMessages = useMemo(
+    () => classMessages.filter((m) => !m.archived),
+    [classMessages]
+  );
+  const archivedClassMessages = useMemo(
+    () => classMessages.filter((m) => Boolean(m.archived)),
+    [classMessages]
+  );
+  const displayedChatMessages =
+    chatArchiveTab === 'active' ? activeClassMessages : archivedClassMessages;
   const classDbMaterials = materials.filter(
     (m) =>
       m.category === 'class_database' &&
@@ -2088,7 +2198,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                         <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                           activeResourcePanel === 'chat' ? 'bg-white/20 text-white' : 'bg-sky-500/15 text-sky-400'
                         }`}>
-                          {classMessages.length}
+                          {activeClassMessages.length}
                         </span>
                       </button>
 
@@ -2211,26 +2321,125 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 {/* PAINEL EXPANSÍVEL: AUDITORIA DE CHAT & MENSAGENS DA TURMA */}
                 {activeResourcePanel === 'chat' && (
                   <div className="pt-3 border-t border-[var(--border-color)] space-y-3 animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-[#29B6F6] flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
-                        <span>Todas as Mensagens &amp; Scripts Trafegados na Turma (Visão Completa do Professor)</span>
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-bold text-[#29B6F6] flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                          <span>Mensagens &amp; Scripts da Turma</span>
+                        </p>
+
+                        <div className="flex items-center gap-1 bg-[var(--bg-surface)] p-0.5 rounded-lg border border-[var(--border-color)]">
+                          <button
+                            type="button"
+                            onClick={() => setChatArchiveTab('active')}
+                            className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                              chatArchiveTab === 'active'
+                                ? 'bg-[#0288D1] text-white shadow-sm'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            Ativas ({activeClassMessages.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChatArchiveTab('archived')}
+                            className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                              chatArchiveTab === 'archived'
+                                ? 'bg-amber-500 text-black shadow-sm'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            Arquivadas ({archivedClassMessages.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={displayedChatMessages.length === 0 || isProcessingChatAction}
+                          onClick={() =>
+                            handleExportChatMarkdown(
+                              displayedChatMessages,
+                              chatArchiveTab === 'active' ? 'Ativas' : 'Arquivadas'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Baixar histórico destas mensagens em Markdown (.md)"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">download</span>
+                          <span>Baixar (.md)</span>
+                        </button>
+
+                        {chatArchiveTab === 'active' ? (
+                          <button
+                            type="button"
+                            disabled={activeClassMessages.length === 0 || isProcessingChatAction}
+                            onClick={() =>
+                              handleToggleArchiveMessages(
+                                activeClassMessages.map((m) => m.id),
+                                true,
+                                `Arquivar todas as ${activeClassMessages.length} mensagens ativas desta turma? Elas ficarão ocultas no chat dos alunos e acessíveis na aba "Arquivadas".`
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Arquivar todas as mensagens ativas da turma"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">archive</span>
+                            <span>Arquivar Todas</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={archivedClassMessages.length === 0 || isProcessingChatAction}
+                            onClick={() =>
+                              handleToggleArchiveMessages(
+                                archivedClassMessages.map((m) => m.id),
+                                false,
+                                `Restaurar todas as ${archivedClassMessages.length} mensagens arquivadas para o chat ativo da turma?`
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Restaurar todas as mensagens arquivadas para o chat ativo"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">unarchive</span>
+                            <span>Restaurar Todas</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={displayedChatMessages.length === 0 || isProcessingChatAction}
+                          onClick={() =>
+                            handleDeleteAllMessagesInTab(
+                              displayedChatMessages,
+                              chatArchiveTab === 'active' ? 'ativas' : 'arquivadas'
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-400 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Excluir permanentemente todas as mensagens desta aba"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                          <span>Excluir Todas</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="max-h-72 overflow-y-auto space-y-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-3">
-                      {classMessages.length === 0 ? (
+                      {displayedChatMessages.length === 0 ? (
                         <p className="text-center text-xs text-[var(--text-muted)] py-6">
-                          Nenhuma mensagem registrada nesta turma ainda.
+                          {chatArchiveTab === 'active'
+                            ? 'Nenhuma mensagem ativa registrada nesta turma.'
+                            : 'Nenhuma mensagem arquivada nesta turma.'}
                         </p>
                       ) : (
-                        classMessages.map((msg) => (
+                        displayedChatMessages.map((msg) => (
                           <div
                             key={msg.id}
                             className="p-2.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-1 text-xs"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="font-bold text-[#FF6B00]">{msg.senderName}</span>
                                 <span className="text-[var(--text-muted)]">➔</span>
                                 <span className="font-bold text-[#29B6F6]">
@@ -2241,10 +2450,38 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                                     📄 Script: {msg.scriptTitle}
                                   </span>
                                 )}
+                                {msg.archived && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold">
+                                    Arquivada
+                                  </span>
+                                )}
                               </div>
-                              <span className="font-mono text-[var(--text-muted)]">
-                                {new Date(msg.createdAt).toLocaleString('pt-BR')}
-                              </span>
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[var(--text-muted)]">
+                                  {new Date(msg.createdAt).toLocaleString('pt-BR')}
+                                </span>
+                                {msg.archived && (
+                                  <button
+                                    type="button"
+                                    disabled={isProcessingChatAction}
+                                    onClick={() => handleToggleArchiveMessages([msg.id], false)}
+                                    className="p-1 rounded-md text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer disabled:opacity-40"
+                                    title="Restaurar mensagem para o chat ativo"
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">unarchive</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={isProcessingChatAction}
+                                  onClick={() => handleDeleteSingleMessage(msg)}
+                                  className="p-1 rounded-md text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Excluir esta mensagem"
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">delete</span>
+                                </button>
+                              </div>
                             </div>
                             <p className="text-[var(--text-primary)] whitespace-pre-wrap">{msg.text}</p>
                             {msg.type === 'script' && msg.scriptContent && (
@@ -2257,34 +2494,36 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                       )}
                     </div>
 
-                    <form onSubmit={handleSendTeacherChat} className="flex flex-wrap items-center gap-2">
-                      <select
-                        value={teacherChatTarget}
-                        onChange={(e) => setTeacherChatTarget(e.target.value)}
-                        className="px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
-                      >
-                        <option value="all">🌐 Para Toda a Turma</option>
-                        {approvedMembers.map((m) => (
-                          <option key={m.studentUid} value={m.studentUid}>
-                            👤 Privado: {m.studentName}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={teacherChatText}
-                        onChange={(e) => setTeacherChatText(e.target.value)}
-                        placeholder="Enviar aviso ou resposta como professor..."
-                        className="flex-1 min-w-[200px] px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isSendingTeacherChat || !teacherChatText.trim()}
-                        className="px-4 py-2 rounded-xl bg-[#0288D1] hover:bg-[#0277BD] text-white font-bold text-xs cursor-pointer disabled:opacity-50"
-                      >
-                        Enviar
-                      </button>
-                    </form>
+                    {chatArchiveTab === 'active' && (
+                      <form onSubmit={handleSendTeacherChat} className="flex flex-wrap items-center gap-2">
+                        <select
+                          value={teacherChatTarget}
+                          onChange={(e) => setTeacherChatTarget(e.target.value)}
+                          className="px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
+                        >
+                          <option value="all">🌐 Para Toda a Turma</option>
+                          {approvedMembers.map((m) => (
+                            <option key={m.studentUid} value={m.studentUid}>
+                              👤 Privado: {m.studentName}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={teacherChatText}
+                          onChange={(e) => setTeacherChatText(e.target.value)}
+                          placeholder="Enviar aviso ou resposta como professor..."
+                          className="flex-1 min-w-[200px] px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)]"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSendingTeacherChat || !teacherChatText.trim()}
+                          className="px-4 py-2 rounded-xl bg-[#0288D1] hover:bg-[#0277BD] text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+                        >
+                          Enviar
+                        </button>
+                      </form>
+                    )}
                   </div>
                 )}
 

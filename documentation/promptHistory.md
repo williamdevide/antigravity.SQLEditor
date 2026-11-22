@@ -4251,3 +4251,19 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Alunos com mensagens não lidas agora sobem automaticamente para o topo da lista, recebem destaque visual verde e exibem o badge com sino animado (`notifications_active`) + quantidade de mensagens não lidas (incluindo fallback caso um remetente com DM não lida não esteja mais listado entre os membros ativos).
    - Seletor de turmas do professor exibe `• 🔔 N` por turma quando há mensagens pendentes e barra superior do chat oferece ação **"Marcar todas como lidas"** quando existem notificações no escopo.
 
+---
+
+### Prompt 40
+> /agente-orquestrador /grill-me /goal agora o professor precisa lá no botão de chat geral em minhas turmas de um botão por mensagem para poder excluir, e de um botão arquivar e um excluir todas as mensagens
+
+**Ações Executadas:**
+1. **Regras de Segurança do Firestore (`firestore.rules` via `@firestore-rules-author`):**
+   - Adicionado suporte aos campos opcionais `archived`, `archivedAt` e `archivedBy` em `class_messages/{messageId}` (`isValidClassMessage`), permitindo arquivamento/restauração exclusivamente pelo professor da turma ou Administrador, mantendo exclusão individual/em lote para docente/admin.
+2. **Serviço de Mensagens em Tempo Real (`frontend/src/types/index.ts`, `frontend/src/services/classroomRealtimeService.ts`):**
+   - Atualizada a interface `ClassMessageItem` com `archived`, `archivedAt` e `archivedBy`.
+   - `subscribeToClassMessages` agora oculta mensagens arquivadas por padrão (`!options?.includeArchived`), preservando o fluxo limpo no chat ativo e na contagem do sininho verde, e expõe `{ includeArchived: true }` para auditoria do professor.
+   - Adicionadas funções `deleteClassMessage`, `deleteClassMessagesBatch`, `archiveClassMessagesBatch` e `formatClassMessagesToMarkdown`.
+3. **Gestão de Mensagens no Chat Geral (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Adicionadas abas **Ativas** e **Arquivadas** no painel `Chat Geral` em **Minhas Turmas**.
+   - Incluído botão individual para excluir (e restaurar quando arquivada) em cada mensagem, além dos botões globais **Baixar (.md)**, **Arquivar Todas / Restaurar Todas** e **Excluir Todas**.
+

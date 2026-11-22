@@ -4,11 +4,14 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   onSnapshot,
   query,
   where,
   arrayUnion,
   serverTimestamp,
+  type WriteBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { formatStudentDisplayName } from '../utils/studentNameFormatter';
@@ -197,19 +200,23 @@ export async function sendClassMessage(params: {
  */
 export function subscribeToClassMessages(
   classId: string,
-  callback: (messages: ClassMessageItem[]) => void
+  callback: (messages: ClassMessageItem[]) => void,
+  options?: { includeArchived?: boolean }
 ): () => void {
   if (!classId) {
     callback([]);
     return () => {};
   }
+  const includeArchived = Boolean(options?.includeArchived);
   const q = query(collection(db, 'class_messages'), where('classId', '==', classId));
   return onSnapshot(
     q,
     (snap) => {
       const msgs: ClassMessageItem[] = [];
       snap.forEach((d) => {
-        msgs.push({ id: d.id, ...(d.data() as Omit<ClassMessageItem, 'id'>) });
+        const item = { id: d.id, ...(d.data() as Omit<ClassMessageItem, 'id'>) };
+        if (!includeArchived && item.archived) return;
+        msgs.push(item);
       });
       msgs.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
       callback(msgs);
@@ -218,6 +225,117 @@ export function subscribeToClassMessages(
       console.warn('[ClassroomRealtime] Erro ao escutar mensagens da turma:', err);
     }
   );
+}
+
+const MESSAGE_BATCH_CHUNK_SIZE = 450;
+
+/**
+ * Executa operações em lote (writeBatch) em blocos compatíveis com o limite de 500 ops do Firestore
+ */
+async function executeClassMessageBatch(
+  messageIds: string[],
+  applyOp: (batch: WriteBatch, ref: ReturnType<typeof doc>) => void
+): Promise<number> {
+  const uniqueIds = Array.from(new Set(messageIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return 0;
+
+  for (let i = 0; i < uniqueIds.length; i += MESSAGE_BATCH_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + MESSAGE_BATCH_CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((id) => {
+      applyOp(batch, doc(db, 'class_messages', id));
+    });
+    await batch.commit();
+  }
+  return uniqueIds.length;
+}
+
+/**
+ * Exclui permanentemente uma única mensagem do chat da turma
+ */
+export async function deleteClassMessage(messageId: string): Promise<void> {
+  if (!messageId) return;
+  await deleteDoc(doc(db, 'class_messages', messageId));
+}
+
+/**
+ * Exclui permanentemente várias mensagens do chat em lote
+ */
+export async function deleteClassMessagesBatch(messageIds: string[]): Promise<number> {
+  return executeClassMessageBatch(messageIds, (batch, ref) => {
+    batch.delete(ref);
+  });
+}
+
+/**
+ * Arquiva ou restaura várias mensagens do chat (soft-archive para histórico do professor)
+ */
+export async function archiveClassMessagesBatch(
+  messageIds: string[],
+  archivedByUid: string,
+  archived = true
+): Promise<number> {
+  const nowIso = new Date().toISOString();
+  return executeClassMessageBatch(messageIds, (batch, ref) => {
+    if (archived) {
+      batch.update(ref, {
+        archived: true,
+        archivedAt: nowIso,
+        archivedBy: archivedByUid || null,
+      });
+    } else {
+      batch.update(ref, {
+        archived: false,
+        archivedAt: null,
+        archivedBy: null,
+      });
+    }
+  });
+}
+
+/**
+ * Formata uma lista de mensagens da turma em documento Markdown para download/arquivo local
+ */
+export function formatClassMessagesToMarkdown(
+  className: string,
+  classCode: string,
+  messages: ClassMessageItem[],
+  label: string
+): string {
+  const exportedAt = new Date().toLocaleString('pt-BR');
+  const lines: string[] = [
+    `# Histórico de Chat — ${className}${classCode ? ` [${classCode}]` : ''}`,
+    ``,
+    `- **Escopo:** ${label}`,
+    `- **Exportado em:** ${exportedAt}`,
+    `- **Total de mensagens:** ${messages.length}`,
+    ``,
+    `---`,
+    ``,
+  ];
+
+  messages.forEach((msg, index) => {
+    const dateLabel = msg.createdAt ? new Date(msg.createdAt).toLocaleString('pt-BR') : 'Sem data';
+    const recipient = msg.recipientUid === 'all' ? 'Toda a Turma' : msg.recipientName || 'Privado';
+    const statusTag = msg.archived ? ' [Arquivada]' : '';
+    lines.push(`### ${index + 1}. ${msg.senderName} → ${recipient} (${dateLabel})${statusTag}`);
+    if (msg.text) {
+      lines.push(``);
+      lines.push(msg.text);
+    }
+    if (msg.type === 'script' && (msg.scriptTitle || msg.scriptContent)) {
+      lines.push(``);
+      if (msg.scriptTitle) lines.push(`**Script compartilhado:** \`${msg.scriptTitle}\``);
+      if (msg.scriptContent) {
+        lines.push('```sql');
+        lines.push(msg.scriptContent);
+        lines.push('```');
+      }
+    }
+    lines.push(``);
+  });
+
+  return lines.join('\n');
 }
 
 /**
