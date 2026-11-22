@@ -617,20 +617,35 @@ service cloud.firestore {
     // Coleção: savedScripts/{scriptId} (Scripts Salvos, BDs de Aula e Avaliações)
     // ===============================================================
     match /savedScripts/{scriptId} {
-      // Leitura: qualquer usuário autenticado (carregamento no editor, galeria, perfil e avaliações)
-      allow get, list: if isAuthenticated();
+      // Leitura: usuário autenticado (acesso completo às consultas) ou visitante não autenticado
+      // exclusivamente para itens do catálogo público do Modo Normal ('normal_global' em classIds)
+      allow get, list: if isAuthenticated() ||
+                          (
+                            resource.data.classIds is list &&
+                            'normal_global' in resource.data.classIds
+                          );
 
       // Criação: usuário autenticado criando seu próprio script, professor aprovado ou Administrador
+      // Somente Administradores podem incluir 'normal_global' em classIds (catálogo público)
       allow create: if isAuthenticated() &&
                        isValidSavedScript(request.resource.data) &&
-                       (request.resource.data.authorUid == request.auth.uid || isAdmin() || isTeacherApproved());
+                       (request.resource.data.authorUid == request.auth.uid || isAdmin() || isTeacherApproved()) &&
+                       (!('normal_global' in request.resource.data.classIds) || isAdmin());
 
       // Atualização: o próprio autor do script, o professor da turma (correção de entregas de avaliação) ou Administrador
       // authorUid e createdAt são estritamente imutáveis para integridade do registro
+      // Somente Administradores podem incluir, manter ou alterar scripts com 'normal_global' em classIds
       allow update: if isAuthenticated() &&
                        isValidSavedScript(request.resource.data) &&
                        request.resource.data.authorUid == resource.data.authorUid &&
                        request.resource.data.createdAt == resource.data.createdAt &&
+                       (
+                         (
+                           !('normal_global' in request.resource.data.classIds) &&
+                           !('classIds' in resource.data && resource.data.classIds is list && 'normal_global' in resource.data.classIds)
+                         ) ||
+                         isAdmin()
+                       ) &&
                        (
                          resource.data.authorUid == request.auth.uid ||
                          isAdmin() ||

@@ -21,8 +21,14 @@ import {
   getTeacherPublishedScripts,
   updateScript,
   deleteScript,
+  deleteScriptsBatch,
   getExamSubmissions,
   gradeExamSubmission,
+  NORMAL_GLOBAL_CLASS_ID,
+  getNormalGlobalScripts,
+  ensureNormalGlobalSeeded,
+  restoreMissingBuiltInNormalMaterials,
+  copyNormalMaterialsToClass,
 } from '../services/scriptService';
 import {
   subscribeToClassPresence,
@@ -125,6 +131,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const [materials, setMaterials] = useState<SavedScriptItem[]>([]);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [materialCategoryFilter, setMaterialCategoryFilter] = useState<string>('all');
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
+  const [isDeletingBatchMaterials, setIsDeletingBatchMaterials] = useState(false);
+
+  // Card Especial "Geral (Modo Normal)" exclusivo do Administrador
+  const [isNormalGlobalSelected, setIsNormalGlobalSelected] = useState(false);
+  const [normalGlobalMaterials, setNormalGlobalMaterials] = useState<SavedScriptItem[]>([]);
+  const [isLoadingNormalGlobal, setIsLoadingNormalGlobal] = useState(false);
+
+  // Modal "Copiar do Modo Normal" para dentro de uma Turma
+  const [isCopyNormalModalOpen, setIsCopyNormalModalOpen] = useState(false);
+  const [normalCatalogForCopy, setNormalCatalogForCopy] = useState<SavedScriptItem[]>([]);
+  const [isLoadingNormalCatalog, setIsLoadingNormalCatalog] = useState(false);
+  const [copyNormalCategoryFilter, setCopyNormalCategoryFilter] = useState<string>('all');
+  const [copyNormalSearch, setCopyNormalSearch] = useState('');
+  const [selectedCopyNormalIds, setSelectedCopyNormalIds] = useState<string[]>([]);
+  const [isCopyingNormalMaterials, setIsCopyingNormalMaterials] = useState(false);
 
   // Modal de Criação / Edição de Material
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
@@ -251,10 +273,38 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     }
   }, []);
 
+  // Carrega catálogo público "Geral (Modo Normal)" (e garante seed inicial para Administrador)
+  const loadNormalGlobalCatalog = useCallback(
+    async (seedIfNeeded = false) => {
+      try {
+        setIsLoadingNormalGlobal(true);
+        if (seedIfNeeded && isAdmin && user) {
+          const seeded = await ensureNormalGlobalSeeded({
+            uid: user.uid,
+            displayName: userProfile?.displayName || user.displayName || 'Administrador',
+            email: userProfile?.email || user.email || '',
+          });
+          setNormalGlobalMaterials(seeded);
+        } else {
+          const list = await getNormalGlobalScripts();
+          setNormalGlobalMaterials(list);
+        }
+      } catch (err) {
+        console.error('[TeacherPanel] Erro ao carregar Geral (Modo Normal):', err);
+      } finally {
+        setIsLoadingNormalGlobal(false);
+      }
+    },
+    [isAdmin, user, userProfile?.displayName, userProfile?.email]
+  );
+
   useEffect(() => {
     loadTeacherClasses();
     loadAvailableStudents();
-  }, [loadTeacherClasses, loadAvailableStudents]);
+    if (isAdmin) {
+      loadNormalGlobalCatalog(false);
+    }
+  }, [loadTeacherClasses, loadAvailableStudents, isAdmin, loadNormalGlobalCatalog]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -670,11 +720,19 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     setMatDesc('');
     setMatContent('-- Escreva aqui o script SQL do Banco de Dados, Exemplo ou Exercício...\n');
     setMatCategory('class_database');
-    setMatClassIds(selectedClass ? [selectedClass.id] : ['all']);
-    setMatAllClasses(false);
-    setMatVisibleNormal(false);
-    setMatVisibleClassroom(true);
-    setMatVisibleExam(false);
+    if (isAdmin && isNormalGlobalSelected) {
+      setMatClassIds([NORMAL_GLOBAL_CLASS_ID]);
+      setMatAllClasses(false);
+      setMatVisibleNormal(true);
+      setMatVisibleClassroom(false);
+      setMatVisibleExam(false);
+    } else {
+      setMatClassIds(selectedClass ? [selectedClass.id] : ['all']);
+      setMatAllClasses(false);
+      setMatVisibleNormal(false);
+      setMatVisibleClassroom(true);
+      setMatVisibleExam(false);
+    }
     setMatAnswerKeySql('');
     setModalError(null);
     setIsMaterialModalOpen(false);
@@ -683,6 +741,89 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const handleOpenNewMaterialModal = () => {
     resetMaterialModal();
     setIsMaterialModalOpen(true);
+  };
+
+  const handleSelectNormalGlobal = async () => {
+    setIsNormalGlobalSelected(true);
+    setSelectedMaterialIds([]);
+    setMaterialCategoryFilter('all');
+    await loadNormalGlobalCatalog(true);
+  };
+
+  const handleRestoreNormalBuiltIns = async () => {
+    if (!isAdmin || !user) return;
+    try {
+      setIsLoadingNormalGlobal(true);
+      const count = await restoreMissingBuiltInNormalMaterials({
+        uid: user.uid,
+        displayName: userProfile?.displayName || user.displayName || 'Administrador',
+        email: userProfile?.email || user.email || '',
+      });
+      await loadNormalGlobalCatalog(false);
+      showFeedback(
+        'success',
+        count > 0
+          ? `${count} material(is) padrão restaurado(s) em Geral (Modo Normal)!`
+          : 'Todos os materiais padrão originais já estão presentes.'
+      );
+    } catch (err: any) {
+      showFeedback('error', err?.message || 'Erro ao restaurar materiais padrão.');
+      setIsLoadingNormalGlobal(false);
+    }
+  };
+
+  const handleOpenCopyNormalModal = async () => {
+    setIsCopyNormalModalOpen(true);
+    setCopyNormalCategoryFilter('all');
+    setCopyNormalSearch('');
+    setSelectedCopyNormalIds([]);
+    setIsLoadingNormalCatalog(true);
+    try {
+      const list = await getNormalGlobalScripts();
+      setNormalCatalogForCopy(list);
+    } catch (err) {
+      console.error('[TeacherPanel] Erro ao abrir catálogo Normal:', err);
+      showFeedback('error', 'Erro ao carregar materiais do Modo Normal.');
+    } finally {
+      setIsLoadingNormalCatalog(false);
+    }
+  };
+
+  const handleCopyNormalSubmit = async () => {
+    if (!selectedClass || !user || selectedCopyNormalIds.length === 0) return;
+    const targets = normalCatalogForCopy.filter((m) => selectedCopyNormalIds.includes(m.id));
+    if (targets.length === 0) return;
+
+    try {
+      setIsCopyingNormalMaterials(true);
+      const authorRole: UserRole = userProfile?.role || (isAdmin ? 'admin' : 'professor');
+      const authorName = userProfile?.displayName || user.displayName || 'Professor';
+      const authorEmail = userProfile?.email || user.email || '';
+
+      await copyNormalMaterialsToClass({
+        materials: targets,
+        classId: selectedClass.id,
+        authorUid: user.uid,
+        authorName,
+        authorEmail,
+        authorRole,
+      });
+
+      setIsCopyNormalModalOpen(false);
+      setSelectedCopyNormalIds([]);
+      await loadClassMaterials();
+      showFeedback(
+        'success',
+        `${targets.length} ${
+          targets.length === 1 ? 'material copiado' : 'materiais copiados'
+        } para a turma "${selectedClass.name}"!`
+      );
+    } catch (err: any) {
+      console.error('[handleCopyNormalSubmit Error]', err);
+      showFeedback('error', err?.message || 'Erro ao copiar materiais para a turma.');
+    } finally {
+      setIsCopyingNormalMaterials(false);
+    }
   };
 
   const handleOpenEditMaterialModal = (item: SavedScriptItem) => {
@@ -880,27 +1021,43 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     try {
       setIsSavingMaterial(true);
       setModalError(null);
-      const cleanClassIds = matAllClasses
+
+      const isManagingNormalGlobal = Boolean(isAdmin && isNormalGlobalSelected);
+      const cleanClassIds = isManagingNormalGlobal
+        ? editingMaterial && !editingMaterial.id.startsWith('builtin-')
+          ? Array.from(new Set([...(editingMaterial.classIds || []), NORMAL_GLOBAL_CLASS_ID]))
+          : [NORMAL_GLOBAL_CLASS_ID]
+        : matAllClasses
         ? ['all']
         : matClassIds.length > 0
         ? matClassIds
-        : (selectedClass ? [selectedClass.id] : ['all']);
+        : selectedClass
+        ? [selectedClass.id]
+        : ['all'];
+
+      const effectiveCategory: SavedScriptCategory =
+        isManagingNormalGlobal && matCategory === 'exam' ? 'exercise' : matCategory;
+      const effectiveVisibleNormal = isManagingNormalGlobal ? true : matVisibleNormal;
+      const effectiveVisibleClassroom = isManagingNormalGlobal ? false : matVisibleClassroom;
+      const effectiveVisibleExam = isManagingNormalGlobal ? false : matVisibleExam;
 
       const authorRole: UserRole = userProfile?.role || (isAdmin ? 'admin' : 'professor');
       const authorName = userProfile?.displayName || user.displayName || 'Professor';
       const authorEmail = userProfile?.email || user.email || '';
 
-      if (editingMaterial) {
+      if (editingMaterial && !editingMaterial.id.startsWith('builtin-')) {
         await updateScript(editingMaterial.id, {
           title: matTitle.trim(),
           description: matDesc.trim(),
           content: matContent,
-          category: matCategory,
+          category: effectiveCategory,
           classIds: cleanClassIds,
-          visibleInNormal: matVisibleNormal,
-          visibleInClassroom: matVisibleClassroom,
-          visibleInExam: matVisibleExam,
-          ...(matCategory === 'exam' ? { answerKeySql: matAnswerKeySql } : {}),
+          visibleInNormal: effectiveVisibleNormal,
+          visibleInClassroom: effectiveVisibleClassroom,
+          visibleInExam: effectiveVisibleExam,
+          ...(!isManagingNormalGlobal && effectiveCategory === 'exam'
+            ? { answerKeySql: matAnswerKeySql }
+            : {}),
         });
         showFeedback('success', `Material "${matTitle.trim()}" atualizado com sucesso!`);
       } else {
@@ -912,19 +1069,29 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
           authorName,
           authorEmail,
           authorRole,
-          category: matCategory,
+          category: effectiveCategory,
           classIds: cleanClassIds,
-          visibleInNormal: matVisibleNormal,
-          visibleInClassroom: matVisibleClassroom,
-          visibleInExam: matVisibleExam,
-          answerKeySql: matCategory === 'exam' ? matAnswerKeySql : undefined,
+          visibleInNormal: effectiveVisibleNormal,
+          visibleInClassroom: effectiveVisibleClassroom,
+          visibleInExam: effectiveVisibleExam,
+          answerKeySql:
+            !isManagingNormalGlobal && effectiveCategory === 'exam' ? matAnswerKeySql : undefined,
         });
-        showFeedback('success', `Material "${matTitle.trim()}" publicado com sucesso para a turma!`);
+        showFeedback(
+          'success',
+          isManagingNormalGlobal
+            ? `Material "${matTitle.trim()}" publicado em Geral (Modo Normal)!`
+            : `Material "${matTitle.trim()}" publicado com sucesso para a turma!`
+        );
       }
 
       // Zera a janela e fecha o modal
       resetMaterialModal();
-      loadClassMaterials();
+      if (isManagingNormalGlobal) {
+        await loadNormalGlobalCatalog(false);
+      } else {
+        await loadClassMaterials();
+      }
     } catch (err: any) {
       console.error('[handleSaveMaterialSubmit Error]', err);
       const errMsg = 'Erro ao salvar material: ' + (err?.message || 'Erro inesperado');
@@ -938,11 +1105,57 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const handleDeleteMaterial = async (item: SavedScriptItem) => {
     if (!window.confirm(`Deseja excluir o material "${item.title}"?`)) return;
     try {
-      await deleteScript(item.id);
+      if (!item.id.startsWith('builtin-')) {
+        await deleteScript(item.id);
+      }
+      setSelectedMaterialIds((prev) => prev.filter((id) => id !== item.id));
       showFeedback('success', `Material "${item.title}" excluído.`);
-      loadClassMaterials();
+      if (isAdmin && isNormalGlobalSelected) {
+        await loadNormalGlobalCatalog(false);
+      } else {
+        await loadClassMaterials();
+      }
     } catch (err: any) {
       showFeedback('error', 'Erro ao excluir material.');
+    }
+  };
+
+  const handleDeleteSelectedMaterials = async (currentFiltered: SavedScriptItem[]) => {
+    const visibleSet = new Set(currentFiltered.map((m) => m.id));
+    const targetIds = selectedMaterialIds.filter((id) => visibleSet.has(id));
+    if (targetIds.length === 0) return;
+
+    if (
+      !window.confirm(
+        `Deseja excluir permanentemente ${targetIds.length} ${
+          targetIds.length === 1 ? 'material selecionado' : 'materiais selecionados'
+        }?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setIsDeletingBatchMaterials(true);
+      const deletableIds = targetIds.filter((id) => !id.startsWith('builtin-'));
+      await deleteScriptsBatch(deletableIds);
+      setSelectedMaterialIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+      showFeedback(
+        'success',
+        `${targetIds.length} ${
+          targetIds.length === 1 ? 'material excluído' : 'materiais excluídos'
+        } com sucesso!`
+      );
+      if (isAdmin && isNormalGlobalSelected) {
+        await loadNormalGlobalCatalog(false);
+      } else {
+        await loadClassMaterials();
+      }
+    } catch (err: any) {
+      console.error('[handleDeleteSelectedMaterials Error]', err);
+      showFeedback('error', err?.message || 'Erro ao excluir materiais selecionados.');
+    } finally {
+      setIsDeletingBatchMaterials(false);
     }
   };
 
@@ -953,6 +1166,15 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     const matchesClass = (m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id);
     return matchesClass;
   });
+
+  // Filtragem de materiais do card "Geral (Modo Normal)" (sem categoria 'exam')
+  const filteredNormalGlobalMaterials = normalGlobalMaterials
+    .filter((m) => {
+      if (m.category === 'exam') return false;
+      if (materialCategoryFilter !== 'all' && m.category !== materialCategoryFilter) return false;
+      return true;
+    })
+    .sort((a, b) => compareNamesPtBr(a.title, b.title));
 
   const getMemberDisplayName = (member: ClassMemberItem) =>
     formatStudentDisplayName(member.studentName, member.studentEmail);
@@ -1019,6 +1241,335 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  // Lista filtrada para o modal "Copiar do Modo Normal"
+  const existingMaterialTitleSet = new Set(
+    filteredMaterials.map((m) => m.title.trim().toLowerCase())
+  );
+
+  const filteredCopyNormalCatalog = normalCatalogForCopy
+    .filter((item) => {
+      if (item.category === 'exam') return false;
+      if (copyNormalCategoryFilter !== 'all' && item.category !== copyNormalCategoryFilter) {
+        return false;
+      }
+      const term = copyNormalSearch.trim().toLowerCase();
+      if (!term) return true;
+      return (
+        item.title.toLowerCase().includes(term) ||
+        (item.description || '').toLowerCase().includes(term)
+      );
+    })
+    .sort((a, b) => compareNamesPtBr(a.title, b.title));
+
+  // Helper reutilizável para renderizar a lista de materiais com seleção múltipla e exclusão em lote
+  const renderMaterialsSection = (params: {
+    items: SavedScriptItem[];
+    isLoading: boolean;
+    isNormalGlobalMode: boolean;
+  }) => {
+    const { items, isLoading, isNormalGlobalMode } = params;
+    const itemIdSet = new Set(items.map((m) => m.id));
+    const selectedVisibleIds = selectedMaterialIds.filter((id) => itemIdSet.has(id));
+    const allVisibleSelected = items.length > 0 && selectedVisibleIds.length === items.length;
+
+    const categoryOptions = isNormalGlobalMode
+      ? [
+          { id: 'all', label: 'Todos' },
+          { id: 'class_database', label: 'BDs Sala de Aula' },
+          { id: 'example', label: 'Exemplos' },
+          { id: 'exercise', label: 'Exercícios' },
+          { id: 'solution', label: 'Soluções' },
+        ]
+      : [
+          { id: 'all', label: 'Todos' },
+          { id: 'class_database', label: 'BDs Sala de Aula' },
+          { id: 'example', label: 'Exemplos' },
+          { id: 'exercise', label: 'Exercícios' },
+          { id: 'solution', label: 'Soluções' },
+          { id: 'exam', label: 'Avaliações' },
+        ];
+
+    const toggleSelectAllVisible = () => {
+      if (allVisibleSelected) {
+        setSelectedMaterialIds((prev) => prev.filter((id) => !itemIdSet.has(id)));
+      } else {
+        setSelectedMaterialIds((prev) => Array.from(new Set([...prev, ...items.map((m) => m.id)])));
+      }
+    };
+
+    const toggleSingleSelection = (id: string) => {
+      setSelectedMaterialIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      );
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+            {categoryOptions.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  setMaterialCategoryFilter(f.id);
+                  setSelectedMaterialIds([]);
+                }}
+                type="button"
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  materialCategoryFilter === f.id
+                    ? 'bg-[#FF6B00] text-black font-bold'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {isNormalGlobalMode ? (
+              <button
+                onClick={handleRestoreNormalBuiltIns}
+                type="button"
+                disabled={isLoading}
+                title="Restaurar BDs e soluções padrão caso algum tenha sido excluído"
+                className="px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">restore</span>
+                <span>Restaurar Padrões</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleOpenCopyNormalModal}
+                type="button"
+                className="px-3.5 py-1.5 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                title="Copiar BDs, Exemplos, Exercícios ou Soluções do Modo Normal para esta turma"
+              >
+                <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                <span>Copiar do Modo Normal</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleOpenNewMaterialModal}
+              type="button"
+              className="px-4 py-1.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8800] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow"
+            >
+              <span className="material-symbols-outlined text-[17px]">add_circle</span>
+              <span>+ Novo Material</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Barra de Seleção Múltipla & Exclusão em Lote */}
+        {!isLoading && items.length > 0 && (
+          <div className="px-3.5 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex flex-wrap items-center justify-between gap-2 text-xs">
+            <label className="inline-flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer select-none font-medium">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleSelectAllVisible}
+                className="rounded accent-[#FF6B00] cursor-pointer"
+              />
+              <span>Selecionar todos ({items.length})</span>
+            </label>
+
+            {selectedVisibleIds.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  {selectedVisibleIds.length} selecionado(s)
+                </span>
+                <button
+                  type="button"
+                  disabled={isDeletingBatchMaterials}
+                  onClick={() => handleDeleteSelectedMaterials(items)}
+                  className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
+                  <span>
+                    {isDeletingBatchMaterials
+                      ? 'Excluindo...'
+                      : `Excluir Selecionados (${selectedVisibleIds.length})`}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+            <span className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin inline-block" />
+            <p>Carregando materiais pedagógicos...</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
+            <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
+              post_add
+            </span>
+            <p className="text-xs text-[var(--text-secondary)] font-medium">
+              {isNormalGlobalMode
+                ? 'Nenhum material cadastrado em Geral (Modo Normal) nesta categoria.'
+                : 'Nenhum material publicado para esta turma nesta categoria.'}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              {isNormalGlobalMode
+                ? 'Clique em + Novo Material ou Restaurar Padrões para adicionar itens ao Modo Normal.'
+                : 'Clique em + Novo Material ou Copiar do Modo Normal para disponibilizar materiais.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map((mat) => {
+              const isAulaVisible = mat.visibleInClassroom !== false;
+              const isExamVisible = mat.visibleInExam ?? mat.category === 'exam';
+              const isChecked = selectedMaterialIds.includes(mat.id);
+
+              return (
+                <div
+                  key={mat.id}
+                  className={`p-2.5 px-3.5 rounded-xl border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                    isChecked
+                      ? 'bg-red-500/5 border-red-500/40'
+                      : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[#FF6B00]/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleSingleSelection(mat.id)}
+                      title="Selecionar material para exclusão em lote"
+                      className="rounded accent-[#FF6B00] cursor-pointer shrink-0"
+                    />
+
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)] shrink-0 flex items-center gap-1">
+                      {mat.category === 'class_database'
+                        ? '🗄️ BD Aula'
+                        : mat.category === 'example'
+                        ? '💡 Exemplo'
+                        : mat.category === 'exercise'
+                        ? '📝 Exercício'
+                        : mat.category === 'solution'
+                        ? '✅ Solução'
+                        : '🎯 Avaliação'}
+                    </span>
+
+                    {!isNormalGlobalMode && mat.visibleInNormal && (
+                      <span
+                        title="Também disponível no Modo Normal"
+                        className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 shrink-0"
+                      >
+                        Normal
+                      </span>
+                    )}
+
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <h4
+                        className="font-bold text-xs text-[var(--text-primary)] truncate"
+                        title={mat.title}
+                      >
+                        {mat.title}
+                      </h4>
+                      {mat.description && (
+                        <span
+                          className="text-[11px] text-[var(--text-secondary)] truncate hidden md:inline max-w-[280px]"
+                          title={mat.description}
+                        >
+                          — {mat.description}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="hidden sm:flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono shrink-0">
+                      <span>{mat.content.split('\n').length} linhas</span>
+                      {!isNormalGlobalMode && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {(mat.classIds || []).includes('all')
+                              ? '🌐 Todas'
+                              : `Turmas: ${(mat.classIds || []).length}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                    {!isNormalGlobalMode && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMaterialClassroomVisibility(mat)}
+                          title={
+                            isAulaVisible
+                              ? 'Modo Sala de Aula: VISÍVEL para os alunos (clique para ocultar)'
+                              : 'Modo Sala de Aula: INVISÍVEL para os alunos (clique para tornar visível)'
+                          }
+                          aria-label="Alternar visibilidade no Modo Sala de Aula"
+                          className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
+                            isAulaVisible
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            {isAulaVisible ? 'visibility' : 'visibility_off'}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMaterialExamVisibility(mat)}
+                          title={
+                            isExamVisible
+                              ? 'Modo Avaliação: VISÍVEL na prova (clique para ocultar)'
+                              : 'Modo Avaliação: INVISÍVEL na prova (clique para liberar na prova)'
+                          }
+                          aria-label="Alternar visibilidade no Modo Avaliação"
+                          className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
+                            isExamVisible
+                              ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500/30'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-300'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            {isExamVisible ? 'quiz' : 'visibility_off'}
+                          </span>
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => handleOpenEditMaterialModal(mat)}
+                      type="button"
+                      title="Editar Material"
+                      aria-label="Editar Material"
+                      className="p-1.5 px-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] hover:text-[#0288D1] hover:border-[#0288D1]/40 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">edit</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteMaterial(mat)}
+                      type="button"
+                      title="Excluir Material"
+                      aria-label="Excluir Material"
+                      className="p-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -1099,6 +1650,46 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
             </button>
           </div>
 
+          {/* Card Especial do Administrador: Geral (Modo Normal) */}
+          {isAdmin && (
+            <div
+              onClick={handleSelectNormalGlobal}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                isNormalGlobalSelected
+                  ? 'bg-sky-950/35 border-sky-400 shadow-lg shadow-sky-500/15'
+                  : 'bg-[var(--bg-surface)]/80 border-sky-500/30 hover:border-sky-400/70 hover:bg-[var(--bg-surface)]'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="material-symbols-outlined text-sky-400 text-[18px]">
+                      public
+                    </span>
+                    <h3 className="font-bold text-sm text-[var(--text-primary)] truncate">
+                      Geral (Modo Normal)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] truncate mt-1">
+                    BDs Aula, Soluções, Exemplos e Exercícios públicos
+                  </p>
+                </div>
+
+                <span className="px-2 py-0.5 rounded-lg bg-sky-500/15 border border-sky-500/35 text-[10px] font-bold text-sky-300 shrink-0">
+                  Sem Login / Normal
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] mt-3 pt-2.5 border-t border-[var(--border-color)]/50">
+                <span>Catálogo Global</span>
+                <span className="font-semibold text-sky-300">
+                  {normalGlobalMaterials.length}{' '}
+                  {normalGlobalMaterials.length === 1 ? 'material' : 'materiais'}
+                </span>
+              </div>
+            </div>
+          )}
+
           {isLoadingClasses ? (
             <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
               <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block" />
@@ -1123,12 +1714,16 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
           ) : (
             <div className="space-y-2.5">
               {sortedClasses.map((c) => {
-                const isSelected = selectedClass?.id === c.id;
+                const isSelected = !isNormalGlobalSelected && selectedClass?.id === c.id;
                 const cMode = c.classroomMode || 'normal';
                 return (
                   <div
                     key={c.id}
-                    onClick={() => setSelectedClass(c)}
+                    onClick={() => {
+                      setIsNormalGlobalSelected(false);
+                      setSelectedMaterialIds([]);
+                      setSelectedClass(c);
+                    }}
                     className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
                       isSelected
                         ? 'bg-[var(--bg-surface)] border-[#0288D1] shadow-lg shadow-[#0288D1]/10'
@@ -1174,9 +1769,38 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
           )}
         </div>
 
-        {/* Coluna Direita: Detalhes, Modos e Materiais da Turma Selecionada (Mais larga - 9 Colunas) */}
+        {/* Coluna Direita: Geral (Modo Normal) ou Detalhes, Modos e Materiais da Turma Selecionada */}
         <div className="lg:col-span-9">
-          {selectedClass ? (
+          {isAdmin && isNormalGlobalSelected ? (
+            <div className="bg-[var(--bg-surface)] border border-sky-500/40 rounded-3xl p-6 shadow-xl space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[var(--border-color)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-sky-500/15 border border-sky-500/40 text-sky-400 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">public</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                        Geral (Modo Normal)
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                        Público • Modo Normal e Sem Login
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                      Gestão centralizada dos BDs de Aula, Soluções, Exemplos e Exercícios exibidos globalmente no Modo Normal e para visitantes sem login.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {renderMaterialsSection({
+                items: filteredNormalGlobalMaterials,
+                isLoading: isLoadingNormalGlobal,
+                isNormalGlobalMode: true,
+              })}
+            </div>
+          ) : selectedClass ? (
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 shadow-xl space-y-6">
               {/* Header do Card da Turma Selecionada */}
               <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[var(--border-color)]">
@@ -1499,190 +2123,11 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 {/* PAINEL EXPANSÍVEL: MATERIAIS & BDS */}
                 {activeResourcePanel === 'materials' && (
                   <div className="pt-3 border-t border-[var(--border-color)] space-y-4 animate-in fade-in duration-150">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-                        {[
-                          { id: 'all', label: 'Todos' },
-                          { id: 'class_database', label: 'BDs Sala de Aula' },
-                          { id: 'example', label: 'Exemplos' },
-                          { id: 'exercise', label: 'Exercícios' },
-                          { id: 'solution', label: 'Soluções' },
-                          { id: 'exam', label: 'Avaliações' },
-                        ].map((f) => (
-                          <button
-                            key={f.id}
-                            onClick={() => setMaterialCategoryFilter(f.id)}
-                            type="button"
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                              materialCategoryFilter === f.id
-                                ? 'bg-[#FF6B00] text-black font-bold'
-                                : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                            }`}
-                          >
-                            {f.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <button
-                        onClick={handleOpenNewMaterialModal}
-                        type="button"
-                        className="px-4 py-1.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8800] text-black font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow self-start sm:self-auto"
-                      >
-                        <span className="material-symbols-outlined text-[17px]">add_circle</span>
-                        <span>+ Novo Material</span>
-                      </button>
-                    </div>
-
-                    {isLoadingMaterials ? (
-                      <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
-                        <span className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin inline-block" />
-                        <p>Carregando materiais pedagógicos...</p>
-                      </div>
-                    ) : filteredMaterials.length === 0 ? (
-                      <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
-                        <span className="material-symbols-outlined text-[32px] text-[var(--text-muted)]">
-                          post_add
-                        </span>
-                        <p className="text-xs text-[var(--text-secondary)] font-medium">
-                          Nenhum material publicado para esta turma nesta categoria.
-                        </p>
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          Clique em <strong>+ Novo Material</strong> para disponibilizar Bancos de Dados de Aula, Exemplos, Exercícios, Soluções ou Avaliações.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {filteredMaterials.map((mat) => {
-                          const isAulaVisible = mat.visibleInClassroom !== false;
-                          const isExamVisible = mat.visibleInExam ?? (mat.category === 'exam');
-                          return (
-                            <div
-                              key={mat.id}
-                              className="p-2.5 px-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6B00]/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                {/* Tag da categoria */}
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-primary)] border border-[var(--border-color)] shrink-0 flex items-center gap-1">
-                                  {mat.category === 'class_database'
-                                    ? '🗄️ BD Aula'
-                                    : mat.category === 'example'
-                                    ? '💡 Exemplo'
-                                    : mat.category === 'exercise'
-                                    ? '📝 Exercício'
-                                    : mat.category === 'solution'
-                                    ? '✅ Solução'
-                                    : '🎯 Avaliação'}
-                                </span>
-
-                                {mat.visibleInNormal && (
-                                  <span
-                                    title="Também disponível no Modo Normal"
-                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 shrink-0"
-                                  >
-                                    Normal
-                                  </span>
-                                )}
-
-                                {/* Título e descrição resumida */}
-                                <div className="min-w-0 flex-1 flex items-center gap-2">
-                                  <h4
-                                    className="font-bold text-xs text-[var(--text-primary)] truncate"
-                                    title={mat.title}
-                                  >
-                                    {mat.title}
-                                  </h4>
-                                  {mat.description && (
-                                    <span
-                                      className="text-[11px] text-[var(--text-secondary)] truncate hidden md:inline max-w-[280px]"
-                                      title={mat.description}
-                                    >
-                                      — {mat.description}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Metadados: linhas e turmas */}
-                                <div className="hidden sm:flex items-center gap-2 text-[10px] text-[var(--text-muted)] font-mono shrink-0">
-                                  <span>{mat.content.split('\n').length} linhas</span>
-                                  <span>•</span>
-                                  <span>
-                                    {(mat.classIds || []).includes('all')
-                                      ? '🌐 Todas'
-                                      : `Turmas: ${(mat.classIds || []).length}`}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Ações: Olho Modo Aula + Olho Modo Avaliação + Editar + Excluir (apenas ícones) */}
-                              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                                {/* Olho Modo Sala de Aula (Verde aberto / Cinza escuro fechado) */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleMaterialClassroomVisibility(mat)}
-                                  title={
-                                    isAulaVisible
-                                      ? 'Modo Sala de Aula: VISÍVEL para os alunos (clique para ocultar)'
-                                      : 'Modo Sala de Aula: INVISÍVEL para os alunos (clique para tornar visível)'
-                                  }
-                                  aria-label="Alternar visibilidade no Modo Sala de Aula"
-                                  className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
-                                    isAulaVisible
-                                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25'
-                                      : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-zinc-300'
-                                  }`}
-                                >
-                                  <span className="material-symbols-outlined text-[15px]">
-                                    {isAulaVisible ? 'visibility' : 'visibility_off'}
-                                  </span>
-                                </button>
-
-                                {/* Olho Modo Avaliação (Roxo aberto / Cinza escuro fechado) */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleMaterialExamVisibility(mat)}
-                                  title={
-                                    isExamVisible
-                                      ? 'Modo Avaliação: VISÍVEL na prova (clique para ocultar)'
-                                      : 'Modo Avaliação: INVISÍVEL na prova (clique para liberar na prova)'
-                                  }
-                                  aria-label="Alternar visibilidade no Modo Avaliação"
-                                  className={`p-1.5 px-2 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shadow-sm ${
-                                    isExamVisible
-                                      ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500/30'
-                                      : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-300'
-                                  }`}
-                                >
-                                  <span className="material-symbols-outlined text-[15px]">
-                                    {isExamVisible ? 'quiz' : 'visibility_off'}
-                                  </span>
-                                </button>
-
-                                <button
-                                  onClick={() => handleOpenEditMaterialModal(mat)}
-                                  type="button"
-                                  title="Editar Material"
-                                  aria-label="Editar Material"
-                                  className="p-1.5 px-2 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] hover:text-[#0288D1] hover:border-[#0288D1]/40 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
-                                >
-                                  <span className="material-symbols-outlined text-[15px]">edit</span>
-                                </button>
-
-                                <button
-                                  onClick={() => handleDeleteMaterial(mat)}
-                                  type="button"
-                                  title="Excluir Material"
-                                  aria-label="Excluir Material"
-                                  className="p-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 cursor-pointer flex items-center justify-center transition-colors shadow-sm"
-                                >
-                                  <span className="material-symbols-outlined text-[15px]">delete</span>
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {renderMaterialsSection({
+                      items: filteredMaterials,
+                      isLoading: isLoadingMaterials,
+                      isNormalGlobalMode: false,
+                    })}
                   </div>
                 )}
 
@@ -2629,7 +3074,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                     <option value="example">💡 Exemplo de Aula</option>
                     <option value="exercise">📝 Exercício Prático</option>
                     <option value="solution">✅ Solução de Aula</option>
-                    <option value="exam">🎯 Avaliação / Prova</option>
+                    {!(isAdmin && isNormalGlobalSelected) && (
+                      <option value="exam">🎯 Avaliação / Prova</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -2647,78 +3094,90 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 />
               </div>
 
-              {/* Visibilidade por Modo (Normal / Sala de Aula / Avaliação) */}
-              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
-                <p className="text-[11px] font-bold text-[var(--text-secondary)] uppercase">
-                  Disponibilidade &amp; Visibilidade nos Modos da Turma:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
-                    <input
-                      type="checkbox"
-                      checked={matVisibleNormal}
-                      onChange={() => setMatVisibleNormal(!matVisibleNormal)}
-                      className="rounded accent-sky-500"
-                    />
-                    <span className="text-[var(--text-primary)]">🌐 Modo Normal</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
-                    <input
-                      type="checkbox"
-                      checked={matVisibleClassroom}
-                      onChange={() => setMatVisibleClassroom(!matVisibleClassroom)}
-                      className="rounded accent-emerald-500"
-                    />
-                    <span className="text-[var(--text-primary)]">👁️ Modo Sala de Aula</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
-                    <input
-                      type="checkbox"
-                      checked={matVisibleExam}
-                      onChange={() => setMatVisibleExam(!matVisibleExam)}
-                      className="rounded accent-purple-500"
-                    />
-                    <span className="text-[var(--text-primary)]">🎯 Modo Avaliação</span>
-                  </label>
+              {isAdmin && isNormalGlobalSelected ? (
+                <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">public</span>
+                  <span>
+                    Este material será disponibilizado publicamente no catálogo{' '}
+                    <strong>Geral (Modo Normal e Sem Login)</strong>.
+                  </span>
                 </div>
-              </div>
-
-              {/* Vinculação de Turmas */}
-              <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={matAllClasses}
-                    onChange={() => setMatAllClasses(!matAllClasses)}
-                    className="rounded border-[var(--border-color)] accent-[#FF6B00]"
-                  />
-                  <span>🌐 Disponibilizar para todas as minhas turmas</span>
-                </label>
-
-                {!matAllClasses && (
-                  <div className="space-y-1 max-h-24 overflow-y-auto pl-5 text-xs text-[var(--text-secondary)]">
-                    {sortedClasses.map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+              ) : (
+                <>
+                  {/* Visibilidade por Modo (Normal / Sala de Aula / Avaliação) */}
+                  <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
+                    <p className="text-[11px] font-bold text-[var(--text-secondary)] uppercase">
+                      Disponibilidade &amp; Visibilidade nos Modos da Turma:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
                         <input
                           type="checkbox"
-                          checked={matClassIds.includes(c.id)}
-                          onChange={() => {
-                            setMatClassIds((prev) =>
-                              prev.includes(c.id)
-                                ? prev.filter((id) => id !== c.id)
-                                : [...prev, c.id]
-                            );
-                          }}
-                          className="rounded border-[var(--border-color)] accent-[#FF6B00]"
+                          checked={matVisibleNormal}
+                          onChange={() => setMatVisibleNormal(!matVisibleNormal)}
+                          className="rounded accent-sky-500"
                         />
-                        <span>{c.name}</span>
+                        <span className="text-[var(--text-primary)]">🌐 Modo Normal</span>
                       </label>
-                    ))}
+
+                      <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
+                        <input
+                          type="checkbox"
+                          checked={matVisibleClassroom}
+                          onChange={() => setMatVisibleClassroom(!matVisibleClassroom)}
+                          className="rounded accent-emerald-500"
+                        />
+                        <span className="text-[var(--text-primary)]">👁️ Modo Sala de Aula</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded-lg hover:bg-[var(--bg-hover)]">
+                        <input
+                          type="checkbox"
+                          checked={matVisibleExam}
+                          onChange={() => setMatVisibleExam(!matVisibleExam)}
+                          className="rounded accent-purple-500"
+                        />
+                        <span className="text-[var(--text-primary)]">🎯 Modo Avaliação</span>
+                      </label>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Vinculação de Turmas */}
+                  <div className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={matAllClasses}
+                        onChange={() => setMatAllClasses(!matAllClasses)}
+                        className="rounded border-[var(--border-color)] accent-[#FF6B00]"
+                      />
+                      <span>🌐 Disponibilizar para todas as minhas turmas</span>
+                    </label>
+
+                    {!matAllClasses && (
+                      <div className="space-y-1 max-h-24 overflow-y-auto pl-5 text-xs text-[var(--text-secondary)]">
+                        {sortedClasses.map((c) => (
+                          <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={matClassIds.includes(c.id)}
+                              onChange={() => {
+                                setMatClassIds((prev) =>
+                                  prev.includes(c.id)
+                                    ? prev.filter((id) => id !== c.id)
+                                    : [...prev, c.id]
+                                );
+                              }}
+                              className="rounded border-[var(--border-color)] accent-[#FF6B00]"
+                            />
+                            <span>{c.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               {/* Conteúdo SQL */}
               <div className="space-y-1.5">
@@ -2747,8 +3206,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 />
               </div>
 
-              {/* Gabarito SQL (apenas para categoria Avaliação) */}
-              {matCategory === 'exam' && (
+              {/* Gabarito SQL (apenas para categoria Avaliação em turmas) */}
+              {!(isAdmin && isNormalGlobalSelected) && matCategory === 'exam' && (
                 <div className="space-y-1.5 p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-purple-300">
@@ -2792,6 +3251,211 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE COPIAR MATERIAIS DO MODO NORMAL PARA A TURMA */}
+      {isCopyNormalModalOpen && selectedClass && (
+        <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl w-full max-w-2xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-[var(--bg-primary)] border-b border-[var(--border-color)] flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-400 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[20px]">content_copy</span>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-[var(--text-primary)] truncate">
+                    Copiar Materiais do Modo Normal
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-secondary)] truncate">
+                    Destino: <strong className="text-[#FF6B00]">{selectedClass.name}</strong> (cria cópias independentes editáveis na turma)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCopyNormalModalOpen(false)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-[var(--border-color)] space-y-3 shrink-0">
+              <div className="relative">
+                <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={copyNormalSearch}
+                  onChange={(e) => setCopyNormalSearch(e.target.value)}
+                  placeholder="Buscar material pelo título ou nome do arquivo..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                  {[
+                    { id: 'all', label: 'Todos' },
+                    { id: 'class_database', label: 'BDs Sala de Aula' },
+                    { id: 'example', label: 'Exemplos' },
+                    { id: 'exercise', label: 'Exercícios' },
+                    { id: 'solution', label: 'Soluções' },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCopyNormalCategoryFilter(cat.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        copyNormalCategoryFilter === cat.id
+                          ? 'bg-sky-500 text-black font-bold'
+                          : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {filteredCopyNormalCatalog.length > 0 && (
+                  <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredCopyNormalCatalog.length > 0 &&
+                        filteredCopyNormalCatalog.every((m) =>
+                          selectedCopyNormalIds.includes(m.id)
+                        )
+                      }
+                      onChange={() => {
+                        const visibleIds = filteredCopyNormalCatalog.map((m) => m.id);
+                        const allSelected = visibleIds.every((id) =>
+                          selectedCopyNormalIds.includes(id)
+                        );
+                        if (allSelected) {
+                          const vSet = new Set(visibleIds);
+                          setSelectedCopyNormalIds((prev) => prev.filter((id) => !vSet.has(id)));
+                        } else {
+                          setSelectedCopyNormalIds((prev) =>
+                            Array.from(new Set([...prev, ...visibleIds]))
+                          );
+                        }
+                      }}
+                      className="rounded accent-sky-500 cursor-pointer"
+                    />
+                    <span>Selecionar todos ({filteredCopyNormalCatalog.length})</span>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {isLoadingNormalCatalog ? (
+                <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                  <span className="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin inline-block" />
+                  <p>Carregando materiais do Modo Normal...</p>
+                </div>
+              ) : filteredCopyNormalCatalog.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[var(--text-muted)]">
+                  Nenhum material encontrado no catálogo do Modo Normal para este filtro.
+                </div>
+              ) : (
+                filteredCopyNormalCatalog.map((item) => {
+                  const isChecked = selectedCopyNormalIds.includes(item.id);
+                  const alreadyExists = existingMaterialTitleSet.has(
+                    item.title.trim().toLowerCase()
+                  );
+                  return (
+                    <label
+                      key={item.id}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                        isChecked
+                          ? 'bg-sky-500/10 border-sky-500/45'
+                          : 'bg-[var(--bg-primary)] border-[var(--border-color)] hover:bg-[var(--bg-hover)]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedCopyNormalIds((prev) =>
+                              prev.includes(item.id)
+                                ? prev.filter((x) => x !== item.id)
+                                : [...prev, item.id]
+                            );
+                          }}
+                          className="rounded accent-sky-500 cursor-pointer shrink-0"
+                        />
+
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-surface)] border border-[var(--border-color)] shrink-0">
+                          {item.category === 'class_database'
+                            ? '🗄️ BD Aula'
+                            : item.category === 'example'
+                            ? '💡 Exemplo'
+                            : item.category === 'exercise'
+                            ? '📝 Exercício'
+                            : '✅ Solução'}
+                        </span>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-[var(--text-primary)] truncate">
+                              {item.title}
+                            </p>
+                            {alreadyExists && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                                Já na turma
+                              </span>
+                            )}
+                          </div>
+                          {item.description && (
+                            <p className="text-[10px] text-[var(--text-muted)] truncate">
+                              {item.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0">
+                        {item.content.split('\n').length} linhas
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-[var(--bg-primary)] border-t border-[var(--border-color)] flex items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-[var(--text-secondary)]">
+                <strong>{selectedCopyNormalIds.length}</strong> selecionado(s)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCopyNormalModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedCopyNormalIds.length === 0 || isCopyingNormalMaterials}
+                  onClick={handleCopyNormalSubmit}
+                  className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-bold text-xs shadow disabled:opacity-40 cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                  <span>
+                    {isCopyingNormalMaterials
+                      ? 'Copiando...'
+                      : `Copiar para Turma (${selectedCopyNormalIds.length})`}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -40,6 +40,8 @@ import {
 import {
   getUserSavedScripts,
   getClassScripts,
+  getNormalGlobalScripts,
+  NORMAL_GLOBAL_CLASS_ID,
   saveScript,
   submitExam,
 } from './services/scriptService';
@@ -336,8 +338,20 @@ export const App: React.FC = () => {
   const [loadingProgress, setLoadingProgress] = useState<Record<string, DatabaseLoadProgress> | null>(null);
   const [isClassLoading, setIsClassLoading] = useState<boolean>(false);
 
-  // Soluções de aula disponíveis
-  const solutions = useMemo(() => getAvailableSolutions(), []);
+  // Catálogo público "Geral (Modo Normal)" gerenciado pelo Administrador (disponível inclusive sem login)
+  const [normalGlobalScripts, setNormalGlobalScripts] = useState<SavedScriptItem[]>([]);
+
+  const refreshNormalGlobalScripts = useCallback(async () => {
+    const list = await getNormalGlobalScripts();
+    setNormalGlobalScripts(list);
+  }, []);
+
+  useEffect(() => {
+    refreshNormalGlobalScripts();
+  }, [refreshNormalGlobalScripts]);
+
+  // Soluções de aula embutidas (fallback caso o catálogo Geral ainda não tenha sido semeado)
+  const builtInSolutions = useMemo(() => getAvailableSolutions(), []);
 
   // Aba de Revisão e Aba Ativa no Console
   const [sqlReview, setSqlReview] = useState<SqlReview | null>(null);
@@ -935,34 +949,68 @@ export const App: React.FC = () => {
 
   // Filtragem dinâmica dos materiais da classe conforme o modo operacional e os olhos de visibilidade
   const isStudentInClass = Boolean(userProfile?.role === 'aluno' && userProfile?.classId && userProfile?.classStatus === 'approved');
+  const isInRestrictedClassMode = Boolean(
+    isStudentInClass && activeClassroomMode !== 'normal'
+  );
+
+  // Soluções exibidas no menu Nova Aba (Modo Normal/Sem Login usa o catálogo Geral; Sala de Aula usa soluções da turma)
+  const solutions = useMemo<SolutionItem[]>(() => {
+    if (!isInRestrictedClassMode && normalGlobalScripts.length > 0) {
+      const hasFirestoreCatalog = normalGlobalScripts.some((s) => !s.id.startsWith('builtin-'));
+      const normalSols = normalGlobalScripts.filter((s) => s.category === 'solution');
+      if (hasFirestoreCatalog || normalSols.length > 0) {
+        return normalSols.map((s) => ({
+          id: s.id,
+          fileName: s.description || s.title,
+          displayName: s.title,
+          content: s.content,
+        }));
+      }
+    }
+    return builtInSolutions;
+  }, [isInRestrictedClassMode, normalGlobalScripts, builtInSolutions]);
 
   const classExamples = useMemo(() => {
-    return rawClassScripts.filter((s) => {
+    const classScoped = rawClassScripts.filter((s) => {
       if (s.category !== 'example') return false;
       if (!isStudentInClass) return true;
       if (activeClassroomMode === 'exam') return Boolean(s.visibleInExam);
       if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
       return Boolean(s.visibleInNormal);
     });
-  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+    if (isInRestrictedClassMode) return classScoped;
+
+    const normalScoped = normalGlobalScripts.filter((s) => s.category === 'example');
+    const seen = new Set(classScoped.map((s) => s.id));
+    return [...normalScoped.filter((s) => !seen.has(s.id)), ...classScoped];
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode, isInRestrictedClassMode, normalGlobalScripts]);
 
   const classExercises = useMemo(() => {
-    return rawClassScripts.filter((s) => {
+    const classScoped = rawClassScripts.filter((s) => {
       if (s.category !== 'exercise') return false;
       if (!isStudentInClass) return true;
       if (activeClassroomMode === 'exam') return false;
       if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
       return Boolean(s.visibleInNormal);
     });
-  }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
+
+    if (isInRestrictedClassMode) return classScoped;
+
+    const normalScoped = normalGlobalScripts.filter((s) => s.category === 'exercise');
+    const seen = new Set(classScoped.map((s) => s.id));
+    return [...normalScoped.filter((s) => !seen.has(s.id)), ...classScoped];
+  }, [rawClassScripts, isStudentInClass, activeClassroomMode, isInRestrictedClassMode, normalGlobalScripts]);
 
   const classSolutions = useMemo(() => {
     return rawClassScripts.filter((s) => {
       if (s.category !== 'solution') return false;
-      if (!isStudentInClass) return true;
+      if (!isStudentInClass) {
+        return !(s.classIds || []).includes(NORMAL_GLOBAL_CLASS_ID);
+      }
       if (activeClassroomMode === 'exam') return false;
       if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
-      return Boolean(s.visibleInNormal);
+      return Boolean(s.visibleInNormal) && !(s.classIds || []).includes(NORMAL_GLOBAL_CLASS_ID);
     });
   }, [rawClassScripts, isStudentInClass, activeClassroomMode]);
 
@@ -1005,7 +1053,16 @@ export const App: React.FC = () => {
 
     let effectiveCustomScripts = customScripts;
     if (!effectiveCustomScripts) {
-      if (preset === 'teacher_class') {
+      if (preset === 'class') {
+        const hasFirestoreNormalCatalog = normalGlobalScripts.some(
+          (s) => !s.id.startsWith('builtin-')
+        );
+        if (hasFirestoreNormalCatalog) {
+          effectiveCustomScripts = normalGlobalScripts
+            .filter((s) => s.category === 'class_database')
+            .map((s) => ({ title: s.title, content: s.content }));
+        }
+      } else if (preset === 'teacher_class') {
         effectiveCustomScripts = teacherClassDbs.map(s => ({ title: s.title, content: s.content }));
       } else if (preset === 'exam') {
         effectiveCustomScripts = examDbScriptsForPreset.map(s => ({ title: s.title, content: s.content }));
@@ -1057,7 +1114,7 @@ export const App: React.FC = () => {
       setLoadingProgress(null);
       setIsClassLoading(false);
     }, 1800);
-  }, [refreshSchemas, teacherClassDbs, examDbScriptsForPreset]);
+  }, [refreshSchemas, teacherClassDbs, examDbScriptsForPreset, normalGlobalScripts]);
 
   const handleReloadAllDatabases = useCallback(async () => {
     const preset = dbEngine.getPreset();
@@ -1087,6 +1144,8 @@ export const App: React.FC = () => {
 
   // 1. Recarrega scripts do usuário e materiais de aula
   const reloadAllScripts = useCallback(async () => {
+    refreshNormalGlobalScripts();
+
     if (!user) {
       setSavedScripts([]);
       setRawClassScripts([]);
@@ -1833,10 +1892,12 @@ export const App: React.FC = () => {
     if (preset === 'class') presetLabel = 'BDs da Aula (Professor)';
 
     if (confirm(`Deseja restaurar o banco de dados para o estado original da opção selecionada (${presetLabel})? Todas as alterações locais serão substituídas.`)) {
-      setIsExecuting(true);
       if (preset === 'class') {
-        setIsClassLoading(true);
+        await handleLoadPreset('class');
+        return;
       }
+
+      setIsExecuting(true);
       await dbEngine.resetDatabase((progressMap, completedCount) => {
         setLoadingProgress({ ...progressMap });
         if (completedCount > 0) {
@@ -2441,7 +2502,11 @@ export const App: React.FC = () => {
             <AdminPanelView onBackToWorkspace={() => setActiveView('workspace')} />
           ) : activeView === 'teacher-panel' ? (
             <TeacherPanelView
-              onBackToWorkspace={() => setActiveView('workspace')}
+              onBackToWorkspace={() => {
+                refreshNormalGlobalScripts();
+                reloadAllScripts();
+                setActiveView('workspace');
+              }}
               onOpenStudentInSqlEditor={handleOpenStudentInSqlEditor}
             />
           ) : activeView === 'my-class' ? (

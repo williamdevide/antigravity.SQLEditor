@@ -4217,3 +4217,23 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 4. **"Minha Classe / Chat" Unificado para Aluno e Professor Multi-Turma (`frontend/src/components/ProfileAvatarButton.tsx`, `frontend/src/components/LandingPageView.tsx`, `frontend/src/components/MyClassView.tsx`, `frontend/src/App.tsx`):**
    - Menu rápido da foto de perfil renomeado para **`Minha Classe / Chat`**, habilitado também para professores e administradores (com borda dourada neon quando possuem turmas e sininho verde para mensagens não lidas em todas as suas turmas).
    - `MyClassView` agora oferece ao professor seletor de filtro entre **`Todas as Turmas`** (feed unificado em tempo real com escolha da turma de envio direcionado) ou qualquer turma específica, com nomes normalizados e ordenação alfabética.
+
+---
+
+### Prompt 38
+> /agente-orquestrador /grill-me /goal na parte de gestão de materiais, nas turmas, onde exibe os que já estão inclusos, quero uma opção para selecionar varios e excluir mais rapidamente. 
+> na hora de incluir materiais para uma turma, quero a opção de copiar materiais disponibilizados no modo normal do sqleditor (os já existentes) para dentro de uma turma (mas com opção de selecionar individuais os materiais).
+> o administrador da página tem um card de turma antes das outras turmas, é o card de Geral (Modo Normal) onde ele pode fazer a gestão de materiais que aparecem na aplicação no modo normal e no modo sem login (aqui não aparece as opções de adionar alunos nem o que for especifico das salas). importante, todos os materiais já existentes agora devem aparecer aqui, não posso perder nada.
+
+**Ações Executadas:**
+1. **Regras de Segurança do Firestore (`firestore.rules` via `@firestore-rules-author`):**
+   - Atualizado o bloco `match /savedScripts/{scriptId}` para permitir leitura pública (`allow get, list`) apenas quando `'normal_global' in resource.data.classIds` (consulta compatível com `array-contains` sem exigir índice composto), restringindo criação, edição e exclusão de itens `normal_global` exclusivamente a `isAdmin()`.
+2. **Catálogo Global do Modo Normal, Seed Idempotente, Cópia e Exclusão em Lote (`frontend/src/services/scriptService.ts`, `frontend/src/services/dbEngine.ts`):**
+   - Criado `NORMAL_GLOBAL_CLASS_ID = 'normal_global'`, `getBuiltInNormalMaterials()`, `getNormalGlobalScripts()`, `ensureNormalGlobalSeeded()` (que semeia os BDs de Aula e Soluções originais + vincula materiais existentes `visibleInNormal === true` sem duplicação), `restoreMissingBuiltInNormalMaterials()`, `copyNormalMaterialsToClass()` (cópias independentes) e `deleteScriptsBatch()`.
+   - Atualizado `dbEngine.ts` com `loadCustomClassScripts` respeitando `CREATE DATABASE` / `USE` internos quando `preset === 'class'` carrega BDs do catálogo gerenciado pelo Administrador.
+3. **Integração no Modo Normal e Sem Login (`frontend/src/App.tsx`):**
+   - Carrega `normalGlobalScripts` mesmo sem login e abastece dinamicamente `solutions`, `classExamples`, `classExercises` e `handleLoadPreset('class')` / `handleResetDb()` quando o usuário está no Modo Normal ou visitante sem login.
+4. **Card `Geral (Modo Normal)`, Seleção Múltipla & Cópia na Gestão de Materiais (`frontend/src/components/TeacherPanelView.tsx`):**
+   - Card fixo **`Geral (Modo Normal)`** no topo da coluna esquerda exclusivo para `isAdmin`, abrindo visão limpa focada apenas nos materiais globais (sem abas de alunos, modos ou entregas).
+   - Helper compartilhado `renderMaterialsSection` com checkboxes individuais, **"Selecionar todos"** e botão **"Excluir Selecionados (N)"**.
+   - Botão e modal **"Copiar do Modo Normal"** dentro das turmas com busca, filtro por categoria, selo `"Já na turma"` e cópia individual independente.

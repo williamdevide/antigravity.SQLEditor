@@ -1,6 +1,6 @@
 import alasql from 'alasql';
 import { dbStorage } from './storage';
-import { getClassroomDatabases } from './scriptsLoader';
+import { getClassroomDatabases, splitSqlStatements } from './scriptsLoader';
 import { parseSqlStatementsWithRanges, tokenizeSql } from './sqlStatementParser';
 import type { DatabaseSchema, TableSchema, ColumnSchema, QueryResult, QueryHistoryItem, DatabasePreset } from '../types';
 
@@ -358,6 +358,12 @@ class DatabaseEngine {
     }
 
     if (preset === 'class') {
+      if (customScripts && customScripts.length > 0) {
+        await this.loadCustomClassScripts(customScripts, onProgress);
+        await this.persistAllDatabases();
+        return;
+      }
+
       const classDbs = getClassroomDatabases();
       const progressMap: Record<string, DatabaseLoadProgress> = {};
 
@@ -470,70 +476,159 @@ class DatabaseEngine {
 
     if (preset === 'teacher_class' || preset === 'exam') {
       const scriptsToLoad = customScripts || [];
-      if (scriptsToLoad.length === 0) {
-        this.activeDatabase = '';
-        return;
-      }
+      await this.loadCustomClassScripts(scriptsToLoad, onProgress);
+      await this.persistAllDatabases();
+      return;
+    }
+  }
 
-      const progressMap: Record<string, DatabaseLoadProgress> = {};
-      for (const script of scriptsToLoad) {
-        const cleanDbName = script.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-        progressMap[cleanDbName] = {
-          dbName: cleanDbName,
-          status: 'pending',
-          currentStatement: 0,
-          totalStatements: 1,
-          percentage: 0,
-        };
-      }
+  /**
+   * Carrega uma lista de scripts SQL de BDs de Aula/Turma respeitando CREATE DATABASE / USE internos
+   * e utilizando o nome do script como fallback quando não houver banco explícito no SQL.
+   */
+  private async loadCustomClassScripts(
+    scriptsToLoad: { title: string; content: string }[],
+    onProgress?: OnLoadProgressCallback
+  ): Promise<void> {
+    if (scriptsToLoad.length === 0) {
+      this.activeDatabase = '';
+      return;
+    }
 
-      onProgress?.({ ...progressMap }, 0, scriptsToLoad.length, 0);
+    const dbGroupsMap = new Map<string, string[]>();
 
-      for (let sIdx = 0; sIdx < scriptsToLoad.length; sIdx++) {
-        const script = scriptsToLoad[sIdx];
-        const dbName = script.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-        progressMap[dbName].status = 'loading';
+    for (const script of scriptsToLoad) {
+      const fallbackDbName =
+        script.title
+          .replace(/\.sql$/i, '')
+          .replace(/[^a-zA-Z0-9_]/g, '_')
+          .toLowerCase() || 'bd_aula';
+      const statements = splitSqlStatements(script.content);
+      let currentDb = '';
 
-        try {
-          if (!alasql.databases[dbName]) {
-            alasql(`CREATE DATABASE \`${dbName}\`;`);
-          }
-          alasql(`USE \`${dbName}\`;`);
-          this.activeDatabase = dbName;
-        } catch (_) {}
+      for (const stmt of statements) {
+        if (!stmt.trim()) continue;
+        const clean = stmt
+          .replace(/--.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .trim();
+        const createMatch = clean.match(
+          /^CREATE\s+DATABASE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`'"\w-]+)/i
+        );
+        const useMatch = clean.match(/^USE\s+([`'"\w-]+)/i);
 
-        // Divide o script por ponto e vírgula
-        const stmts = script.content
-          .split(/;(?=(?:(?:[^']*'){2})*[^']*$)(?=(?:(?:[^"]*"){2})*[^"]*$)/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-
-        progressMap[dbName].totalStatements = Math.max(1, stmts.length);
-
-        for (let i = 0; i < stmts.length; i++) {
-          const rawStmt = stmts[i];
-          try {
-            alasql(preprocessSqlQuery(rawStmt));
-          } catch (stmtErr) {
-            console.warn(`[loadCustomScripts] Aviso no comando ${i}:`, stmtErr);
-          }
+        if (createMatch) {
+          currentDb = createMatch[1].replace(/[`'"]/g, '');
+        } else if (useMatch) {
+          currentDb = useMatch[1].replace(/[`'"]/g, '');
         }
 
-        await this.persistDatabase(dbName);
-        progressMap[dbName].status = 'completed';
-        progressMap[dbName].percentage = 100;
-        const completed = sIdx + 1;
-        const overall = Math.round((completed / scriptsToLoad.length) * 100);
-        onProgress?.({ ...progressMap }, completed, scriptsToLoad.length, overall);
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        const targetDb = currentDb || fallbackDbName;
+        if (!dbGroupsMap.has(targetDb)) {
+          dbGroupsMap.set(targetDb, []);
+        }
+        dbGroupsMap.get(targetDb)!.push(stmt);
+      }
+    }
+
+    const groups = Array.from(dbGroupsMap.entries()).map(([dbName, statements]) => ({
+      dbName,
+      statements,
+    }));
+
+    if (groups.length === 0) {
+      this.activeDatabase = '';
+      return;
+    }
+
+    const progressMap: Record<string, DatabaseLoadProgress> = {};
+    for (const group of groups) {
+      progressMap[group.dbName] = {
+        dbName: group.dbName,
+        status: 'pending',
+        currentStatement: 0,
+        totalStatements: Math.max(1, group.statements.length),
+        percentage: 0,
+      };
+    }
+
+    onProgress?.({ ...progressMap }, 0, groups.length, 0);
+    const BATCH_SIZE = 20;
+
+    for (let gIdx = 0; gIdx < groups.length; gIdx++) {
+      const group = groups[gIdx];
+      progressMap[group.dbName].status = 'loading';
+
+      try {
+        if (!alasql.databases[group.dbName]) {
+          alasql(`CREATE DATABASE \`${group.dbName}\`;`);
+        }
+        alasql(`USE \`${group.dbName}\`;`);
+        this.activeDatabase = group.dbName;
+      } catch (_) {}
+
+      for (let i = 0; i < group.statements.length; i++) {
+        const stmt = group.statements[i];
+        const cleanStmt = stmt
+          .replace(/--.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .trim();
+
+        const createDbMatch = cleanStmt.match(
+          /^CREATE\s+DATABASE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`'"]?([a-zA-Z0-9_-]+)[`'"]?/i
+        );
+        if (createDbMatch) {
+          const dbN = createDbMatch[1];
+          if (!alasql.databases[dbN]) {
+            try {
+              alasql(`CREATE DATABASE \`${dbN}\`;`);
+            } catch (_) {}
+          }
+          continue;
+        }
+
+        const tableMatch = cleanStmt.match(
+          /(?:INSERT\s+INTO|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+[`'"]?([a-zA-Z0-9_]+)[`'"]?/i
+        );
+        if (tableMatch) {
+          progressMap[group.dbName].currentTable = tableMatch[1];
+        }
+
+        try {
+          alasql(preprocessSqlQuery(stmt));
+        } catch (stmtErr) {
+          console.warn(`[loadCustomClassScripts] Aviso em ${group.dbName} (stmt ${i}):`, stmtErr);
+        }
+
+        if (i % BATCH_SIZE === 0 || i === group.statements.length - 1) {
+          const dbPct = Math.round(((i + 1) / group.statements.length) * 100);
+          progressMap[group.dbName].currentStatement = i + 1;
+          progressMap[group.dbName].percentage = dbPct;
+
+          const completedDbs = Object.values(progressMap).filter((p) => p.status === 'completed').length;
+          const sumPct = Object.values(progressMap).reduce((acc, p) => acc + p.percentage, 0);
+          onProgress?.({ ...progressMap }, completedDbs, groups.length, Math.round(sumPct / groups.length));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
 
-      const firstLoaded = scriptsToLoad[0]?.title.replace(/\.sql$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || '';
-      this.activeDatabase = firstLoaded;
-      if (firstLoaded) {
-        try { alasql(`USE \`${firstLoaded}\`;`); } catch (_) {}
-      }
-      return;
+      await this.persistDatabase(group.dbName);
+      progressMap[group.dbName].status = 'completed';
+      progressMap[group.dbName].percentage = 100;
+      delete progressMap[group.dbName].currentTable;
+
+      const completedDbs = Object.values(progressMap).filter((p) => p.status === 'completed').length;
+      const sumPct = Object.values(progressMap).reduce((acc, p) => acc + p.percentage, 0);
+      onProgress?.({ ...progressMap }, completedDbs, groups.length, Math.round(sumPct / groups.length));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    const firstLoaded = groups[0]?.dbName || '';
+    this.activeDatabase = firstLoaded;
+    if (firstLoaded) {
+      try {
+        alasql(`USE \`${firstLoaded}\`;`);
+      } catch (_) {}
     }
   }
 
