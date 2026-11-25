@@ -2,8 +2,8 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
-// Lê variáveis de ambiente injetadas pelo Vite com suporte flexível a variações de casing
-const env = import.meta.env;
+// Lê variáveis de ambiente injetadas pelo Vite com suporte flexível a variações de casing e execução em Node
+const env = (import.meta as any)?.env || {};
 
 const firebaseConfig = {
   apiKey:

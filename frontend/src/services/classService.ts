@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { logSystemEvent } from './auditService';
+import { withFirestoreTimeout } from './firestoreUtils';
 import { formatStudentDisplayName, compareNamesPtBr } from '../utils/studentNameFormatter';
 import type { ClassItem, ClassMemberItem, UserProfile, ClassroomMode } from '../types';
 
@@ -533,6 +534,7 @@ export interface ExamSessionMetadata {
   activeExamSessionId: string | null;
   activeExamSessionLabel: string | null;
   activeExamStartedAt: string | null;
+  examAutoOpenScriptIds: string[];
 }
 
 /**
@@ -551,17 +553,20 @@ export function buildDefaultExamSessionLabel(date = new Date()): string {
 
 /**
  * Atualiza o modo de operação de uma turma específica ('normal' | 'classroom' | 'exam').
- * Ao iniciar o modo avaliação, cria um novo activeExamSessionId para encapsular as ocorrências.
+ * Ao iniciar o modo avaliação, cria um novo activeExamSessionId e grava os scripts auto-abertos.
  * Ao encerrar o modo avaliação, limpa os ponteiros ativos mantendo as ocorrências encapsuladas no histórico.
  */
 export async function updateClassMode(
   classId: string,
   mode: ClassroomMode,
   teacher: UserProfile,
-  options?: { examSessionLabel?: string }
+  options?: { examSessionLabel?: string; examAutoOpenScriptIds?: string[] }
 ): Promise<ExamSessionMetadata> {
   const classRef = doc(db, 'classes', classId);
   const nowIso = new Date().toISOString();
+  const cleanAutoOpenIds = Array.from(
+    new Set((options?.examAutoOpenScriptIds || []).filter((id) => typeof id === 'string' && id.trim()))
+  ).slice(0, 50);
 
   const sessionMeta: ExamSessionMetadata =
     mode === 'exam'
@@ -569,20 +574,27 @@ export async function updateClassMode(
           activeExamSessionId: `exam_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           activeExamSessionLabel: (options?.examSessionLabel?.trim() || buildDefaultExamSessionLabel()).slice(0, 120),
           activeExamStartedAt: nowIso,
+          examAutoOpenScriptIds: cleanAutoOpenIds,
         }
       : {
           activeExamSessionId: null,
           activeExamSessionLabel: null,
           activeExamStartedAt: null,
+          examAutoOpenScriptIds: [],
         };
 
-  await updateDoc(classRef, {
-    classroomMode: mode,
-    activeExamSessionId: sessionMeta.activeExamSessionId,
-    activeExamSessionLabel: sessionMeta.activeExamSessionLabel,
-    activeExamStartedAt: sessionMeta.activeExamStartedAt,
-    updatedAt: nowIso,
-  });
+  await withFirestoreTimeout(
+    updateDoc(classRef, {
+      classroomMode: mode,
+      activeExamSessionId: sessionMeta.activeExamSessionId,
+      activeExamSessionLabel: sessionMeta.activeExamSessionLabel,
+      activeExamStartedAt: sessionMeta.activeExamStartedAt,
+      examAutoOpenScriptIds: sessionMeta.examAutoOpenScriptIds,
+      updatedAt: nowIso,
+    }),
+    12000,
+    'alterar o modo da turma'
+  );
 
   const modeLabels: Record<ClassroomMode, string> = {
     normal: 'Modo Normal (Padrão)',
@@ -615,7 +627,7 @@ export async function updateAllTeacherClassesMode(
   teacherId: string,
   mode: ClassroomMode,
   teacher: UserProfile,
-  options?: { examSessionLabel?: string }
+  options?: { examSessionLabel?: string; examAutoOpenScriptIds?: string[] }
 ): Promise<Record<string, ExamSessionMetadata>> {
   const classes = await getClassesByTeacher(teacherId);
   const results: Record<string, ExamSessionMetadata> = {};

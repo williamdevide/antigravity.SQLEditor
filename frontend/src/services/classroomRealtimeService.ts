@@ -14,6 +14,21 @@ import {
   type WriteBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { withFirestoreTimeout } from './firestoreUtils';
+import {
+  EXAM_ALERT_TYPE_LABELS,
+  extractTimestampMs,
+  computePresenceOnlineStatus,
+  groupExamAlertsBySession,
+  type ExamAlertSessionGroup,
+} from '../utils/classroomHelpers';
+export {
+  EXAM_ALERT_TYPE_LABELS,
+  extractTimestampMs,
+  computePresenceOnlineStatus,
+  groupExamAlertsBySession,
+  type ExamAlertSessionGroup,
+};
 import { formatStudentDisplayName } from '../utils/studentNameFormatter';
 import type {
   ClassPresenceItem,
@@ -24,34 +39,6 @@ import type {
   StudentLiveTabSnapshot,
   UserRole,
 } from '../types';
-
-/**
- * Converte Timestamp do Firestore, Date, número ou string ISO em milissegundos.
- */
-export function extractTimestampMs(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'object' && value !== null) {
-    const maybeTs = value as { toMillis?: () => number; seconds?: number };
-    if (typeof maybeTs.toMillis === 'function') {
-      return maybeTs.toMillis();
-    }
-    if (typeof maybeTs.seconds === 'number') {
-      return maybeTs.seconds * 1000;
-    }
-    if (value instanceof Date) {
-      const ms = value.getTime();
-      return Number.isNaN(ms) ? null : ms;
-    }
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim()) {
-    const ms = new Date(value).getTime();
-    return Number.isNaN(ms) ? null : ms;
-  }
-  return null;
-}
 
 /**
  * Atualiza ou registra o status de presença online de um usuário na turma
@@ -70,21 +57,26 @@ export async function updateClassPresence(params: {
   const docId = `${params.classId}_${params.uid}`;
   const safeName = formatStudentDisplayName(params.displayName, params.email).slice(0, 100);
   try {
-    await setDoc(
-      doc(db, 'class_presence', docId),
-      {
-        id: docId,
-        classId: params.classId.slice(0, 128),
-        uid: params.uid.slice(0, 128),
-        displayName: safeName,
-        email: (params.email || '').slice(0, 150),
-        role: params.role || 'aluno',
-        photoURL: (params.photoURL || '').slice(0, 1000),
-        isOnline: params.isOnline,
-        lastSeenAt: serverTimestamp(),
-        activeView: (params.activeView || 'workspace').slice(0, 100),
-      },
-      { merge: true }
+    await withFirestoreTimeout(
+      setDoc(
+        doc(db, 'class_presence', docId),
+        {
+          id: docId,
+          classId: params.classId.slice(0, 128),
+          uid: params.uid.slice(0, 128),
+          displayName: safeName,
+          email: (params.email || '').slice(0, 150),
+          role: params.role || 'aluno',
+          photoURL: (params.photoURL || '').slice(0, 1000),
+          isOnline: params.isOnline,
+          lastSeenAt: serverTimestamp(),
+          clientUpdatedAtMs: Date.now(),
+          activeView: (params.activeView || 'workspace').slice(0, 100),
+        },
+        { merge: true }
+      ),
+      8000,
+      'atualizar presença na turma'
     );
   } catch (err) {
     console.warn('[ClassroomRealtime] Erro ao atualizar presença:', err);
@@ -93,12 +85,12 @@ export async function updateClassPresence(params: {
 
 /**
  * Inscreve para ouvir a lista de presença em tempo real da turma
- * Considera online quem tem isOnline === true e heartbeat recente (< 120s),
- * reavaliando periodicamente mesmo sem novas gravações no Firestore.
+ * Compensa eventuais diferenças de relógio entre máquinas do laboratório e o servidor Firestore.
  */
 export function subscribeToClassPresence(
   classId: string,
-  callback: (items: ClassPresenceItem[]) => void
+  callback: (items: ClassPresenceItem[]) => void,
+  currentUid?: string
 ): () => void {
   if (!classId) {
     callback([]);
@@ -110,18 +102,23 @@ export function subscribeToClassPresence(
     docData: ClassPresenceItem;
     rawLastSeenAt: unknown;
   }> = [];
+  let serverClockOffsetMs = 0;
 
   const emitComputed = () => {
     const nowMs = Date.now();
     const items: ClassPresenceItem[] = latestRawItems.map(({ id, docData, rawLastSeenAt }) => {
-      const lastMs = extractTimestampMs(rawLastSeenAt);
-      // Tolerância ampla para evitar oscilação por pequenas diferenças de relógio
-      const isFresh = lastMs === null || Math.abs(nowMs - lastMs) < 120000;
+      const computed = computePresenceOnlineStatus(
+        docData,
+        rawLastSeenAt,
+        nowMs,
+        serverClockOffsetMs,
+        180000
+      );
       return {
         ...docData,
         id,
-        lastSeenAt: lastMs !== null ? new Date(lastMs).toISOString() : new Date(nowMs).toISOString(),
-        isOnline: Boolean(docData.isOnline && isFresh),
+        lastSeenAt: computed.lastSeenAtIso,
+        isOnline: computed.isOnline,
       };
     });
     callback(items);
@@ -134,6 +131,18 @@ export function subscribeToClassPresence(
       const nextRaw: typeof latestRawItems = [];
       snap.forEach((d) => {
         const data = d.data({ serverTimestamps: 'estimate' }) as ClassPresenceItem;
+        // Calibra desvio entre relógio do servidor Firestore e relógio local do usuário
+        if (
+          currentUid &&
+          data.uid === currentUid &&
+          typeof data.clientUpdatedAtMs === 'number' &&
+          Number.isFinite(data.clientUpdatedAtMs)
+        ) {
+          const srvMs = extractTimestampMs(data.lastSeenAt);
+          if (srvMs !== null) {
+            serverClockOffsetMs = data.clientUpdatedAtMs - srvMs;
+          }
+        }
         nextRaw.push({
           id: d.id,
           docData: data,
@@ -148,7 +157,7 @@ export function subscribeToClassPresence(
     }
   );
 
-  const refreshTimer = window.setInterval(emitComputed, 20000);
+  const refreshTimer = window.setInterval(emitComputed, 30000);
 
   return () => {
     window.clearInterval(refreshTimer);
@@ -354,86 +363,6 @@ export async function markClassMessagesAsRead(messageIds: string[], uid: string)
   }
 }
 
-export const EXAM_ALERT_TYPE_LABELS: Record<ExamAlertType, string> = {
-  tab_switch: '🔄 Troca de Aba',
-  window_blur: '🪟 Saiu da Janela',
-  copy_paste_attempt: '📋 Copiar/Colar',
-  extension_detected: '🤖 Extensão/Overlay IA',
-  devtools_or_resize: '🛠️ Inspeção/DevTools',
-  page_exit_attempt: '🚪 Saída / Fechamento da Página',
-};
-
-export interface ExamAlertSessionGroup {
-  sessionId: string;
-  sessionLabel: string;
-  isCurrentActive: boolean;
-  alerts: ExamAlertItem[];
-  unackCount: number;
-  latestAt: string;
-}
-
-/**
- * Agrupa ocorrências anti-trapaça por sessão de avaliação, mantendo a avaliação ativa
- * (se existir) no topo mesmo sem ocorrências e separando avaliações anteriores.
- */
-export function groupExamAlertsBySession(
-  alerts: ExamAlertItem[],
-  activeSession?: {
-    id?: string | null;
-    label?: string | null;
-    startedAt?: string | null;
-    isExamActive?: boolean;
-  }
-): ExamAlertSessionGroup[] {
-  const groupsMap = new Map<string, ExamAlertSessionGroup>();
-  const activeId = activeSession?.isExamActive && activeSession.id ? activeSession.id : null;
-
-  if (activeId) {
-    groupsMap.set(activeId, {
-      sessionId: activeId,
-      sessionLabel: activeSession?.label || 'Avaliação Atual',
-      isCurrentActive: true,
-      alerts: [],
-      unackCount: 0,
-      latestAt: activeSession?.startedAt || new Date().toISOString(),
-    });
-  }
-
-  for (const alert of alerts) {
-    const sid = alert.examSessionId || '__legacy__';
-    const existing = groupsMap.get(sid);
-    if (existing) {
-      existing.alerts.push(alert);
-      if (!alert.acknowledged) existing.unackCount += 1;
-      if ((alert.createdAt || '') > existing.latestAt) {
-        existing.latestAt = alert.createdAt || existing.latestAt;
-      }
-      if (!existing.isCurrentActive && alert.examSessionLabel) {
-        existing.sessionLabel = alert.examSessionLabel;
-      }
-    } else {
-      const label =
-        sid === '__legacy__'
-          ? 'Avaliações Anteriores (Sem Sessão)'
-          : alert.examSessionLabel || `Avaliação (${new Date(alert.createdAt).toLocaleString('pt-BR')})`;
-      groupsMap.set(sid, {
-        sessionId: sid,
-        sessionLabel: label,
-        isCurrentActive: sid === activeId,
-        alerts: [alert],
-        unackCount: alert.acknowledged ? 0 : 1,
-        latestAt: alert.createdAt || '',
-      });
-    }
-  }
-
-  return Array.from(groupsMap.values()).sort((a, b) => {
-    if (a.isCurrentActive && !b.isCurrentActive) return -1;
-    if (!a.isCurrentActive && b.isCurrentActive) return 1;
-    return (b.latestAt || '').localeCompare(a.latestAt || '');
-  });
-}
-
 /**
  * Registra uma ocorrência / alerta anti-trapaça durante o Modo Avaliação
  */
@@ -552,11 +481,11 @@ export async function syncStudentLiveState(params: {
   if (!params.classId || !params.studentUid) return;
   const docId = `${params.classId}_${params.studentUid}`;
   try {
-    // Limita snapshot das abas para respeitar tamanho máximo seguro
-    const safeTabs = params.tabs.slice(0, 12).map((t) => ({
+    // Compacta snapshots para evitar gargalo de rede em turmas com 30+ alunos
+    const safeTabs = params.tabs.slice(0, 6).map((t) => ({
       id: t.id,
       title: (t.title || 'Script').slice(0, 120),
-      content: (t.content || '').slice(0, 60000),
+      content: (t.content || '').slice(0, 8000),
     }));
 
     const safeStudentName = formatStudentDisplayName(params.studentName, params.studentEmail).slice(0, 100);
@@ -567,7 +496,7 @@ export async function syncStudentLiveState(params: {
       studentName: safeStudentName,
       studentEmail: (params.studentEmail || '').slice(0, 150),
       activeTabTitle: (params.activeTabTitle || 'Script').slice(0, 120),
-      activeTabContent: (params.activeTabContent || '').slice(0, 60000),
+      activeTabContent: (params.activeTabContent || '').slice(0, 30000),
       tabs: safeTabs,
       activeDatabase: (params.activeDatabase || '').slice(0, 128),
       updatedAt: new Date().toISOString(),

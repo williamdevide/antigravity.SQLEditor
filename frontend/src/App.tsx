@@ -44,7 +44,10 @@ import {
   NORMAL_GLOBAL_CLASS_ID,
   saveScript,
   submitExam,
+  filterPersonalSavedScripts,
+  computeDatabasesFingerprint,
 } from './services/scriptService';
+import { clearInternalClipboard } from './services/examClipboardGuard';
 import {
   loadAppPreferences,
   saveAppPreferences,
@@ -320,6 +323,10 @@ export const App: React.FC = () => {
   activeViewRef.current = activeView;
   const lastLiveSyncAtRef = useRef<number>(0);
   const liveSyncTimerRef = useRef<number | null>(null);
+  const lastLiveHashRef = useRef<string>('');
+  const lastClassSnapshotKeyRef = useRef<string>('');
+  const lastLoadedDbFingerprintRef = useRef<{ preset: string; fingerprint: string } | null>(null);
+  const prevWorkspaceActiveRef = useRef<boolean>(activeView === 'workspace');
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(0);
   const [executedTabId, setExecutedTabId] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
@@ -948,13 +955,25 @@ export const App: React.FC = () => {
   }, [handleNewTab]);
 
   const handleCloseAllTabs = useCallback(() => {
-    setTabs([]);
-    setActiveTabId('');
+    setTabs(prev => {
+      if (isExamModeActiveRef.current) {
+        const preserved = prev.filter(t => t.isProtectedExamTab);
+        setActiveTabId(preserved.length > 0 ? preserved[0].id : '');
+        return preserved;
+      }
+      setActiveTabId('');
+      return [];
+    });
   }, []);
 
   const handleCloseOtherTabs = useCallback((keepId: string) => {
-    setTabs(prev => prev.filter(t => t.id === keepId));
-    setActiveTabId(keepId);
+    setTabs(prev => {
+      const next = prev.filter(
+        t => t.id === keepId || (isExamModeActiveRef.current && Boolean(t.isProtectedExamTab))
+      );
+      setActiveTabId(keepId);
+      return next;
+    });
   }, []);
 
   // Filtragem dinâmica dos materiais da classe conforme o modo operacional e os olhos de visibilidade
@@ -1089,6 +1108,12 @@ export const App: React.FC = () => {
     }, effectiveCustomScripts);
 
     setCurrentPreset(preset);
+    if (preset === 'class' || preset === 'teacher_class') {
+      lastLoadedDbFingerprintRef.current = {
+        preset,
+        fingerprint: computeDatabasesFingerprint(effectiveCustomScripts || []),
+      };
+    }
     await refreshSchemas();
     const newActiveDb = dbEngine.getActiveDatabase();
     setActiveDatabase(newActiveDb);
@@ -1144,6 +1169,11 @@ export const App: React.FC = () => {
 
   const handleCloseTab = useCallback((id: string) => {
     setTabs(prev => {
+      const targetTab = prev.find(t => t.id === id);
+      // Abas de prova são protegidas contra fechamento acidental durante o Modo Avaliação
+      if (isExamModeActiveRef.current && targetTab?.isProtectedExamTab) {
+        return prev;
+      }
       const next = prev.filter(t => t.id !== id);
       if (activeTabId === id) {
         setActiveTabId(next.length > 0 ? next[next.length - 1].id : '');
@@ -1151,6 +1181,17 @@ export const App: React.FC = () => {
       return next;
     });
   }, [activeTabId]);
+
+  // Vincula o ID do script salvo na nuvem à aba aberta sem mutação direta de objeto
+  const handleBindTabSavedScript = useCallback((tabId: string, savedScriptId: string, newTitle?: string) => {
+    setTabs(prev =>
+      prev.map(t =>
+        t.id === tabId
+          ? { ...t, savedScriptId, ...(newTitle ? { title: newTitle } : {}) }
+          : t
+      )
+    );
+  }, []);
 
   // 1. Recarrega scripts do usuário e materiais de aula
   const reloadAllScripts = useCallback(async () => {
@@ -1163,9 +1204,9 @@ export const App: React.FC = () => {
     }
 
     try {
-      // Scripts salvos pelo próprio usuário
+      // Carrega apenas scripts salvos como Script Pessoal (exclui rascunhos temporários e outros tipos)
       const myScripts = await getUserSavedScripts(user.uid);
-      setSavedScripts(myScripts.filter(s => !s.isTemporary));
+      setSavedScripts(filterPersonalSavedScripts(myScripts));
 
       // Se for professor ou admin, busca também as turmas lecionadas
       if (userProfile?.role === 'admin') {
@@ -1193,16 +1234,23 @@ export const App: React.FC = () => {
     reloadAllScripts();
   }, [reloadAllScripts]);
 
-  // Atualização otimista e sincronizada de scripts salvos pelo usuário
+  // Atualização em memória de scripts pessoais salvos (evita recarregar todo o catálogo a cada Ctrl+S)
   const handleScriptSaved = useCallback((savedScript?: SavedScriptItem) => {
-    if (savedScript) {
-      setSavedScripts((prev) => [
-        savedScript,
-        ...prev.filter((s) => s.id !== savedScript.id),
-      ]);
+    if (!savedScript) {
+      reloadAllScripts();
+      return;
     }
-    reloadAllScripts();
+    const isPersonal = filterPersonalSavedScripts([savedScript]).length > 0;
+    setSavedScripts((prev) => {
+      const withoutCurrent = prev.filter((s) => s.id !== savedScript.id);
+      return isPersonal ? [savedScript, ...withoutCurrent] : withoutCurrent;
+    });
   }, [reloadAllScripts]);
+
+  const rawClassScriptsRef = useRef<SavedScriptItem[]>([]);
+  rawClassScriptsRef.current = rawClassScripts;
+  const activeClassroomModeRef = useRef<ClassroomMode>('normal');
+  activeClassroomModeRef.current = activeClassroomMode;
 
   // 2. Ouve alterações da turma do aluno em tempo real (Modo Sala de Aula / Modo Avaliação / Chat / Scripts)
   useEffect(() => {
@@ -1212,11 +1260,13 @@ export const App: React.FC = () => {
 
     if (!classId || !isApprovedMember) {
       activeClassItemRef.current = null;
+      lastClassSnapshotKeyRef.current = '';
       setActiveClassItem(null);
       setActiveClassroomMode('normal');
       setActiveClassName('');
       setIsExamModeActive(false);
       isExamModeActiveRef.current = false;
+      clearInternalClipboard();
       return;
     }
 
@@ -1238,6 +1288,7 @@ export const App: React.FC = () => {
         setActiveClassroomMode(newMode);
         setAntiCheatWarning(null);
         violationCountRef.current = 0;
+        clearInternalClipboard();
         try {
           window.sessionStorage.removeItem('sqleditor_exam_reloaded_for');
           window.sessionStorage.removeItem('sqleditor_exam_backed_up_for');
@@ -1245,9 +1296,19 @@ export const App: React.FC = () => {
         } catch (_) {}
       }
 
-      // Recarrega scripts da turma para refletir mudanças imediatas nos olhos de visibilidade
-      const latestClassScripts = await getClassScripts(classId);
-      setRawClassScripts(latestClassScripts);
+      // Evita refetch redundante de materiais quando o snapshot da turma não alterou estado relevante
+      const snapshotKey = `${classData.updatedAt || ''}|${newMode}|${classData.activeExamSessionId || ''}|${(classData.examAutoOpenScriptIds || []).join(',')}`;
+      let latestClassScripts = rawClassScriptsRef.current;
+      if (
+        !lastClassSnapshotKeyRef.current ||
+        lastClassSnapshotKeyRef.current !== snapshotKey ||
+        willBeInExam ||
+        latestClassScripts.length === 0
+      ) {
+        lastClassSnapshotKeyRef.current = snapshotKey;
+        latestClassScripts = await getClassScripts(classId);
+        setRawClassScripts(latestClassScripts);
+      }
 
       if (!isStudent) {
         setActiveClassroomMode('normal');
@@ -1268,6 +1329,7 @@ export const App: React.FC = () => {
           lastExamSessionIdRef.current = examSessionKey;
           violationCountRef.current = 0;
           setAntiCheatWarning(null);
+          clearInternalClipboard();
 
           let alreadyBackedUp = false;
           let alreadyReloaded = false;
@@ -1330,24 +1392,46 @@ export const App: React.FC = () => {
           setTabs([]);
           setActiveTabId('');
 
-          // D. Carrega scripts oficiais de prova visíveis na turma
+          // D. Carrega abas configuradas pelo professor (Avaliação protegida + Exemplos liberados), focando na prova
           try {
-            const examScripts = latestClassScripts.filter(
+            const configuredIds = Array.isArray(classData.examAutoOpenScriptIds)
+              ? classData.examAutoOpenScriptIds
+              : [];
+            const visibleExamScripts = latestClassScripts.filter(
               (s) => s.category === 'exam' && s.visibleInExam !== false
             );
-            if (examScripts.length > 0) {
-              const newExamTabs: TabItem[] = examScripts.map((s) => ({
+
+            let scriptsToOpen: SavedScriptItem[] = [];
+            if (configuredIds.length > 0) {
+              const selectedByTeacher = latestClassScripts.filter(
+                (s) =>
+                  configuredIds.includes(s.id) &&
+                  (s.category === 'exam' || s.category === 'example')
+              );
+              const selectedExams = selectedByTeacher.filter((s) => s.category === 'exam');
+              const selectedExamples = selectedByTeacher.filter((s) => s.category === 'example');
+              const ensuredExams = selectedExams.length > 0 ? selectedExams : visibleExamScripts;
+              scriptsToOpen = [...ensuredExams, ...selectedExamples];
+            } else {
+              scriptsToOpen = visibleExamScripts;
+            }
+
+            if (scriptsToOpen.length > 0) {
+              const newExamTabs: TabItem[] = scriptsToOpen.map((s) => ({
                 id: s.id,
                 title: s.title,
                 content: s.content,
+                isProtectedExamTab: s.category === 'exam',
               }));
               setTabs(newExamTabs);
-              setActiveTabId(newExamTabs[0].id);
+              const focusExamTab = newExamTabs.find((t) => t.isProtectedExamTab) || newExamTabs[0];
+              setActiveTabId(focusExamTab.id);
             } else {
               const defaultExamTab: TabItem = {
                 id: `tab-exam-${Date.now()}`,
                 title: 'avaliacao_respostas.sql',
                 content: `-- AVALIAÇÃO DA TURMA: ${classData.name}\n-- Digite suas respostas SQL abaixo e entregue ao finalizar.\n\n`,
+                isProtectedExamTab: true,
               };
               setTabs([defaultExamTab]);
               setActiveTabId(defaultExamTab.id);
@@ -1443,7 +1527,7 @@ export const App: React.FC = () => {
     userProfile?.classCode,
   ]);
 
-  // 2.1 Heartbeat de presença online na turma (sem race condition de cleanup)
+  // 2.1 Heartbeat de presença online na turma (otimizado: 60s, apenas guias visíveis e turmas próprias)
   const presenceClassIdsKey = useMemo(() => {
     if (!user || !userProfile) return '';
     const targetClassIds = new Set<string>();
@@ -1451,7 +1535,11 @@ export const App: React.FC = () => {
       targetClassIds.add(userProfile.classId);
     }
     if (userProfile.role === 'professor' || userProfile.role === 'admin') {
-      teacherClasses.forEach((c) => {
+      // Limita ping contínuo às turmas do próprio docente; MyClassView envia ping imediato na turma aberta
+      const ownClasses = teacherClasses.filter(
+        (c) => c.teacherId === user.uid || userProfile.role === 'professor'
+      );
+      ownClasses.slice(0, 5).forEach((c) => {
         if (c.id) targetClassIds.add(c.id);
       });
     }
@@ -1483,6 +1571,68 @@ export const App: React.FC = () => {
     [presenceClassIdsKey]
   );
 
+  // Recarrega automaticamente os BDs de aula ao entrar no Laboratório SQL apenas se houver alterações reais
+  useEffect(() => {
+    const justEnteredWorkspace =
+      !prevWorkspaceActiveRef.current && activeView === 'workspace';
+    prevWorkspaceActiveRef.current = activeView === 'workspace';
+    if (!justEnteredWorkspace || isExamModeActive) return;
+
+    let cancelled = false;
+    const syncDatabasesOnWorkspaceEnter = async () => {
+      try {
+        if (
+          (isStudentInClass && activeClassroomMode === 'classroom' && userProfile?.classId) ||
+          (currentPreset === 'teacher_class' && userProfile?.classId)
+        ) {
+          const freshScripts = await getClassScripts(userProfile.classId);
+          if (cancelled) return;
+          setRawClassScripts(freshScripts);
+          const freshDbs = freshScripts
+            .filter((s) => s.category === 'class_database' && s.visibleInClassroom !== false)
+            .map((s) => ({ title: s.title, content: s.content }));
+          const nextFp = computeDatabasesFingerprint(freshDbs);
+          const prev = lastLoadedDbFingerprintRef.current;
+          if (prev && prev.preset === 'teacher_class' && prev.fingerprint !== nextFp) {
+            await handleLoadPreset('teacher_class', freshDbs);
+          }
+          return;
+        }
+
+        if (currentPreset === 'class') {
+          const latestNormal = await getNormalGlobalScripts();
+          if (cancelled) return;
+          setNormalGlobalScripts(latestNormal);
+          const hasCatalog = latestNormal.some((s) => !s.id.startsWith('builtin-'));
+          if (!hasCatalog) return;
+          const freshDbs = latestNormal
+            .filter((s) => s.category === 'class_database')
+            .map((s) => ({ title: s.title, content: s.content }));
+          const nextFp = computeDatabasesFingerprint(freshDbs);
+          const prev = lastLoadedDbFingerprintRef.current;
+          if (prev && prev.preset === 'class' && prev.fingerprint !== nextFp) {
+            await handleLoadPreset('class', freshDbs);
+          }
+        }
+      } catch (err) {
+        console.warn('[Workspace DB Auto-Reload Warning]', err);
+      }
+    };
+
+    syncDatabasesOnWorkspaceEnter();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeView,
+    isExamModeActive,
+    isStudentInClass,
+    activeClassroomMode,
+    currentPreset,
+    userProfile?.classId,
+    handleLoadPreset,
+  ]);
+
   useEffect(() => {
     const classIdsList = presenceClassIdsKey
       ? presenceClassIdsKey.split(',').filter(Boolean)
@@ -1490,7 +1640,11 @@ export const App: React.FC = () => {
     if (!user?.uid || classIdsList.length === 0) return;
 
     sendPresenceHeartbeat(true, classIdsList);
-    const interval = window.setInterval(() => sendPresenceHeartbeat(true, classIdsList), 20000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        sendPresenceHeartbeat(true, classIdsList);
+      }
+    }, 60000);
 
     const handleWakeUp = () => {
       if (document.visibilityState !== 'hidden') {
@@ -1518,7 +1672,9 @@ export const App: React.FC = () => {
   // Atualiza apenas activeView na presença sem marcar usuário offline durante navegação
   useEffect(() => {
     if (!user?.uid || !presenceClassIdsKey) return;
-    sendPresenceHeartbeat(true);
+    if (document.visibilityState !== 'hidden') {
+      sendPresenceHeartbeat(true);
+    }
   }, [activeView, user?.uid, presenceClassIdsKey, sendPresenceHeartbeat]);
 
   // 2.2 Escuta mensagens da classe (aluno) ou de todas as turmas (professor/admin) para o sininho verde
@@ -1757,7 +1913,8 @@ export const App: React.FC = () => {
       !currentUser ||
       currentProfile?.role !== 'aluno' ||
       !currentProfile?.classId ||
-      currentProfile?.classStatus !== 'approved'
+      currentProfile?.classStatus !== 'approved' ||
+      activeClassroomModeRef.current === 'normal'
     ) {
       return;
     }
@@ -1780,6 +1937,12 @@ export const App: React.FC = () => {
     const latestResult =
       currentResults.length > 0 ? currentResults[currentResults.length - 1] : undefined;
 
+    const stateHash = `${currentTab?.title || ''}|${liveEditorContent.length}:${liveEditorContent.slice(0, 80)}:${liveEditorContent.slice(-80)}|${snapshotTabs.length}|${activeDatabaseRef.current}|${latestResult?.status || ''}|${violationCountRef.current}`;
+    if (lastLiveHashRef.current === stateHash) {
+      return;
+    }
+    lastLiveHashRef.current = stateHash;
+
     lastLiveSyncAtRef.current = Date.now();
     syncStudentLiveState({
       classId: currentProfile.classId,
@@ -1800,13 +1963,14 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Throttle com trailing flush (1000ms) para que o código seja enviado continuamente mesmo digitando sem pausas
+  // Throttle adaptativo: 5s no Modo Avaliação e 12s no Modo Sala de Aula; desligado no Modo Normal
   useEffect(() => {
     if (
       !user ||
       userProfile?.role !== 'aluno' ||
       !userProfile?.classId ||
-      userProfile?.classStatus !== 'approved'
+      userProfile?.classStatus !== 'approved' ||
+      activeClassroomMode === 'normal'
     ) {
       if (liveSyncTimerRef.current) {
         window.clearTimeout(liveSyncTimerRef.current);
@@ -1815,20 +1979,28 @@ export const App: React.FC = () => {
       return;
     }
 
+    const throttleMs = activeClassroomMode === 'exam' ? 5000 : 12000;
     const elapsed = Date.now() - lastLiveSyncAtRef.current;
-    if (elapsed >= 1000) {
+    if (elapsed >= throttleMs) {
       if (liveSyncTimerRef.current) {
         window.clearTimeout(liveSyncTimerRef.current);
         liveSyncTimerRef.current = null;
       }
       pushStudentLiveStateNow();
     } else if (!liveSyncTimerRef.current) {
-      const waitMs = Math.max(250, 1000 - elapsed);
+      const waitMs = Math.max(500, throttleMs - elapsed);
       liveSyncTimerRef.current = window.setTimeout(() => {
         liveSyncTimerRef.current = null;
         pushStudentLiveStateNow();
       }, waitMs);
     }
+
+    return () => {
+      if (liveSyncTimerRef.current) {
+        window.clearTimeout(liveSyncTimerRef.current);
+        liveSyncTimerRef.current = null;
+      }
+    };
   }, [
     user,
     userProfile?.role,
@@ -1836,34 +2008,13 @@ export const App: React.FC = () => {
     userProfile?.classStatus,
     userProfile?.displayName,
     userProfile?.email,
+    activeClassroomMode,
     tabs,
     activeTabId,
     activeDatabase,
     results,
     pushStudentLiveStateNow,
   ]);
-
-  // Reforço periódico de sincronização ao vivo enquanto o aluno está na turma
-  useEffect(() => {
-    if (
-      !user ||
-      userProfile?.role !== 'aluno' ||
-      !userProfile?.classId ||
-      userProfile?.classStatus !== 'approved'
-    ) {
-      return;
-    }
-    const periodicTimer = window.setInterval(() => {
-      pushStudentLiveStateNow();
-    }, 10000);
-    return () => {
-      window.clearInterval(periodicTimer);
-      if (liveSyncTimerRef.current) {
-        window.clearTimeout(liveSyncTimerRef.current);
-        liveSyncTimerRef.current = null;
-      }
-    };
-  }, [user, userProfile?.role, userProfile?.classId, userProfile?.classStatus, pushStudentLiveStateNow]);
 
   // Formata título curto identificando o aluno na barra de abas do SQLEditor do professor
   const formatMirrorTabTitle = (
@@ -2500,6 +2651,7 @@ export const App: React.FC = () => {
     classExams,
     onDeliverExam: handleDeliverExam,
     onScriptSaved: handleScriptSaved,
+    onBindTabSavedScript: handleBindTabSavedScript,
     onToggleStudentMirrorLive: handleToggleStudentMirrorLive,
     onReturnToTeacherPanel: handleReturnToTeacherPanel,
   };

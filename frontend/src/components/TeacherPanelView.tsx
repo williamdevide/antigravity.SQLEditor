@@ -114,6 +114,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const [examSessionLabelInput, setExamSessionLabelInput] = useState<string>(() =>
     buildDefaultExamSessionLabel()
   );
+  const [examAutoOpenScriptIds, setExamAutoOpenScriptIds] = useState<string[]>([]);
+  const [modeChangeError, setModeChangeError] = useState<string | null>(null);
   const [isChangingMode, setIsChangingMode] = useState(false);
 
   // Admissão por E-mail
@@ -349,8 +351,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
 
   // Alteração de Modo de Turma (Normal, Sala de Aula, Avaliação)
   const requestModeChange = (mode: ClassroomMode, applyAll = false) => {
+    setModeChangeError(null);
     if (mode === 'exam') {
       setExamSessionLabelInput(buildDefaultExamSessionLabel());
+      // Pré-seleciona scripts de avaliação visíveis e eventuais exemplos marcados previamente
+      const savedSelection = selectedClass?.examAutoOpenScriptIds;
+      if (savedSelection && savedSelection.length > 0) {
+        setExamAutoOpenScriptIds(savedSelection);
+      } else {
+        const defaultExamIds = classExamMaterials
+          .filter((m) => m.visibleInExam !== false)
+          .map((m) => m.id);
+        const defaultExampleIds = classExampleMaterials
+          .filter((m) => Boolean(m.visibleInExam))
+          .map((m) => m.id);
+        setExamAutoOpenScriptIds([...defaultExamIds, ...defaultExampleIds]);
+      }
       setPendingModeChange({ mode, applyAll });
     } else {
       executeModeChange(mode, applyAll);
@@ -359,8 +375,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
 
   const executeModeChange = async (mode: ClassroomMode, applyAll: boolean) => {
     if (!user || !userProfile || !selectedClass) return;
+    setModeChangeError(null);
     const sessionOptions =
-      mode === 'exam' ? { examSessionLabel: examSessionLabelInput } : undefined;
+      mode === 'exam'
+        ? {
+            examSessionLabel: examSessionLabelInput,
+            examAutoOpenScriptIds,
+          }
+        : undefined;
     try {
       setIsChangingMode(true);
       if (applyAll) {
@@ -415,7 +437,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       setPendingModeChange(null);
     } catch (err: any) {
       console.error('[executeModeChange Error]', err);
-      showFeedback('error', 'Falha ao alterar modo da turma: ' + (err?.message || 'Erro'));
+      const errMsg = 'Falha ao alterar modo da turma: ' + (err?.message || 'Erro de permissão ou rede.');
+      setModeChangeError(errMsg);
+      showFeedback('error', errMsg);
     } finally {
       setIsChangingMode(false);
     }
@@ -759,23 +783,35 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       setPresenceList([]);
       setClassMessages([]);
       setExamAlerts([]);
-      setLiveStates([]);
       return;
     }
-    const unsubPresence = subscribeToClassPresence(selectedClass.id, setPresenceList);
+    const unsubPresence = subscribeToClassPresence(selectedClass.id, setPresenceList, user?.uid);
     const unsubMsgs = subscribeToClassMessages(selectedClass.id, setClassMessages, {
       includeArchived: true,
     });
     const unsubAlerts = subscribeToClassExamAlerts(selectedClass.id, setExamAlerts);
-    const unsubLive = subscribeToClassLiveStates(selectedClass.id, setLiveStates);
 
     return () => {
       unsubPresence();
       unsubMsgs();
       unsubAlerts();
+    };
+  }, [selectedClass?.id, user?.uid]);
+
+  // Assina espelhamento ao vivo da turma apenas fora do Modo Normal ou quando monitorando um aluno
+  useEffect(() => {
+    if (
+      !selectedClass?.id ||
+      (selectedClass.classroomMode === 'normal' && !monitoringStudent)
+    ) {
+      setLiveStates([]);
+      return;
+    }
+    const unsubLive = subscribeToClassLiveStates(selectedClass.id, setLiveStates);
+    return () => {
       unsubLive();
     };
-  }, [selectedClass?.id]);
+  }, [selectedClass?.id, selectedClass?.classroomMode, monitoringStudent]);
 
   // Zera e reseta todos os campos do modal de material didático
   const resetMaterialModal = () => {
@@ -1474,6 +1510,12 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const classExamMaterials = materials.filter(
     (m) =>
       m.category === 'exam' &&
+      selectedClass &&
+      ((m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id))
+  );
+  const classExampleMaterials = materials.filter(
+    (m) =>
+      m.category === 'example' &&
       selectedClass &&
       ((m.classIds || []).includes('all') || (m.classIds || []).includes(selectedClass.id))
   );
@@ -3350,7 +3392,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       {/* MODAL DE CONFIRMAÇÃO DE MODO AVALIAÇÃO */}
       {pendingModeChange && (
         <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-[var(--bg-surface)] border border-purple-500/40 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150 text-center">
+          <div className="bg-[var(--bg-surface)] border border-purple-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150 text-center max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto shadow-[0_0_24px_rgba(168,85,247,0.3)]">
               <span className="material-symbols-outlined text-[32px]">quiz</span>
             </div>
@@ -3362,7 +3404,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
               <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
                 Ao ativar o modo de prova, as guias abertas dos alunos serão{' '}
                 <strong className="text-purple-300">salvas como backup temporário</strong>, a tela de cada aluno será{' '}
-                <strong className="text-purple-300">automaticamente recarregada no Laboratório SQL</strong> e todas as ocorrências ficarão encapsuladas nesta avaliação.
+                <strong className="text-purple-300">recarregada no Laboratório SQL</strong> com foco automático na aba da Avaliação (protegida contra fechamento), e copiar/colar{' '}
+                <strong className="text-emerald-300">entre as abas abertas</strong> permanecerá permitido.
               </p>
             </div>
 
@@ -3380,11 +3423,112 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
               />
             </div>
 
+            {/* Seleção de scripts de Avaliação e Exemplos a abrir automaticamente nas abas */}
+            <div className="text-left space-y-2.5 p-3 rounded-2xl bg-[var(--bg-primary)]/70 border border-[var(--border-color)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-purple-300">
+                  Abas abertas automaticamente para os alunos
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  {examAutoOpenScriptIds.length} selecionado(s)
+                </span>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-purple-400 mb-1">
+                  Scripts da Avaliação (protegidos e com foco automático)
+                </p>
+                {classExamMaterials.length === 0 ? (
+                  <p className="text-[11px] text-[var(--text-muted)] italic">
+                    Nenhum script de avaliação cadastrado nesta turma (será criada aba padrão em branco).
+                  </p>
+                ) : (
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                    {classExamMaterials.map((item) => {
+                      const checked = examAutoOpenScriptIds.includes(item.id);
+                      return (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-hover)] cursor-pointer text-xs text-[var(--text-primary)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setExamAutoOpenScriptIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, item.id]
+                                  : prev.filter((id) => id !== item.id)
+                              );
+                            }}
+                            className="accent-purple-500 rounded"
+                          />
+                          <span className="truncate font-semibold">{item.title}</span>
+                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-bold">
+                            Prova
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1">
+                  Scripts de Exemplos liberados na Avaliação (cópia entre abas permitida)
+                </p>
+                {classExampleMaterials.length === 0 ? (
+                  <p className="text-[11px] text-[var(--text-muted)] italic">
+                    Nenhum script de exemplo vinculado a esta turma.
+                  </p>
+                ) : (
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                    {classExampleMaterials.map((item) => {
+                      const checked = examAutoOpenScriptIds.includes(item.id);
+                      return (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-hover)] cursor-pointer text-xs text-[var(--text-primary)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setExamAutoOpenScriptIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, item.id]
+                                  : prev.filter((id) => id !== item.id)
+                              );
+                            }}
+                            className="accent-emerald-500 rounded"
+                          />
+                          <span className="truncate">{item.title}</span>
+                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-bold">
+                            Exemplo
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {modeChangeError && (
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold text-left">
+                {modeChangeError}
+              </div>
+            )}
+
             <div className="flex items-center justify-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setPendingModeChange(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                onClick={() => {
+                  setPendingModeChange(null);
+                  setModeChangeError(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] cursor-pointer"
               >
                 Cancelar
               </button>
@@ -3392,7 +3536,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 type="button"
                 disabled={isChangingMode}
                 onClick={() => executeModeChange(pendingModeChange.mode, pendingModeChange.applyAll)}
-                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isChangingMode ? 'Ativando...' : 'Confirmar e Iniciar Avaliação'}
               </button>

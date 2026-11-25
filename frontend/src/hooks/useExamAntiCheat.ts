@@ -1,4 +1,8 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
+import {
+  recordInternalClipboard,
+  isAllowedInternalPaste,
+} from '../services/examClipboardGuard';
 import type { ExamAlertType } from '../types';
 
 interface UseExamAntiCheatOptions {
@@ -8,7 +12,7 @@ interface UseExamAntiCheatOptions {
   onPageExitPersist?: (details: string) => void;
 }
 
-// Seletores comumente injetados por extensões de IA / copilot / tradutores na página
+// Seletores comumente injetados por extensões de IA / copilot / sidebars / tradutores na página
 const KNOWN_AI_EXTENSION_SELECTORS = [
   '[id*="monica"]',
   '[class*="monica"]',
@@ -19,12 +23,27 @@ const KNOWN_AI_EXTENSION_SELECTORS = [
   '[id*="chatgpt"]',
   '[class*="chatgpt"]',
   '[id*="copilot"]',
+  '[class*="copilot"]',
+  '[data-testid*="copilot"]',
   '[id*="perplexity"]',
+  '[class*="perplexity"]',
   '[id*="claude"]',
   '[id*="gemini-sidebar"]',
+  '[id*="harpa"]',
+  '[class*="harpa"]',
+  '[id*="maxai"]',
+  '[class*="maxai"]',
+  '[id*="usechatgpt"]',
+  '[id*="liner"]',
+  '[class*="liner"]',
+  '[id*="glasp"]',
+  '[id*="poe"]',
+  '[id*="aria"]',
+  'plasmo-csui',
   'grammarly-extension',
   'grammarly-desktop-integration',
   'div[data-ext-name]',
+  'iframe[src*="extension://"]',
 ];
 
 /**
@@ -77,17 +96,55 @@ export function useExamAntiCheat({
       onAlertRef.current(type, details, severityMessage);
     };
 
-    // 1. Bloqueio de copiar / colar / recortar / arrastar texto
-    const handleClipboardBlock = (e: ClipboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const actionLabel =
-        e.type === 'paste' ? 'colar conteúdo (Paste)' : e.type === 'copy' ? 'copiar conteúdo (Copy)' : 'recortar conteúdo (Cut)';
-      triggerThrottledAlert(
-        'copy_paste_attempt',
-        `Tentativa de ${actionLabel} bloqueada durante a avaliação.`,
-        `Ação de ${actionLabel} bloqueada! O uso de área de transferência não é permitido durante o Modo Avaliação.`
-      );
+    // 1. Área de transferência: permite copiar/colar ENTRE abas internas do SQLEditor,
+    // bloqueando qualquer colagem externa de fora da prova.
+    const extractSelectedTextFromDom = (target: EventTarget | null): string => {
+      const el = target as HTMLElement | null;
+      if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+        const inputEl = el as HTMLTextAreaElement | HTMLInputElement;
+        if (
+          typeof inputEl.selectionStart === 'number' &&
+          typeof inputEl.selectionEnd === 'number' &&
+          inputEl.selectionEnd > inputEl.selectionStart
+        ) {
+          return inputEl.value.slice(inputEl.selectionStart, inputEl.selectionEnd);
+        }
+      }
+      return window.getSelection()?.toString() || '';
+    };
+
+    const handleClipboardGuard = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInsideApp = Boolean(target && target.closest('#root'));
+
+      if (e.type === 'copy' || e.type === 'cut') {
+        if (isInsideApp) {
+          const selectedText = extractSelectedTextFromDom(e.target);
+          if (selectedText) {
+            recordInternalClipboard(selectedText);
+          }
+          // Permite cópia/recorte entre abas da própria avaliação sem gerar alerta
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (e.type === 'paste') {
+        const pastedText = e.clipboardData?.getData('text/plain') || '';
+        if (isInsideApp && pastedText && isAllowedInternalPaste(pastedText)) {
+          // Colagem originada de uma aba interna da avaliação: permitida
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        triggerThrottledAlert(
+          'copy_paste_attempt',
+          'Tentativa de colar conteúdo externo bloqueada durante a avaliação.',
+          'Colar conteúdo externo de fora do SQLEditor está bloqueado durante o Modo Avaliação! Apenas copiar/colar entre as abas da prova é permitido.'
+        );
+      }
     };
 
     const handleDragOrDropBlock = (e: DragEvent) => {
@@ -104,7 +161,7 @@ export function useExamAntiCheat({
 
     const handleContextMenuBlock = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      // Permite apenas menu interno do SQL Editor caso não seja área de colagem nativa do browser
+      // Permite apenas menu interno do SQL Editor
       if (target && !target.closest('[data-allow-exam-context="true"]')) {
         e.preventDefault();
       }
@@ -113,18 +170,6 @@ export function useExamAntiCheat({
     const handleKeyDownBlock = (e: KeyboardEvent) => {
       const ctrlOrCmd = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-
-      if (ctrlOrCmd && (key === 'c' || key === 'v' || key === 'x')) {
-        e.preventDefault();
-        e.stopPropagation();
-        const op = key === 'v' ? 'Ctrl+V (Colar)' : key === 'c' ? 'Ctrl+C (Copiar)' : 'Ctrl+X (Recortar)';
-        triggerThrottledAlert(
-          'copy_paste_attempt',
-          `Atalho ${op} bloqueado no teclado durante a avaliação.`,
-          `O atalho ${op} é proibido durante a avaliação e esta tentativa foi registrada para o professor.`
-        );
-        return;
-      }
 
       // Bloqueia atalhos de DevTools (F12, Ctrl+Shift+I/J/C)
       if (
@@ -269,6 +314,69 @@ export function useExamAntiCheat({
           });
         } catch (_) {}
       }
+
+      // Varredura genérica de nós externos injetados diretamente no <body> ou <html> por extensões de IA
+      const containers = [document.body, document.documentElement];
+      for (const container of containers) {
+        if (!container) continue;
+        Array.from(container.children).forEach((el) => {
+          if (
+            el === document.head ||
+            el === document.body ||
+            el.id === 'root' ||
+            el.getAttribute('data-sql-app-portal') === 'true' ||
+            el.getAttribute('data-exam-flagged') === 'true'
+          ) {
+            return;
+          }
+          const tag = el.tagName.toLowerCase();
+          if (tag === 'style' || tag === 'noscript') return;
+
+          const srcOrHref = el.getAttribute('src') || el.getAttribute('href') || '';
+          const hasExtensionProto = /^(chrome|edge|moz|safari)-extension:\/\//i.test(srcOrHref);
+          const computed = window.getComputedStyle(el as HTMLElement);
+          const isHighOverlay =
+            computed.position === 'fixed' && Number(computed.zIndex || 0) >= 9999;
+
+          if (
+            tag.includes('-') ||
+            tag === 'iframe' ||
+            Boolean((el as HTMLElement).shadowRoot) ||
+            hasExtensionProto ||
+            isHighOverlay
+          ) {
+            el.setAttribute('data-exam-flagged', 'true');
+            neutralizeAndReportExtension(
+              el,
+              `Sobreposição ou extensão injetada na aba detectada (<${tag}> ${el.id || ''}).`.trim()
+            );
+          }
+        });
+      }
+    };
+
+    // Detecta abertura súbita de Side Panel do navegador (extensão lateral de IA / DevTools dockado)
+    let prevInnerWidth = window.innerWidth;
+    let prevOuterWidth = window.outerWidth;
+    const handleWindowResize = () => {
+      if (isDisposed || suppressExitAlertRef?.current) return;
+      const currInnerW = window.innerWidth;
+      const currOuterW = window.outerWidth;
+      const widthDrop = prevInnerWidth - currInnerW;
+      const outerDelta = Math.abs(currOuterW - prevOuterWidth);
+      const chromePanelGap = currOuterW - currInnerW;
+
+      prevInnerWidth = currInnerW;
+      prevOuterWidth = currOuterW;
+
+      if (widthDrop >= 240 && outerDelta <= 40 && chromePanelGap >= 260) {
+        triggerThrottledAlert(
+          'extension_detected',
+          `Redução brusca da área útil da aba (${widthDrop}px) compatível com abertura de Painel Lateral de IA ou inspeção dockada.`,
+          'Painel lateral do navegador detectado durante a avaliação! Feche qualquer barra lateral/extensão e mantenha apenas a janela da prova.',
+          5000
+        );
+      }
     };
 
     const observer = new MutationObserver((mutations) => {
@@ -305,9 +413,9 @@ export function useExamAntiCheat({
     scanSuspiciousElements();
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
-    document.addEventListener('copy', handleClipboardBlock, true);
-    document.addEventListener('paste', handleClipboardBlock, true);
-    document.addEventListener('cut', handleClipboardBlock, true);
+    document.addEventListener('copy', handleClipboardGuard, true);
+    document.addEventListener('paste', handleClipboardGuard, true);
+    document.addEventListener('cut', handleClipboardGuard, true);
     document.addEventListener('dragstart', handleDragOrDropBlock, true);
     document.addEventListener('drop', handleDragOrDropBlock, true);
     document.addEventListener('contextmenu', handleContextMenuBlock, true);
@@ -315,6 +423,7 @@ export function useExamAntiCheat({
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleWindowFocus);
     window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('resize', handleWindowResize);
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
 
@@ -325,9 +434,9 @@ export function useExamAntiCheat({
       clearBlurTimer();
       observer.disconnect();
       window.clearInterval(periodicExtensionCheck);
-      document.removeEventListener('copy', handleClipboardBlock, true);
-      document.removeEventListener('paste', handleClipboardBlock, true);
-      document.removeEventListener('cut', handleClipboardBlock, true);
+      document.removeEventListener('copy', handleClipboardGuard, true);
+      document.removeEventListener('paste', handleClipboardGuard, true);
+      document.removeEventListener('cut', handleClipboardGuard, true);
       document.removeEventListener('dragstart', handleDragOrDropBlock, true);
       document.removeEventListener('drop', handleDragOrDropBlock, true);
       document.removeEventListener('contextmenu', handleContextMenuBlock, true);
@@ -335,6 +444,7 @@ export function useExamAntiCheat({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
     };

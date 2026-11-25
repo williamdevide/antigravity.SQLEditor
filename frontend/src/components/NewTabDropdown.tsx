@@ -90,7 +90,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
       window.addEventListener('scroll', updatePosition, true);
     }
 
-    return () => {
+  return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', updatePosition);
@@ -141,6 +141,10 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
       setActiveSubmenu(null);
     }, 350);
   };
+
+  const personalSavedScripts = savedScripts.filter(
+    (sc) => sc.category === 'student_saved' && !sc.isTemporary
+  );
 
   return (
     <div className="relative inline-block text-left" ref={dropdownRef}>
@@ -359,7 +363,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                       <span className="text-[10px] text-[var(--text-muted)]">
                         {!user
                           ? 'Requer login'
-                          : `${savedScripts.length} ${savedScripts.length === 1 ? 'script no perfil' : 'scripts no perfil'}`}
+                          : `${personalSavedScripts.length} ${personalSavedScripts.length === 1 ? 'script no perfil' : 'scripts no perfil'}`}
                       </span>
                     </div>
                   </div>
@@ -402,18 +406,18 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                           Entrar na Conta
                         </button>
                       </div>
-                    ) : savedScripts.length === 0 ? (
+                    ) : personalSavedScripts.length === 0 ? (
                       <div className="px-3 py-4 text-center text-[var(--text-muted)] text-[11px] space-y-1">
                         <span className="material-symbols-outlined text-[20px] text-[var(--text-muted)]/60 block mx-auto">
                           bookmark_border
                         </span>
-                        <p className="font-medium text-[var(--text-primary)]">Nenhum script salvo ainda</p>
+                        <p className="font-medium text-[var(--text-primary)]">Nenhum Script Pessoal salvo ainda</p>
                         <p className="text-[10px]">
-                          Abra uma guia e use o botão <strong className="text-[var(--accent-yellow)]">Salvar no Perfil (Ctrl+S)</strong>.
+                          Abra uma guia e use <strong className="text-[var(--accent-yellow)]">Salvar no Perfil (Ctrl+S)</strong> ou <strong className="text-[#FF6B00]">Salvar Como (Script Pessoal)</strong>.
                         </p>
                       </div>
                     ) : (
-                      savedScripts.map((sc) => (
+                      personalSavedScripts.map((sc) => (
                         <button
                           key={sc.id}
                           onClick={() => handleSavedScriptClick(sc)}

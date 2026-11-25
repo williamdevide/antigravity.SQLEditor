@@ -9,6 +9,7 @@ import { getStudentExamSubmissions } from '../services/scriptService';
 import {
   subscribeToClassPresence,
   subscribeToClassMessages,
+  updateClassPresence,
   sendClassMessage,
   markClassMessagesAsRead,
 } from '../services/classroomRealtimeService';
@@ -229,9 +230,13 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
     const unsubs: Array<() => void> = [];
     classIds.forEach((cId) => {
       unsubs.push(
-        subscribeToClassPresence(cId, (items) => {
-          setPresenceByClass((prev) => ({ ...prev, [cId]: items }));
-        })
+        subscribeToClassPresence(
+          cId,
+          (items) => {
+            setPresenceByClass((prev) => ({ ...prev, [cId]: items }));
+          },
+          user?.uid
+        )
       );
       unsubs.push(
         subscribeToClassMessages(cId, (msgs) => {
@@ -243,7 +248,27 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
     return () => {
       unsubs.forEach((fn) => fn());
     };
-  }, [effectiveClassIdsKey]);
+  }, [effectiveClassIdsKey, user?.uid]);
+
+  // Reforça heartbeat imediato ao abrir a tela de Chat / trocar o filtro de turma
+  useEffect(() => {
+    if (!user?.uid || !userProfile) return;
+    const classesToPing = visibleScopeClasses.filter((cls) =>
+      isTeacherOrAdmin ? cls.teacherId === user.uid || cls.id === userProfile.classId : true
+    );
+    classesToPing.forEach((cls) => {
+      updateClassPresence({
+        classId: cls.id,
+        uid: user.uid,
+        displayName: userProfile.displayName || user.displayName || 'Usuário',
+        email: userProfile.email || user.email || '',
+        role: userProfile.role || (isTeacherOrAdmin ? 'professor' : 'aluno'),
+        photoURL: userProfile.photoURL || user.photoURL || '',
+        isOnline: true,
+        activeView: 'my-class',
+      });
+    });
+  }, [user?.uid, userProfile, visibleScopeClasses, isTeacherOrAdmin]);
 
   // Verifica se uma mensagem conta como não lida para o usuário atual (espelha o sininho da header)
   const isMessageRelevantUnread = (m: ClassMessageItem, cls: ClassItem): boolean => {

@@ -7,6 +7,7 @@ interface SaveScriptModalProps {
   onClose: () => void;
   activeTabTitle: string;
   activeTabContent: string;
+  getLiveContent?: () => string;
   user: any;
   userProfile: UserProfile | null;
   teacherClasses: ClassItem[];
@@ -20,6 +21,7 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
   onClose,
   activeTabTitle,
   activeTabContent,
+  getLiveContent,
   user,
   userProfile,
   teacherClasses,
@@ -32,7 +34,7 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
   const [title, setTitle] = useState(activeTabTitle || '');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SavedScriptCategory>(
-    isTeacherOrAdmin ? 'example' : 'student_saved'
+    isExamModeActive ? 'exam' : 'student_saved'
   );
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>(['all']);
   const [isAllClasses, setIsAllClasses] = useState(true);
@@ -43,13 +45,8 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
     if (isOpen) {
       setTitle(activeTabTitle || 'Meu Script SQL');
       setDescription('');
-      setCategory(
-        isExamModeActive
-          ? 'exam'
-          : isTeacherOrAdmin
-          ? 'example'
-          : 'student_saved'
-      );
+      // Padrão inicial: sempre "Script Pessoal" (student_saved), salvo quando em Modo Avaliação
+      setCategory(isExamModeActive ? 'exam' : 'student_saved');
       if (currentClassId) {
         setSelectedClassIds([currentClassId]);
         setIsAllClasses(false);
@@ -57,9 +54,10 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
         setSelectedClassIds(['all']);
         setIsAllClasses(true);
       }
+      setIsSaving(false);
       setErrorMessage(null);
     }
-  }, [isOpen, activeTabTitle, isTeacherOrAdmin, isExamModeActive, currentClassId]);
+  }, [isOpen, activeTabTitle, isExamModeActive, currentClassId]);
 
   if (!isOpen) return null;
 
@@ -124,11 +122,12 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
       // Formata automaticamente o título para nome de arquivo .sql em formato kebab-case
       // (ex: 'teste' -> 'teste.sql', 'meu teste' -> 'meu-teste.sql')
       const formattedTitle = formatScriptFileName(title);
+      const liveContent = getLiveContent ? getLiveContent() : activeTabContent;
 
       const saved = await saveScript({
         title: formattedTitle,
         description: description.trim(),
-        content: activeTabContent,
+        content: liveContent ?? '',
         authorUid: user.uid,
         authorName,
         authorEmail,
@@ -254,7 +253,7 @@ export const SaveScriptModal: React.FC<SaveScriptModalProps> = ({
                     <span className="material-symbols-outlined text-[16px] text-[#FF6B00]">
                       bookmark
                     </span>
-                    <span className="text-[11px]">Rascunho Pessoal</span>
+                    <span className="text-[11px]">Script Pessoal</span>
                   </label>
 
                   <label

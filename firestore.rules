@@ -38,15 +38,17 @@ rules_version = '2';
 //   - teacherEmail: string (obrigatório, tamanho até 150) - E-mail institucional do professor
 //   - createdAt: string (obrigatório, tamanho até 50) - Data ISO de criação (imutável)
 //   - active: bool (obrigatório) - Indicador se a turma está ativa
-//   - studentCount: int (opcional, >= 0) - Contador de alunos matriculados na turma
-//   - description: string (opcional, tamanho até 500) - Observações e plano pedagógico
-//   - classroomMode: string (opcional, 'normal' | 'classroom' | 'exam') - Modo de operação da sala de aula
-//   - chatEnabled: bool (opcional) - Habilita ou desabilita o chat para os alunos na turma
-//   - scriptSharingEnabled: bool (opcional) - Habilita ou desabilita o compartilhamento de scripts entre alunos
+//   - studentCount: int (opcional/null, >= 0) - Contador de alunos matriculados na turma
+//   - description: string (opcional/null, tamanho até 500) - Observações e plano pedagógico
+//   - classroomMode: string (opcional/null, 'normal' | 'classroom' | 'exam') - Modo de operação da sala de aula
+//   - chatEnabled: bool (opcional/null) - Habilita ou desabilita o chat para os alunos na turma
+//   - scriptSharingEnabled: bool (opcional/null) - Habilita ou desabilita o compartilhamento de scripts entre alunos
 //   - activeExamSessionId: string (opcional/null, tamanho até 128) - ID da sessão de avaliação ativa (null ao encerrar)
 //   - activeExamSessionLabel: string (opcional/null, tamanho até 120) - Rótulo da sessão de avaliação ativa (null ao encerrar)
 //   - activeExamStartedAt: string (tamanho até 50) ou timestamp (opcional/null) - Data/hora de início da sessão de avaliação ativa (null ao encerrar)
-//   - updatedAt: string (opcional, tamanho até 50) - Data ISO da última atualização
+//   - examAutoOpenScriptIds: list (opcional/null, máx 50 elementos) - Lista de IDs de scripts de avaliação abertos automaticamente para os alunos
+//   - updatedAt: string (tamanho até 50) ou timestamp (opcional/null) - Data/hora da última atualização
+//   - id: string (opcional/null, tamanho até 128) - ID do documento da turma
 //
 // 3. Coleção: class_members/{memberId}
 // Document ID: ID no formato `${classId}_${studentUid}`
@@ -82,7 +84,7 @@ rules_version = '2';
 // Campos:
 //   - title: string (obrigatório, tamanho 1 a 250) - Título do script SQL
 //   - description: string (opcional, tamanho até 500) - Descrição detalhada do script
-//   - content: string (obrigatório, tamanho 1 a 1000000) - Conteúdo SQL ou DDL
+//   - content: string (obrigatório, tamanho 0 a 1000000) - Conteúdo SQL ou DDL (permite conteúdo vazio em abas recém-criadas)
 //   - authorUid: string (obrigatório, tamanho 1 a 128) - UID do autor do script (imutável)
 //   - authorName: string (obrigatório, tamanho 1 a 100) - Nome do autor da publicação
 //   - authorEmail: string (obrigatório, tamanho até 150) - E-mail do autor
@@ -116,8 +118,9 @@ rules_version = '2';
 //   - role: string (opcional, 'admin' | 'professor' | 'aluno') - Papel do usuário
 //   - photoURL: string (opcional, tamanho até 1000) - URL da foto de perfil
 //   - isOnline: bool (opcional) - Indicador de conexão ativa
-//   - lastSeenAt: string (tamanho até 50) ou timestamp (opcional) - Último heartbeat de presença
-//   - activeView: string (opcional, tamanho até 100) - Visão/aba ativa na plataforma
+//   - lastSeenAt: string (tamanho até 50) ou timestamp (opcional/null) - Último heartbeat de presença
+//   - clientUpdatedAtMs: number (opcional/null, >= 0) - Timestamp em milissegundos no cliente da última atualização de presença
+//   - activeView: string (opcional/null, tamanho até 100) - Visão/aba ativa na plataforma
 //
 // 7. Coleção: class_messages/{messageId} (Chat e Compartilhamento de Scripts da Turma)
 // Document ID: ID único gerado automaticamente pelo Firestore
@@ -301,22 +304,23 @@ service cloud.firestore {
         data.teacherEmail is string && isValidEmail(data.teacherEmail) &&
         data.createdAt is string && data.createdAt.size() <= 50 &&
         data.active is bool &&
-        (!('studentCount' in data) || (data.studentCount is int && data.studentCount >= 0)) &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
-        (!('classroomMode' in data) || (data.classroomMode is string && (data.classroomMode in ['normal', 'classroom', 'exam']))) &&
+        (!('studentCount' in data) || data.studentCount == null || (data.studentCount is int && data.studentCount >= 0)) &&
+        (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 500)) &&
+        (!('classroomMode' in data) || data.classroomMode == null || (data.classroomMode is string && (data.classroomMode in ['normal', 'classroom', 'exam']))) &&
         (!('chatEnabled' in data) || data.chatEnabled == null || data.chatEnabled is bool) &&
         (!('scriptSharingEnabled' in data) || data.scriptSharingEnabled == null || data.scriptSharingEnabled is bool) &&
         (!('activeExamSessionId' in data) || data.activeExamSessionId == null || (data.activeExamSessionId is string && data.activeExamSessionId.size() <= 128)) &&
         (!('activeExamSessionLabel' in data) || data.activeExamSessionLabel == null || (data.activeExamSessionLabel is string && data.activeExamSessionLabel.size() <= 120)) &&
         (!('activeExamStartedAt' in data) || data.activeExamStartedAt == null || (data.activeExamStartedAt is string && data.activeExamStartedAt.size() <= 50) || data.activeExamStartedAt is timestamp) &&
-        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
-        (!('id' in data) || (data.id is string && data.id.size() <= 128));
+        (!('examAutoOpenScriptIds' in data) || data.examAutoOpenScriptIds == null || (data.examAutoOpenScriptIds is list && data.examAutoOpenScriptIds.size() <= 50)) &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 50) || data.updatedAt is timestamp) &&
+        (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128));
     }
 
     // Validador de esquema e limites para a coleção 'savedScripts'
     function isValidSavedScript(data) {
       return data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
-        data.content is string && data.content.size() >= 1 && data.content.size() <= 1000000 &&
+        data.content is string && data.content.size() <= 1000000 &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
         data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
         data.authorEmail is string && data.authorEmail.size() <= 150 &&
@@ -393,6 +397,7 @@ service cloud.firestore {
         (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
         (!('isOnline' in data) || data.isOnline == null || data.isOnline is bool) &&
         (!('lastSeenAt' in data) || data.lastSeenAt == null || (data.lastSeenAt is string && data.lastSeenAt.size() <= 50) || data.lastSeenAt is timestamp) &&
+        (!('clientUpdatedAtMs' in data) || data.clientUpdatedAtMs == null || (data.clientUpdatedAtMs is number && data.clientUpdatedAtMs >= 0)) &&
         (!('activeView' in data) || data.activeView == null || (data.activeView is string && data.activeView.size() <= 100));
     }
 

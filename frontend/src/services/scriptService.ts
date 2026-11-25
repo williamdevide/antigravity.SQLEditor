@@ -14,6 +14,8 @@ import {
   getAvailableSolutions,
   formatSolutionTitle,
 } from './scriptsLoader';
+import { withFirestoreTimeout } from './firestoreUtils';
+export { filterPersonalSavedScripts, computeDatabasesFingerprint } from '../utils/classroomHelpers';
 import type { SavedScriptItem, SavedScriptCategory, UserRole, AutoGradeDetails } from '../types';
 
 export const NORMAL_GLOBAL_CLASS_ID = 'normal_global';
@@ -73,12 +75,14 @@ export async function saveScript(
   const now = new Date().toISOString();
   const cleanClassIds = payload.classIds && payload.classIds.length > 0 ? payload.classIds : ['all'];
 
+  const cleanContent = payload.content ?? '';
+
   if (existingId) {
     const scriptRef = doc(db, 'savedScripts', existingId);
     const updatePayload: Partial<SavedScriptItem> = {
       title: payload.title.trim(),
       description: (payload.description || '').trim(),
-      content: payload.content,
+      content: cleanContent,
       category: payload.category,
       classIds: cleanClassIds,
       updatedAt: now,
@@ -101,10 +105,15 @@ export async function saveScript(
     if (payload.submittedAt) {
       updatePayload.submittedAt = payload.submittedAt;
     }
-    await updateDoc(scriptRef, updatePayload as any);
+    await withFirestoreTimeout(
+      updateDoc(scriptRef, updatePayload as any),
+      12000,
+      'atualizar o script no perfil'
+    );
     return {
       id: existingId,
       ...payload,
+      content: cleanContent,
       classIds: cleanClassIds,
       createdAt: now,
       updatedAt: now,
@@ -114,7 +123,7 @@ export async function saveScript(
   const docPayload: any = {
     title: payload.title.trim() || 'Script sem título',
     description: (payload.description || '').trim(),
-    content: payload.content,
+    content: cleanContent,
     authorUid: payload.authorUid,
     authorName: payload.authorName || 'Usuário',
     authorEmail: payload.authorEmail || '',
@@ -137,7 +146,11 @@ export async function saveScript(
     docPayload.submittedAt = payload.submittedAt;
   }
 
-  const docRef = await addDoc(collection(db, 'savedScripts'), docPayload);
+  const docRef = await withFirestoreTimeout(
+    addDoc(collection(db, 'savedScripts'), docPayload),
+    12000,
+    'salvar o script no perfil'
+  );
   return {
     id: docRef.id,
     ...docPayload,
@@ -169,15 +182,26 @@ export async function getUserSavedScripts(authorUid: string): Promise<SavedScrip
 }
 
 /**
- * Busca os scripts de uma turma (ou globais com 'all') disponibilizados pelo professor
- * Categorias: 'class_database', 'example', 'exercise', 'exam'
+ * Busca os scripts de uma turma (ou globais com 'all') usando consulta filtrada no servidor
+ * para evitar leitura integral da coleção em turmas com muitos alunos.
  */
 export async function getClassScripts(
   classId?: string,
   category?: SavedScriptCategory
 ): Promise<SavedScriptItem[]> {
   try {
-    const snap = await getDocs(collection(db, 'savedScripts'));
+    const scriptsRef = collection(db, 'savedScripts');
+    const q = classId
+      ? query(scriptsRef, where('classIds', 'array-contains-any', [classId, 'all']))
+      : category
+      ? query(scriptsRef, where('category', '==', category))
+      : query(scriptsRef);
+
+    const snap = await withFirestoreTimeout(
+      getDocs(q),
+      12000,
+      'carregar os materiais da turma'
+    );
     const scripts: SavedScriptItem[] = [];
 
     snap.forEach((d) => {
@@ -185,14 +209,8 @@ export async function getClassScripts(
       // Não retorna backups temporários de alunos
       if (data.isTemporary) return;
 
-      // Filtro de categoria
+      // Filtro de categoria quando combinado com filtro de turma
       if (category && data.category !== category) return;
-
-      // Filtro de turmas
-      if (classId) {
-        const belongsToClass = (data.classIds || []).includes(classId) || (data.classIds || []).includes('all');
-        if (!belongsToClass) return;
-      }
 
       scripts.push({ id: d.id, ...data });
     });

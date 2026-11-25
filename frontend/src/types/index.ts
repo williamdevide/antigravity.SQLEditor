@@ -39,6 +39,7 @@ export interface TabItem {
   content: string;
   isDirty?: boolean;
   savedScriptId?: string;
+  isProtectedExamTab?: boolean;
   studentMirror?: StudentMirrorMeta;
 }
 
@@ -214,10 +215,12 @@ export interface ClassItem {
   activeExamSessionId?: string | null; // Identificador único da avaliação ativa para encapsular ocorrências
   activeExamSessionLabel?: string | null; // Rótulo da avaliação ativa (ex.: "Avaliação 22/11 16:30")
   activeExamStartedAt?: string | null; // Timestamp ISO de início da avaliação ativa
+  examAutoOpenScriptIds?: string[] | null; // IDs de exemplos e provas selecionados para abrir automaticamente no Modo Avaliação
   chatEnabled?: boolean; // Habilita ou desabilita o chat para os alunos na turma (default true)
   scriptSharingEnabled?: boolean; // Habilita ou desabilita o compartilhamento de scripts entre alunos (default true)
   studentCount?: number;
   description?: string;
+  updatedAt?: string;
 }
 
 export interface ClassMemberItem {
@@ -323,6 +326,7 @@ export interface ClassPresenceItem {
   photoURL?: string;
   isOnline: boolean;
   lastSeenAt: string;
+  clientUpdatedAtMs?: number;
   activeView?: string;
 }
 

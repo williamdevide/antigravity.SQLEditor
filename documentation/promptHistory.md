@@ -4325,6 +4325,40 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Versão atualizada para `4.1.3` (`APP_VERSION` e `package.json`).
    - Expandida a Seção `#recursos` da Página Inicial para 15 Pilares incorporando os novos recursos de Salas/Chat, Modo Avaliação/Anti-Trapaça e Gestão de Materiais/UX, e adicionados os changelogs sequenciais `v4.1.0`, `v4.1.1`, `v4.1.2` e `v4.1.3` em `CHANGELOG_HISTORY`.
 
+---
+
+### Prompt 45
+> /agente-orquestrador /grill-me /goal no laboratorio sql estamos com alguns problemas e algumas necessidades de mudanças:
+> - em "Salvar Como no Perfil", mude a opção de flag de Rascunho Pessoal para Script Pessoal, e tudo que for salvo com esse flag aparece em Carregar Scripts Salvos.
+> - Em Carregar Scripts Salvos aparecem somente o que estiver salvo como Script Pessoal.
+> - Quando usar o Salvar no Perfil, se for o primeiro salvamento, deve salvar com a tipo padrão de Script Pessoal.
+> - O Savar no Perfil não está salvando, e o Salvar Como no Perfil, está abrindo a tela para preencher os dados, mas quando clica em Salvar, fica Salvando e na realidade não esta salvando.
+> - Quero que sempre que houver alteração nos BDs aulas, quando alunos ou professores entrarem na tela do Laboratório SQL por padrão recarregue os bancos, mas somente se houver alterações.
+> - A tela de chat não está detectando quando temos usuários online, nem ao entrar e nem quando temos mudanças de status.
+> - Em minhas turmas não está funcionando mudar de Sala de Aula para Normal ou Avaliação.
+> - Estranhamente essas opções estavam todas funcionando, verifique e principalmente estabeleça o porque parou de funcionar.
+> - Gostaria de nos scripts, quando estiver no modo sala de aula ou normal, ter uma especie de corretor ortografico que aparece nos caracteres aquelas linhazinhas vermelhas tremidas embaixo do escrito quando estiver algo incorreto. Importante esse recurso é desligado no modo avaliação.
+> - Quando entrar no modo avaliação o professor pode setar quais os scripts exemplos e qual o script da avaliação serão automaticamente abertos nas abas e importante o copiar colar entre essas abas não é considerado trapaça.
+> - Verificar se esta sendo vaidado como trapaça quando o aluno abre uma ia dentro da propria aba do navegador onde esta o script (normalmente são extensões).
+> - Alguns alunos reclamaram de lentidão hoje ao acessar a turma e tentar salvar as tarefas, ou executar scripts, as turmas tem em média 30 alunos, verifique se existem gargalos.
+> - precisamos de uma bateria de testes de recursos e qualidade para validar se estamos prontos para a semana de avaliações.
+
+**Ações Executadas:**
+1. **Diagnóstico de Causa Raiz & Escalabilidade para ~30 Alunos:**
+   - Identificados gargalos críticos que saturavam a fila/cota do Firestore: `getClassScripts` fazia scan completo na coleção `savedScripts`; `syncStudentLiveState` disparava writes a cada 1s + intervalo fixo de 10s para todos os alunos; `TeacherPanelView` mantinha listener de 30 estados ao vivo em tempo real; `updateClassPresence` gravava em todas as turmas do admin a cada 20s; `firestore.rules` rejeitava abas vazias (`content.size() >= 1`) e campos `null`/novos em `classes`; `saveScript`/`updateClassMode` não tinham timeout nem recuperação de estado; e `subscribeToClassPresence` não compensava clock skew entre relógios de máquinas locais.
+2. **Script Pessoal & Correção do Salvar / Carregar (`SaveScriptModal.tsx`, `NewTabDropdown.tsx`, `EditorWorkspace.tsx`, `App.tsx`, `scriptService.ts`, `firestoreUtils.ts`, `firestore.rules`):**
+   - Renomeada opção para `"Script Pessoal"`, filtrado **"Carregar Scripts Salvos"** estritamente para `category === 'student_saved' && !isTemporary`, corrigido `"Salvar no Perfil"` (`Ctrl+S`) para gravar como `'student_saved'` no primeiro salvamento sem mutação direta de prop/objeto e com timeout de 12s (`withFirestoreTimeout`).
+3. **Presença Online no Chat & Mudança de Modo (`classroomRealtimeService.ts`, `MyClassView.tsx`, `classService.ts`, `TeacherPanelView.tsx`, `App.tsx`, `firestore.rules`):**
+   - Compensação automática de clock skew (`clientUpdatedAtMs`) + TTL de 180s e ping imediato ao entrar no Chat; correção de validação em `isValidClass` nas `firestore.rules` e erro explícito no modal de mudança de modo; heartbeat reduzido para 60s somente em turmas próprias e pausado em guia oculta; `syncStudentLiveState` compactado e restrito aos modos `classroom` (12s) e `exam` (5s) apenas em alterações reais de conteúdo.
+4. **Recarregamento Condicional de BDs de Aula (`classroomHelpers.ts`, `scriptService.ts`, `App.tsx`):**
+   - Criado `computeDatabasesFingerprint`: ao entrar no Laboratório SQL (`workspace`), o sistema recarrega os bancos automaticamente apenas se houve alteração real nos BDs de aula.
+5. **Corretor Ortográfico SQL em Tempo Real (`sqlSpellchecker.ts`, `EditorWorkspace.tsx`):**
+   - Análise assíncrona (400ms) com marcadores vermelhos do Monaco Editor para palavras-chave SQL, aspas/parênteses e tabelas/colunas do banco ativo nos modos Normal e Sala de Aula — estritamente desligado no Modo Avaliação.
+6. **Modo Avaliação: Seletor de Abas, Cópia Interna Segura & Detecção de Extensões de IA (`TeacherPanelView.tsx`, `App.tsx`, `examClipboardGuard.ts`, `useExamAntiCheat.ts`):**
+   - Professor escolhe no modal quais scripts de **Avaliação** e **Exemplos** abrem automaticamente nas abas; abas de prova recebem foco automático e proteção contra fechamento (`isProtectedExamTab`); copiar/colar entre abas do SQLEditor é liberado (`examClipboardGuard`) enquanto colagem externa segue bloqueada; detector reforçado para sidebars/overlays/iframes/shadow DOM de extensões de IA na própria guia e Side Panel.
+7. **Bateria Automatizada de Testes (`frontend/scripts/runQualityTests.mjs`, `frontend/package.json` -> `npm run test:quality`):**
+   - Criada suíte executável cobrindo filtros de scripts, presença/clock-skew, fingerprint de BDs, encapsulamento de alertas, corretor SQL, clipboard interno da prova e invariantes de `firestore.rules`.
+
 
 
 

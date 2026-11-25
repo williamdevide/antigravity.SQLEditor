@@ -20,6 +20,8 @@ import type {
 import type { SolutionItem } from '../services/scriptsLoader';
 import { registerAllMonacoThemes, getMonacoThemeName } from '../services/monacoThemeHelper';
 import { registerEnhancedSqlLanguage } from '../services/mysqlLanguageDefinition';
+import { analyzeSqlDiagnostics } from '../services/sqlSpellchecker';
+import { recordInternalClipboard } from '../services/examClipboardGuard';
 import {
   extractStatementAtCursor,
   detectMissingPreviousSemicolon,
@@ -341,6 +343,7 @@ interface EditorWorkspaceProps {
   classExams?: SavedScriptItem[];
   onDeliverExam?: () => void;
   onScriptSaved?: (savedScript?: SavedScriptItem) => void;
+  onBindTabSavedScript?: (tabId: string, savedScriptId: string, newTitle?: string) => void;
   onToggleStudentMirrorLive?: (tabId: string) => void;
   onReturnToTeacherPanel?: () => void;
 }
@@ -396,6 +399,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   classExams = [],
   onDeliverExam,
   onScriptSaved,
+  onBindTabSavedScript,
   onToggleStudentMirrorLive,
   onReturnToTeacherPanel,
 }) => {
@@ -668,8 +672,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   }, []);
 
   // Salvar no Perfil (Ctrl+S):
-  // - Se já for uma guia salva: atualiza diretamente a versão no Firestore e notifica.
-  // - Se for uma guia não salva: salva diretamente com o nome da guia formatado como exemplo, sem descrição e com a data de hoje.
+  // - Se já for uma guia salva do próprio usuário: atualiza diretamente no Firestore e notifica.
+  // - Se for o primeiro salvamento: salva como Script Pessoal ('student_saved') para aparecer em Carregar Scripts Salvos.
   const handleDirectSaveToProfile = useCallback(async (tabToSaveOverride?: TabItem) => {
     flushPendingContent();
     const tabToSave = tabToSaveOverride || tabs.find(t => t.id === currentTabIdRef.current) || activeTab;
@@ -686,58 +690,71 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       ? editorRef.current.getValue()
       : tabToSave.content;
 
-    const isTeacherOrAdmin = userProfile?.role === 'professor' || userProfile?.role === 'admin';
     const authorName = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Usuário';
     const authorEmail = userProfile?.email || user.email || '';
     const authorRole = userProfile?.role || 'aluno';
-    const defaultCategory = isTeacherOrAdmin ? 'example' : 'student_saved';
+
+    // Verifica se o script vinculado pertence realmente ao usuário logado
+    const ownedSavedScript = tabToSave.savedScriptId
+      ? savedScripts.find((s) => s.id === tabToSave.savedScriptId && s.authorUid === user.uid)
+      : undefined;
 
     try {
-      if (tabToSave.savedScriptId) {
-        // Guia já salva: atualiza o script existente
+      if (tabToSave.savedScriptId && ownedSavedScript) {
+        // Guia já salva pelo próprio usuário: atualiza mantendo sua categoria original
+        const cleanTitle = formatScriptFileName(tabToSave.title);
         const updated = await saveScript(
           {
-            title: formatScriptFileName(tabToSave.title),
-            content: content || '',
+            title: cleanTitle,
+            description: ownedSavedScript.description || '',
+            content: content ?? '',
             authorUid: user.uid,
             authorName,
             authorEmail,
             authorRole,
-            category: defaultCategory,
+            category: ownedSavedScript.category || 'student_saved',
+            classIds: ownedSavedScript.classIds && ownedSavedScript.classIds.length > 0 ? ownedSavedScript.classIds : ['all'],
           },
           tabToSave.savedScriptId
         );
         onScriptSaved?.(updated);
         triggerSaveToast(`Script "${updated.title}" atualizado com sucesso!`);
       } else {
-        // Guia nova/não salva: salva diretamente com o nome da guia (.sql), sem descrição e com a data de hoje
+        // Primeiro salvamento (ou cópia pessoal de script externo): salva com categoria padrão 'student_saved' (Script Pessoal)
         const cleanTitle = formatScriptFileName(tabToSave.title || 'script.sql');
         const saved = await saveScript({
           title: cleanTitle,
           description: '',
-          content: content || '',
+          content: content ?? '',
           authorUid: user.uid,
           authorName,
           authorEmail,
           authorRole,
-          category: defaultCategory,
+          category: 'student_saved',
           classIds: ['all'],
           isTemporary: false,
         });
 
-        // Vincula o savedScriptId à aba ativa para que próximos Ctrl+S atualizem
-        tabToSave.savedScriptId = saved.id;
-        if (tabToSave.title !== cleanTitle) {
-          onRenameTab(tabToSave.id, cleanTitle);
-        }
+        onBindTabSavedScript?.(tabToSave.id, saved.id, cleanTitle);
         onScriptSaved?.(saved);
-        triggerSaveToast(`Script "${cleanTitle}" salvo no seu perfil!`);
+        triggerSaveToast(`Script Pessoal "${cleanTitle}" salvo no seu perfil!`);
       }
     } catch (err: any) {
       console.error('[handleDirectSaveToProfile error]', err);
       alert('Erro ao salvar script no perfil: ' + (err?.message || 'Tente novamente.'));
     }
-  }, [flushPendingContent, tabs, activeTab, user, userProfile, openAuthModal, onScriptSaved, onRenameTab, triggerSaveToast]);
+  }, [
+    flushPendingContent,
+    tabs,
+    activeTab,
+    user,
+    userProfile,
+    savedScripts,
+    openAuthModal,
+    onScriptSaved,
+    onBindTabSavedScript,
+    triggerSaveToast,
+  ]);
 
   // Exportar script da aba ativa como arquivo .sql para download
   const handleExportCurrentScript = useCallback(() => {
@@ -1002,6 +1019,46 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
     visualDecorationIdsRef.current = ed.deltaDecorations(visualDecorationIdsRef.current, newVisualDecs);
   }, [results, executedTabId, activeTabId, selectedResultIndex]);
+
+  // Corretor ortográfico SQL em tempo real (sublinhado vermelho tremido estilo spellcheck):
+  // ativo apenas nos modos Normal e Sala de Aula; estritamente desligado no Modo Avaliação.
+  useEffect(() => {
+    const ed = editorRef.current;
+    const monaco = monacoInstanceRef.current;
+    if (!ed || !monaco) return;
+    const model = ed.getModel();
+    if (!model) return;
+
+    const spellcheckDisabled = isExamModeActive || classroomMode === 'exam';
+    if (spellcheckDisabled) {
+      monaco.editor.setModelMarkers(model, 'sql-spellchecker', []);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const currentModel = editorRef.current?.getModel?.();
+      if (!currentModel || currentModel.isDisposed?.()) return;
+      const sqlText = currentModel.getValue();
+      const diagnostics = analyzeSqlDiagnostics(sqlText, activeDatabase, schemas);
+      const monacoMarkers = diagnostics.map((d) => ({
+        startLineNumber: d.startLineNumber,
+        startColumn: d.startColumn,
+        endLineNumber: d.endLineNumber,
+        endColumn: d.endColumn,
+        message: d.message,
+        severity:
+          d.severity === 'error'
+            ? monaco.MarkerSeverity.Error
+            : monaco.MarkerSeverity.Warning,
+        source: 'Corretor SQL',
+      }));
+      monaco.editor.setModelMarkers(currentModel, 'sql-spellchecker', monacoMarkers);
+    }, 380);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeTabId, activeTab?.content, activeDatabase, schemas, isExamModeActive, classroomMode]);
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -1388,12 +1445,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       },
     });
 
-    // Ações de recortar/copiar/deletar via atalho permanecem ativas sem poluir o menu de contexto
+    // Ações de recortar/copiar/deletar via atalho permanecem ativas e alimentam o buffer interno da avaliação
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
       const selection = editor.getSelection();
       if (selection && !selection.isEmpty()) {
         const text = editor.getModel()?.getValueInRange(selection);
-        if (text) navigator.clipboard.writeText(text);
+        if (text) {
+          recordInternalClipboard(text);
+          navigator.clipboard.writeText(text);
+        }
       }
     });
 
@@ -1402,6 +1462,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       if (selection && !selection.isEmpty()) {
         const text = editor.getModel()?.getValueInRange(selection);
         if (text) {
+          recordInternalClipboard(text);
           navigator.clipboard.writeText(text);
           editor.executeEdits('cut', [{ range: selection, text: '' }]);
         }
@@ -1756,24 +1817,33 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   </span>
                 )}
                 {!isEditing && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      flushPendingContent();
-                      if (monacoInstanceRef.current) {
-                        try {
-                          const uri = monacoInstanceRef.current.Uri.parse(`tab_${tab.id}.sql`);
-                          monacoInstanceRef.current.editor.getModel(uri)?.dispose();
-                        } catch (_) {}
-                      }
-                      onCloseTab(tab.id);
-                    }}
-                    title="Fechar Aba"
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/20 transition-colors ml-1"
-                    type="button"
-                  >
-                    ×
-                  </button>
+                  isExamModeActive && tab.isProtectedExamTab ? (
+                    <span
+                      title="Aba oficial da avaliação (protegida contra fechamento)"
+                      className="w-4 h-4 flex items-center justify-center text-purple-400/80 ml-1 shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-[12px]">lock</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        flushPendingContent();
+                        if (monacoInstanceRef.current) {
+                          try {
+                            const uri = monacoInstanceRef.current.Uri.parse(`tab_${tab.id}.sql`);
+                            monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                          } catch (_) {}
+                        }
+                        onCloseTab(tab.id);
+                      }}
+                      title="Fechar Aba"
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[#FF3366] hover:bg-[#FF3366]/20 transition-colors ml-1"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  )
                 )}
               </div>
             );
@@ -2251,25 +2321,27 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </button>
 
             {/* Fechar esta Aba */}
-            <button
-              onClick={() => {
-                const targetId = tabContextMenu.tabId;
-                setTabContextMenu(prev => ({ ...prev, visible: false }));
-                flushPendingContent();
-                if (monacoInstanceRef.current) {
-                  try {
-                    const uri = monacoInstanceRef.current.Uri.parse(`tab_${targetId}.sql`);
-                    monacoInstanceRef.current.editor.getModel(uri)?.dispose();
-                  } catch (_) {}
-                }
-                onCloseTab(targetId);
-              }}
-              className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[15px] text-[#FF3366]">close</span>
-              <span>Fechar</span>
-            </button>
+            {!(isExamModeActive && tabs.find((t) => t.id === tabContextMenu.tabId)?.isProtectedExamTab) && (
+              <button
+                onClick={() => {
+                  const targetId = tabContextMenu.tabId;
+                  setTabContextMenu(prev => ({ ...prev, visible: false }));
+                  flushPendingContent();
+                  if (monacoInstanceRef.current) {
+                    try {
+                      const uri = monacoInstanceRef.current.Uri.parse(`tab_${targetId}.sql`);
+                      monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                    } catch (_) {}
+                  }
+                  onCloseTab(targetId);
+                }}
+                className="w-full px-3 py-1.5 text-left text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2 transition-colors cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[15px] text-[#FF3366]">close</span>
+                <span>Fechar</span>
+              </button>
+            )}
 
             {/* Fechar Outras Abas */}
             {tabs.length > 1 && onCloseOtherTabs && (
@@ -2279,12 +2351,14 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
                   flushPendingContent();
                   if (monacoInstanceRef.current) {
-                    tabs.filter(t => t.id !== targetId).forEach(t => {
-                      try {
-                        const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
-                        monacoInstanceRef.current.editor.getModel(uri)?.dispose();
-                      } catch (_) {}
-                    });
+                    tabs
+                      .filter(t => t.id !== targetId && !(isExamModeActive && t.isProtectedExamTab))
+                      .forEach(t => {
+                        try {
+                          const uri = monacoInstanceRef.current.Uri.parse(`tab_${t.id}.sql`);
+                          monacoInstanceRef.current.editor.getModel(uri)?.dispose();
+                        } catch (_) {}
+                      });
                   }
                   onCloseOtherTabs(targetId);
                 }}
@@ -2297,7 +2371,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             )}
 
             {/* Fechar Todas as Abas */}
-            {onCloseAllTabs && (
+            {onCloseAllTabs && !isExamModeActive && (
               <button
                 onClick={() => {
                   setTabContextMenu(prev => ({ ...prev, visible: false }));
@@ -2331,6 +2405,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         onClose={() => setIsSaveScriptModalOpen(false)}
         activeTabTitle={activeTab?.title || 'script.sql'}
         activeTabContent={activeTab?.content || ''}
+        getLiveContent={() => {
+          flushPendingContent();
+          if (editorRef.current && activeTab?.id === currentTabIdRef.current) {
+            return editorRef.current.getValue() ?? activeTab?.content ?? '';
+          }
+          return activeTab?.content ?? '';
+        }}
         user={user}
         userProfile={userProfile || null}
         teacherClasses={teacherClasses}
@@ -2339,10 +2420,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         onSaveSuccess={(savedScript) => {
           setIsSaveScriptModalOpen(false);
           if (activeTab && savedScript) {
-            activeTab.savedScriptId = savedScript.id;
-            if (activeTab.title !== savedScript.title) {
-              onRenameTab(activeTab.id, savedScript.title);
-            }
+            onBindTabSavedScript?.(activeTab.id, savedScript.id, savedScript.title);
           }
           onScriptSaved?.(savedScript);
           triggerSaveToast(`Script "${savedScript?.title || 'script.sql'}" salvo com sucesso!`);
