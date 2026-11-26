@@ -112,7 +112,7 @@ export function subscribeToClassPresence(
         rawLastSeenAt,
         nowMs,
         serverClockOffsetMs,
-        180000
+        300000
       );
       return {
         ...docData,

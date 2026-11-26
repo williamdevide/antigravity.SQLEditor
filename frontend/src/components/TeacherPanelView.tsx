@@ -798,11 +798,11 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     };
   }, [selectedClass?.id, user?.uid]);
 
-  // Assina espelhamento ao vivo da turma apenas fora do Modo Normal ou quando monitorando um aluno
+  // Assina espelhamento ao vivo da turma apenas no Modo Avaliação ou quando monitorando um aluno em tela
   useEffect(() => {
     if (
       !selectedClass?.id ||
-      (selectedClass.classroomMode === 'normal' && !monitoringStudent)
+      (selectedClass.classroomMode !== 'exam' && !monitoringStudent)
     ) {
       setLiveStates([]);
       return;

@@ -4359,6 +4359,27 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 7. **Bateria Automatizada de Testes (`frontend/scripts/runQualityTests.mjs`, `frontend/package.json` -> `npm run test:quality`):**
    - Criada suíte executável cobrindo filtros de scripts, presença/clock-skew, fingerprint de BDs, encapsulamento de alertas, corretor SQL, clipboard interno da prova e invariantes de `firestore.rules`.
 
+---
+
+### Prompt 46
+> /agente-orquestrador /grill-me /goal o corretor ortografico está exibindo somente um erro por vez, além disso coloquei umas virgulas em lugares proibidos e não apontou os erros nesse tipo de caracter.
+> os outros recursos de salvamento e usuarios online no chat não funcionaram. 
+> pode ser meus limites do firebase. leia meus limites e me guie sobre a melhor atitude. se precisar que eu faça algo para você começar a ler o firebase me instrua.
+
+**Ações Executadas:**
+1. **Leitura Real de Limites & Métricas via Cloud Monitoring/Billing API (`antigravitysqleditor`):**
+   - Confirmado plano **Spark** (`billingEnabled: false`, `freeTier: true`) com cota diária estourada em gravações: **20.102 gravações** nas últimas 24h (`54 CREATE` + `20.048 UPDATE`, limite `20.000/dia`) e **43.569 leituras** (`QUERY`, limite `50.000/dia`), bloqueando `Salvar`, `Mudar Modo` e `Presença no Chat` até o reset diário e evidenciando a necessidade de publicar o novo código e regras otimizadas.
+2. **Economia Máxima de Cota Firestore (`App.tsx`, `TeacherPanelView.tsx`, `classroomHelpers.ts`, `classroomRealtimeService.ts`):**
+   - Intervalo de heartbeat de presença ampliado para **120s** (apenas em guias visíveis) com TTL de **300s**;
+   - Espelhamento ao vivo (`syncStudentLiveState` e `subscribeToClassLiveStates`) restrito exclusivamente ao **Modo Avaliação** (throttle de **15s** + deduplicação por hash), eliminando gravações em loop nos modos Normal e Sala de Aula.
+3. **Configuração e Deploy de Regras via Firebase CLI (`firebase.json`, `.firebaserc`, `firestore.rules`):**
+   - Configurados `firebase.json` e `.firebaserc` apontando para `antigravitysqleditor` e executado deploy de `firestore.rules`.
+4. **Corretor Ortográfico SQL Multi-Erro e Vírgulas Proibidas (`sqlSpellchecker.ts`, `EditorWorkspace.tsx`):**
+   - Acúmulo simultâneo de todos os diagnósticos do script inteiro + atualização em tempo real diretamente no `onDidChangeModelContent` do Monaco Editor;
+   - Detecção de typos em qualquer posição da query, validação de colunas não qualificadas em `SELECT` de tabela única e regras completas contra vírgulas proibidas (`,,`, `SELECT ,`, `, FROM`, `, WHERE`, `, )`, `( ,`, vírgula ao final de comando, vírgula em cláusulas `WHERE`/`HAVING`/`ON` fora de parênteses e junto a operadores), preservando zero falsos positivos em `SELECT *,` e `IN (1, 2)`.
+5. **Ampliação da Bateria de Qualidade (`frontend/scripts/runQualityTests.mjs`):**
+   - Adicionados testes para múltiplos erros simultâneos, vírgulas proibidas/válidas e TTL de presença de 300s.
+
 
 
 

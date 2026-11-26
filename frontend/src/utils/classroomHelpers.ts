@@ -88,7 +88,7 @@ export function computePresenceOnlineStatus(
   rawLastSeenAt: unknown,
   nowMs: number,
   serverClockOffsetMs = 0,
-  ttlMs = 180000
+  ttlMs = 300000
 ): { isOnline: boolean; lastSeenAtIso: string } {
   const serverMs = extractTimestampMs(rawLastSeenAt);
   const clientMs =

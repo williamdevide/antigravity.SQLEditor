@@ -639,6 +639,55 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   schemasRef.current = schemas;
   const activeDatabaseRef = useRef(activeDatabase);
   activeDatabaseRef.current = activeDatabase;
+  const isExamModeActiveRef = useRef(isExamModeActive);
+  isExamModeActiveRef.current = isExamModeActive;
+  const classroomModeRef = useRef(classroomMode);
+  classroomModeRef.current = classroomMode;
+  const spellcheckTimerRef = useRef<number | null>(null);
+
+  const scheduleSpellcheck = useCallback((delayMs = 280) => {
+    if (spellcheckTimerRef.current) {
+      window.clearTimeout(spellcheckTimerRef.current);
+      spellcheckTimerRef.current = null;
+    }
+
+    const runCheck = () => {
+      const ed = editorRef.current;
+      const monaco = monacoInstanceRef.current;
+      const currentModel = ed?.getModel?.();
+      if (!monaco || !currentModel || currentModel.isDisposed?.()) return;
+
+      if (isExamModeActiveRef.current || classroomModeRef.current === 'exam') {
+        monaco.editor.setModelMarkers(currentModel, 'sql-spellchecker', []);
+        return;
+      }
+
+      const sqlText = currentModel.getValue();
+      const diagnostics = analyzeSqlDiagnostics(sqlText, activeDatabaseRef.current, schemasRef.current);
+      const monacoMarkers = diagnostics.map((d) => ({
+        startLineNumber: d.startLineNumber,
+        startColumn: d.startColumn,
+        endLineNumber: d.endLineNumber,
+        endColumn: d.endColumn,
+        message: d.message,
+        severity:
+          d.severity === 'error'
+            ? monaco.MarkerSeverity.Error
+            : monaco.MarkerSeverity.Warning,
+        source: 'Corretor SQL',
+      }));
+      monaco.editor.setModelMarkers(currentModel, 'sql-spellchecker', monacoMarkers);
+    };
+
+    if (delayMs <= 0) {
+      runCheck();
+    } else {
+      spellcheckTimerRef.current = window.setTimeout(() => {
+        spellcheckTimerRef.current = null;
+        runCheck();
+      }, delayMs);
+    }
+  }, []);
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
@@ -1020,45 +1069,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     visualDecorationIdsRef.current = ed.deltaDecorations(visualDecorationIdsRef.current, newVisualDecs);
   }, [results, executedTabId, activeTabId, selectedResultIndex]);
 
-  // Corretor ortográfico SQL em tempo real (sublinhado vermelho tremido estilo spellcheck):
+  // Corretor ortográfico SQL em tempo real (múltiplos erros + vírgulas proibidas):
   // ativo apenas nos modos Normal e Sala de Aula; estritamente desligado no Modo Avaliação.
   useEffect(() => {
-    const ed = editorRef.current;
-    const monaco = monacoInstanceRef.current;
-    if (!ed || !monaco) return;
-    const model = ed.getModel();
-    if (!model) return;
-
     const spellcheckDisabled = isExamModeActive || classroomMode === 'exam';
-    if (spellcheckDisabled) {
-      monaco.editor.setModelMarkers(model, 'sql-spellchecker', []);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      const currentModel = editorRef.current?.getModel?.();
-      if (!currentModel || currentModel.isDisposed?.()) return;
-      const sqlText = currentModel.getValue();
-      const diagnostics = analyzeSqlDiagnostics(sqlText, activeDatabase, schemas);
-      const monacoMarkers = diagnostics.map((d) => ({
-        startLineNumber: d.startLineNumber,
-        startColumn: d.startColumn,
-        endLineNumber: d.endLineNumber,
-        endColumn: d.endColumn,
-        message: d.message,
-        severity:
-          d.severity === 'error'
-            ? monaco.MarkerSeverity.Error
-            : monaco.MarkerSeverity.Warning,
-        source: 'Corretor SQL',
-      }));
-      monaco.editor.setModelMarkers(currentModel, 'sql-spellchecker', monacoMarkers);
-    }, 380);
-
+    scheduleSpellcheck(spellcheckDisabled ? 0 : 250);
     return () => {
-      window.clearTimeout(timer);
+      if (spellcheckTimerRef.current) {
+        window.clearTimeout(spellcheckTimerRef.current);
+        spellcheckTimerRef.current = null;
+      }
     };
-  }, [activeTabId, activeTab?.content, activeDatabase, schemas, isExamModeActive, classroomMode]);
+  }, [activeTabId, activeTab?.content, activeDatabase, schemas, isExamModeActive, classroomMode, scheduleSpellcheck]);
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -1113,8 +1135,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       });
     }
 
+    // Diagnóstico inicial após montagem do Monaco Editor
+    scheduleSpellcheck(80);
+
     // Auto-capitalização em tempo real + Auto-inserção inteligente de ';' no comando anterior não finalizado
     editor.onDidChangeModelContent((e) => {
+      scheduleSpellcheck(280);
       if (isAutoCapitalizingRef.current) return;
       if (!e.changes || e.changes.length === 0) return;
 

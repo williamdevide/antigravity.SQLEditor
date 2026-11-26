@@ -1644,7 +1644,7 @@ export const App: React.FC = () => {
       if (document.visibilityState !== 'hidden') {
         sendPresenceHeartbeat(true, classIdsList);
       }
-    }, 60000);
+    }, 120000);
 
     const handleWakeUp = () => {
       if (document.visibilityState !== 'hidden') {
@@ -1914,7 +1914,7 @@ export const App: React.FC = () => {
       currentProfile?.role !== 'aluno' ||
       !currentProfile?.classId ||
       currentProfile?.classStatus !== 'approved' ||
-      activeClassroomModeRef.current === 'normal'
+      activeClassroomModeRef.current !== 'exam'
     ) {
       return;
     }
@@ -1963,14 +1963,14 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Throttle adaptativo: 5s no Modo Avaliação e 12s no Modo Sala de Aula; desligado no Modo Normal
+  // Economia máxima Firestore: espelho ao vivo envia apenas no Modo Avaliação (throttle 15s + dedup por hash)
   useEffect(() => {
     if (
       !user ||
       userProfile?.role !== 'aluno' ||
       !userProfile?.classId ||
       userProfile?.classStatus !== 'approved' ||
-      activeClassroomMode === 'normal'
+      activeClassroomMode !== 'exam'
     ) {
       if (liveSyncTimerRef.current) {
         window.clearTimeout(liveSyncTimerRef.current);
@@ -1979,7 +1979,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    const throttleMs = activeClassroomMode === 'exam' ? 5000 : 12000;
+    const throttleMs = 15000;
     const elapsed = Date.now() - lastLiveSyncAtRef.current;
     if (elapsed >= throttleMs) {
       if (liveSyncTimerRef.current) {

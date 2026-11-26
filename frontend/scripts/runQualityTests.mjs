@@ -106,10 +106,14 @@ await runTest('2.1 computePresenceOnlineStatus mantém usuário online com skew 
   assert.equal(res.isOnline, true);
 });
 
-await runTest('2.2 computePresenceOnlineStatus marca offline quando TTL (180s) expira ou isOnline=false', () => {
+await runTest('2.2 computePresenceOnlineStatus mantém online até 240s e marca offline quando TTL (300s) expira ou isOnline=false', () => {
   const nowMs = 1_700_000_000_000;
   assert.equal(
-    helpers.computePresenceOnlineStatus({ isOnline: true }, nowMs - 200_000, nowMs).isOnline,
+    helpers.computePresenceOnlineStatus({ isOnline: true }, nowMs - 240_000, nowMs).isOnline,
+    true
+  );
+  assert.equal(
+    helpers.computePresenceOnlineStatus({ isOnline: true }, nowMs - 320_000, nowMs).isOnline,
     false
   );
   assert.equal(
@@ -241,6 +245,41 @@ await runTest('5.4 analyzeSqlDiagnostics detecta string não fechada e parêntes
     sampleSchemas
   );
   assert.ok(diagsParen.some((d) => d.message.includes('(') || d.message.includes('Parêntese')));
+});
+
+await runTest('5.5 analyzeSqlDiagnostics reporta múltiplos erros simultâneos na mesma instrução SQL', () => {
+  const diags = spellchecker.analyzeSqlDiagnostics(
+    'SELEC nomme, emaill FRM alunoss WHER id = 1;',
+    'escola',
+    sampleSchemas
+  );
+  assert.ok(diags.length >= 4, `Esperado >= 4 diagnósticos simultâneos, obtido ${diags.length}: ${JSON.stringify(diags)}`);
+  assert.ok(diags.some((d) => d.message.includes('SELECT')));
+  assert.ok(diags.some((d) => d.message.includes('FROM')));
+  assert.ok(diags.some((d) => d.message.includes('WHERE')));
+  assert.ok(diags.some((d) => d.message.includes('alunoss')));
+});
+
+await runTest('5.6 analyzeSqlDiagnostics detecta vírgulas proibidas sem gerar falso positivo em vírgulas válidas', () => {
+  const invalidSqlCases = [
+    'SELECT , nome FROM alunos;',
+    'SELECT nome, FROM alunos;',
+    'SELECT nome,, email FROM alunos;',
+    "SELECT * FROM alunos WHERE id = 1, nome = 'Ana';",
+    'CREATE TABLE teste (id INT, nome TEXT,);',
+    'SELECT nome FROM alunos,;',
+  ];
+  for (const sqlCase of invalidSqlCases) {
+    const diags = spellchecker.analyzeSqlDiagnostics(sqlCase, 'escola', sampleSchemas);
+    assert.ok(
+      diags.some((d) => d.message.toLowerCase().includes('vírgula')),
+      `Vírgula proibida não detectada em: ${sqlCase}`
+    );
+  }
+
+  const validSql = "SELECT *, nome FROM alunos WHERE id IN (1, 2, 3) AND COALESCE(nome, 'x') <> '';";
+  const validDiags = spellchecker.analyzeSqlDiagnostics(validSql, 'escola', sampleSchemas);
+  assert.equal(validDiags.length, 0, `Falsos positivos em vírgula válida: ${JSON.stringify(validDiags)}`);
 });
 
 // ---------------------------------------------------------------------------
