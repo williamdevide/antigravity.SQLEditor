@@ -179,24 +179,34 @@ export async function syncUserProfile(
 
     const turma = role === 'professor' ? '' : (effectiveExtraData?.turma || '');
 
-    // Novo perfil a ser gravado no Firestore
+    // Novo perfil a ser gravado no Firestore (com truncagem segura compatível com firestore.rules)
+    const safeCourse = (course || DEFAULT_COURSE).trim().slice(0, 100);
+    const safeTurma = (turma || '').trim().slice(0, 100);
+    const safeDisplayName = (
+      effectiveExtraData?.fullName ||
+      user.displayName ||
+      (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor')
+    )
+      .trim()
+      .slice(0, 100);
+
     const newProfile: UserProfile = {
       uid: user.uid,
-      email: user.email || '',
-      displayName: effectiveExtraData?.fullName || user.displayName || (role === 'professor' ? 'Professor(a) SQLEditor' : 'Aluno(a) SQLEditor'),
+      email: (user.email || '').trim().slice(0, 150),
+      displayName: safeDisplayName || 'Aluno(a) SQLEditor',
       role,
       status,
-      course,
-      turma,
-      courseOrClass: turma ? `${course} - ${turma}` : course,
-      registrationNumber: effectiveExtraData?.registrationNumber || '',
-      phone: effectiveExtraData?.phone || '',
-      photoURL: user.photoURL || '',
-      classCode: role === 'aluno' ? (effectiveExtraData?.classCode?.trim().toUpperCase() || '') : '',
+      course: safeCourse,
+      turma: safeTurma,
+      courseOrClass: (safeTurma ? `${safeCourse} - ${safeTurma}` : safeCourse).slice(0, 150),
+      registrationNumber: (effectiveExtraData?.registrationNumber || '').trim().slice(0, 50),
+      phone: (effectiveExtraData?.phone || '').trim().slice(0, 30),
+      photoURL: (user.photoURL || '').slice(0, 1000),
+      classCode: role === 'aluno' ? (effectiveExtraData?.classCode?.trim().toUpperCase().slice(0, 10) || '') : '',
       classStatus: role === 'aluno' && effectiveExtraData?.classCode ? 'pending' : 'none',
       createdAt: new Date().toISOString(),
       emailVerified: user.emailVerified,
-      providerId: user.providerData[0]?.providerId || 'password',
+      providerId: (user.providerData[0]?.providerId || 'password').slice(0, 50),
     };
 
     await setDoc(userDocRef, newProfile);

@@ -275,7 +275,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return (!('uid' in data) || data.uid == null || (data.uid is string && data.uid.size() <= 128)) &&
         (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 150)) &&
-        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 100)) &&
+        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 150)) &&
         (!('role' in data) || data.role == null || (data.role is string && (data.role in ['admin', 'professor', 'aluno']))) &&
         (!('status' in data) || data.status == null || (data.status is string && (data.status in ['active', 'pending_approval', 'rejected']))) &&
         (!('course' in data) || data.course == null || (data.course is string && data.course.size() <= 100)) &&
@@ -283,7 +283,7 @@ service cloud.firestore {
         (!('courseOrClass' in data) || data.courseOrClass == null || (data.courseOrClass is string && data.courseOrClass.size() <= 150)) &&
         (!('registrationNumber' in data) || data.registrationNumber == null || (data.registrationNumber is string && data.registrationNumber.size() <= 50)) &&
         (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 30)) &&
-        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 150000)) &&
         (!('classId' in data) || data.classId == null || (data.classId is string && data.classId.size() <= 128)) &&
         (!('className' in data) || data.className == null || (data.className is string && data.className.size() <= 100)) &&
         (!('classCode' in data) || data.classCode == null || (data.classCode is string && data.classCode.size() <= 10)) &&
@@ -362,9 +362,9 @@ service cloud.firestore {
         data.studentEmail is string && isValidEmail(data.studentEmail) &&
         data.status is string && (data.status in ['pending', 'approved']) &&
         data.requestedAt is string && data.requestedAt.size() <= 50 &&
-        (!('studentRegistration' in data) || (data.studentRegistration is string && data.studentRegistration.size() <= 50)) &&
-        (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 50)) &&
-        (!('id' in data) || (data.id is string && data.id.size() <= 260));
+        (!('studentRegistration' in data) || data.studentRegistration == null || (data.studentRegistration is string && data.studentRegistration.size() <= 50)) &&
+        (!('approvedAt' in data) || data.approvedAt == null || (data.approvedAt is string && data.approvedAt.size() <= 50)) &&
+        (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 260));
     }
 
     // Validador de esquema e limites para a coleção 'system_events'
@@ -617,7 +617,8 @@ service cloud.firestore {
                          )
                        );
 
-      // Atualização: o professor dono da turma aprovando solicitação (status -> 'approved') ou Administrador
+      // Atualização: o professor dono da turma aprovando solicitação (status -> 'approved'),
+      // o próprio aluno atualizando solicitação ainda pendente, ou Administrador
       // Campos imutáveis: classId, studentUid e requestedAt
       allow update: if isAuthenticated() &&
                        isValidClassMember(request.resource.data) &&
@@ -629,6 +630,13 @@ service cloud.firestore {
                            request.resource.data.studentUid == resource.data.studentUid &&
                            request.resource.data.requestedAt == resource.data.requestedAt &&
                            request.resource.data.status == 'approved'
+                         ) ||
+                         (
+                           resource.data.studentUid == request.auth.uid &&
+                           resource.data.status == 'pending' &&
+                           request.resource.data.status == 'pending' &&
+                           request.resource.data.classId == resource.data.classId &&
+                           request.resource.data.studentUid == resource.data.studentUid
                          )
                        );
 

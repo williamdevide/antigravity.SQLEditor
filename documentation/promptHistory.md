@@ -4457,3 +4457,34 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
    - Padronizada a escala **0 a 100** (destaque verde a partir de 60 pts) em toda a interface.
 5. **Validação & Testes (`frontend/scripts/runQualityTests.mjs`):**
    - Adicionados testes 8.1, 8.2 e 8.3 cobrindo remoção de comentários, escala 0–100, peso igual por questão, pontuação parcial proporcional e regras `exam_sessions` (20/20 passando).
+
+---
+
+### Prompt 50
+```text
+ao salvar a avalaiação apareceu: Erro ao salvar avaliação e nota: Function updateDoc() called with invalid data. Unsupported field value: undefined (found in document savedScripts/LEQePIOVQqcP1wA2IIYp)
+```
+
+**Ações Executadas:**
+1. **Sanitização de `undefined` no Firestore (`scriptService.ts`, `autoGraderService.ts`):**
+   - Corrigida `gradeExamSubmission` em `scriptService.ts` para sanitizar `autoGradeDetails` removendo quaisquer chaves `undefined` aninhadas antes de enviar para `updateDoc`, e corrigido o teto de validação da nota para `100` (`Math.max(0, Math.min(100, ...))` em vez de `Math.min(10, ...)`).
+   - Corrigidos os objetos de retorno de `autoGraderService.ts` para incluir a propriedade `error` somente quando definida (`...(act.error ? { error: act.error } : {})`).
+2. **Validação:**
+   - Suíte `test:quality` (20/20) e `npm --prefix frontend run build` validados após a correção.
+
+---
+
+### Prompt 51
+```text
+tem uma aluno que logou na plataforma mas não aparece para que o professor coloque ela em uma turma. ao tentar colocar o codigo da turma no perfil da aluna aparece missing or insuficient permission
+```
+
+**Ações Executadas:**
+1. **Regras do Firestore (`firestore.rules`):**
+   - Ampliado `isValidUser` (`photoURL <= 150000` e `displayName <= 150`) e tolerância a `null` em campos opcionais de `isValidClassMember`;
+   - Permitida atualização pelo próprio aluno de solicitação pendente em `class_members` (`resource.data.status == 'pending' && request.resource.data.status == 'pending'`).
+2. **Auto-cura do perfil no ingresso em turma (`classService.ts` -> `requestJoinClass`) e sanitização (`authService.ts` -> `syncUserProfile`):**
+   - `syncUserProfile` agora trunca campos de string aos limites das regras para impedir criação silenciosa apenas em fallback;
+   - `requestJoinClass` verifica se o documento `users/{uid}` já existe no Firestore — caso estivesse ausente (apenas fallback local), cria automaticamente o registro completo via `setDoc`, além de verificar se já existe vínculo em `class_members` e isolar auditoria em `try/catch`.
+3. **Deploy e Validação:**
+   - Publicadas as novas `firestore.rules`, validados testes (`test:quality`) e build de produção.

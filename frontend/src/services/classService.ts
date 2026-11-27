@@ -149,42 +149,87 @@ export async function requestJoinClass(params: {
   student: UserProfile;
 }): Promise<void> {
   const memberDocId = `${params.classItem.id}_${params.student.uid}`;
-  const memberPayload: ClassMemberItem = {
-    id: memberDocId,
-    classId: params.classItem.id,
-    classCode: params.classItem.code,
-    className: params.classItem.name,
-    studentUid: params.student.uid,
-    studentName: params.student.displayName,
-    studentEmail: params.student.email,
-    studentRegistration: params.student.registrationNumber || '',
-    status: 'pending',
-    requestedAt: new Date().toISOString(),
-  };
+  const nowIso = new Date().toISOString();
+  const safeStudentName = (params.student.displayName || 'Aluno(a) SQLEditor').trim().slice(0, 100) || 'Aluno(a) SQLEditor';
+  const safeStudentEmail = (params.student.email || '').trim().slice(0, 150);
+  const safeReg = (params.student.registrationNumber || '').trim().slice(0, 50);
 
-  // 1. Grava o registro do membro
-  await setDoc(doc(db, 'class_members', memberDocId), memberPayload);
+  // 1. Verifica se já existe vínculo em class_members (ex: já aprovado) antes de gravar solicitação
+  const memberRef = doc(db, 'class_members', memberDocId);
+  let targetClassStatus: 'pending' | 'approved' = 'pending';
+  const existingMemberSnap = await getDoc(memberRef);
 
-  // 2. Atualiza o perfil do aluno
-  await updateDoc(doc(db, 'users', params.student.uid), {
-    classId: params.classItem.id,
-    className: params.classItem.name,
-    classCode: params.classItem.code,
-    classStatus: 'pending',
-    turma: params.classItem.name,
-    updatedAt: new Date().toISOString(),
-  });
+  if (existingMemberSnap.exists() && existingMemberSnap.data()?.status === 'approved') {
+    targetClassStatus = 'approved';
+  } else {
+    const memberPayload: ClassMemberItem = {
+      id: memberDocId,
+      classId: params.classItem.id,
+      classCode: params.classItem.code,
+      className: params.classItem.name.slice(0, 100),
+      studentUid: params.student.uid,
+      studentName: safeStudentName,
+      studentEmail: safeStudentEmail,
+      studentRegistration: safeReg,
+      status: 'pending',
+      requestedAt: existingMemberSnap.exists()
+        ? (existingMemberSnap.data()?.requestedAt || nowIso)
+        : nowIso,
+    };
+    await setDoc(memberRef, memberPayload);
+  }
 
-  // 3. Auditoria
-  await logSystemEvent({
-    type: 'CLASS_STUDENT_REQUESTED',
-    authorUid: params.student.uid,
-    authorName: params.student.displayName,
-    authorEmail: params.student.email,
-    targetUid: params.classItem.teacherId,
-    targetName: params.classItem.name,
-    details: `Aluno ${params.student.displayName} solicitou entrada na turma "${params.classItem.name}" via código [${params.classItem.code}].`,
-  });
+  // 2. Garante que o documento do aluno exista em 'users/{uid}' (auto-cura caso o perfil inicial tenha ficado apenas em fallback)
+  const userRef = doc(db, 'users', params.student.uid);
+  const userSnap = await getDoc(userRef);
+
+  if (userSnap.exists()) {
+    await updateDoc(userRef, {
+      classId: params.classItem.id,
+      className: params.classItem.name.slice(0, 100),
+      classCode: params.classItem.code,
+      classStatus: targetClassStatus,
+      turma: params.classItem.name.slice(0, 100),
+      updatedAt: nowIso,
+    });
+  } else {
+    await setDoc(userRef, {
+      uid: params.student.uid,
+      email: safeStudentEmail,
+      displayName: safeStudentName,
+      role: 'aluno',
+      status: 'active',
+      course: (params.student.course || 'Técnico em Desenvolvimento de Sistemas').slice(0, 100),
+      turma: params.classItem.name.slice(0, 100),
+      courseOrClass: params.classItem.course?.slice(0, 150) || params.classItem.name.slice(0, 150),
+      registrationNumber: safeReg,
+      phone: (params.student.phone || '').slice(0, 30),
+      photoURL: (params.student.photoURL || '').slice(0, 1000),
+      classId: params.classItem.id,
+      className: params.classItem.name.slice(0, 100),
+      classCode: params.classItem.code,
+      classStatus: targetClassStatus,
+      createdAt: params.student.createdAt || nowIso,
+      updatedAt: nowIso,
+      emailVerified: Boolean(params.student.emailVerified),
+      providerId: (params.student.providerId || 'password').slice(0, 50),
+    });
+  }
+
+  // 3. Auditoria (não deve bloquear a solicitação caso falhe)
+  try {
+    await logSystemEvent({
+      type: 'CLASS_STUDENT_REQUESTED',
+      authorUid: params.student.uid,
+      authorName: safeStudentName,
+      authorEmail: safeStudentEmail,
+      targetUid: params.classItem.teacherId,
+      targetName: params.classItem.name,
+      details: `Aluno ${safeStudentName} solicitou entrada na turma "${params.classItem.name}" via código [${params.classItem.code}].`,
+    });
+  } catch (auditErr) {
+    console.warn('[ClassService] Aviso ao auditar solicitação de entrada na turma:', auditErr);
+  }
 }
 
 /**

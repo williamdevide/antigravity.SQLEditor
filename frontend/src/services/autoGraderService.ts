@@ -571,7 +571,7 @@ function evaluateQuestionProportional(
     expectedSummary,
     actualSummary,
     breakdown,
-    error: act.error,
+    ...(act.error ? { error: act.error } : {}),
   };
 }
 
@@ -633,7 +633,7 @@ export function autoGradeStudentSubmission(params: {
           ? `Erro: ${r.error}`
           : `${r.rows.length} registro(s) retornado(s)`,
         breakdown: [ok ? '✓ Executou sem erros' : `✗ Erro: ${r.error}`],
-        error: r.error,
+        ...(r.error ? { error: r.error } : {}),
       };
     });
 

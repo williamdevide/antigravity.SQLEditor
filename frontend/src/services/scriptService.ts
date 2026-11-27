@@ -420,7 +420,7 @@ export async function gradeExamSubmission(
   const now = new Date().toISOString();
   const scriptRef = doc(db, 'savedScripts', submissionId);
   const updateData: Record<string, any> = {
-    grade: Math.max(0, Math.min(10, Number(payload.grade) || 0)),
+    grade: Math.max(0, Math.min(100, Number(payload.grade) || 0)),
     teacherFeedback: (payload.teacherFeedback || '').trim(),
     gradedBy: payload.gradedBy,
     gradedAt: now,
@@ -428,7 +428,8 @@ export async function gradeExamSubmission(
     updatedAt: now,
   };
   if (payload.autoGradeDetails) {
-    updateData.autoGradeDetails = payload.autoGradeDetails;
+    // Remove quaisquer campos 'undefined' aninhados antes de enviar ao Firestore updateDoc
+    updateData.autoGradeDetails = JSON.parse(JSON.stringify(payload.autoGradeDetails));
   }
   await updateDoc(scriptRef, updateData);
 }
