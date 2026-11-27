@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { ZoomControl } from './ZoomControl';
 import { NewTabDropdown } from './NewTabDropdown';
@@ -335,12 +335,15 @@ interface EditorWorkspaceProps {
   isExamModeActive?: boolean;
   isEditorFrozen?: boolean;
   classroomName?: string;
+  examStartedAt?: string | null;
+  examDurationMinutes?: number | null;
   savedScripts?: SavedScriptItem[];
   onSelectSavedScript?: (script: SavedScriptItem) => void;
   classExamples?: SavedScriptItem[];
   classExercises?: SavedScriptItem[];
   classSolutions?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
+  deliveredExams?: SavedScriptItem[];
   onDeliverExam?: () => void;
   onScriptSaved?: (savedScript?: SavedScriptItem) => void;
   onBindTabSavedScript?: (tabId: string, savedScriptId: string, newTitle?: string) => void;
@@ -391,12 +394,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   isExamModeActive = false,
   isEditorFrozen = false,
   classroomName,
+  examStartedAt,
+  examDurationMinutes,
   savedScripts = [],
   onSelectSavedScript,
   classExamples = [],
   classExercises = [],
   classSolutions = [],
   classExams = [],
+  deliveredExams = [],
   onDeliverExam,
   onScriptSaved,
   onBindTabSavedScript,
@@ -459,6 +465,41 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const handleCloseContextMenu = useCallback(() => {
     setEditorContextMenu(prev => prev.visible ? { ...prev, visible: false } : prev);
   }, []);
+
+  // Cronômetro da Avaliação (Duração estimada visível para os alunos)
+  const [examRemainingSeconds, setExamRemainingSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isExamModeActive || !examStartedAt || !examDurationMinutes || examDurationMinutes <= 0) {
+      setExamRemainingSeconds(null);
+      return;
+    }
+
+    const calculateRemaining = () => {
+      const startMs = new Date(examStartedAt).getTime();
+      const totalSec = examDurationMinutes * 60;
+      const elapsedSec = Math.floor((Date.now() - startMs) / 1000);
+      return Math.max(0, totalSec - elapsedSec);
+    };
+
+    setExamRemainingSeconds(calculateRemaining());
+    const timer = setInterval(() => {
+      setExamRemainingSeconds(calculateRemaining());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isExamModeActive, examStartedAt, examDurationMinutes]);
+
+  const formattedExamTimer = useMemo(() => {
+    if (examRemainingSeconds === null) return null;
+    const hours = Math.floor(examRemainingSeconds / 3600);
+    const mins = Math.floor((examRemainingSeconds % 3600) / 60);
+    const secs = examRemainingSeconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+    }
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [examRemainingSeconds]);
 
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
@@ -748,7 +789,38 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       ? savedScripts.find((s) => s.id === tabToSave.savedScriptId && s.authorUid === user.uid)
       : undefined;
 
+    // Regra estrita: scripts da categoria 'exam_submission' (Avaliações Entregues) são imutáveis e protegidos contra sobrescrita
+    const isExamSubmission =
+      ownedSavedScript?.category === 'exam_submission' ||
+      tabToSave.savedScriptId?.startsWith('exam_sub_') ||
+      tabToSave.title.startsWith('[Entrega]');
+
     try {
+      if (isExamSubmission) {
+        // Aluno pode carregar a prova entregue para estudo e salvá-la como uma NOVA cópia em Scripts Salvos,
+        // mas o script original entregue em Avaliações Entregues nunca pode ser sobrescrito.
+        const cleanTitle = formatScriptFileName(
+          tabToSave.title.replace(/^\[Entrega\]\s*/i, 'copia_') || 'estudo_avaliacao.sql'
+        );
+        const saved = await saveScript({
+          title: cleanTitle,
+          description: `Cópia pessoal de estudo criada a partir da avaliação entregue em ${new Date().toLocaleString('pt-BR')}`,
+          content: content ?? '',
+          authorUid: user.uid,
+          authorName,
+          authorEmail,
+          authorRole,
+          category: 'student_saved',
+          classIds: ['all'],
+          isTemporary: false,
+        });
+
+        onBindTabSavedScript?.(tabToSave.id, saved.id, cleanTitle);
+        onScriptSaved?.(saved);
+        triggerSaveToast(`Salvo como nova cópia pessoal "${cleanTitle}" em Scripts Salvos (entrega original protegida).`);
+        return;
+      }
+
       if (tabToSave.savedScriptId && ownedSavedScript) {
         // Guia já salva pelo próprio usuário: atualiza mantendo sua categoria original
         const cleanTitle = formatScriptFileName(tabToSave.title);
@@ -1731,6 +1803,19 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 Turma: {classroomName}
               </span>
             )}
+            {formattedExamTimer && (
+              <span
+                className={`flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded font-bold border ${
+                  examRemainingSeconds && examRemainingSeconds < 300
+                    ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse'
+                    : 'bg-purple-800/60 text-purple-200 border-purple-400/30'
+                }`}
+                title="Tempo estimado de prova (encerramento é sempre manual pelo professor)"
+              >
+                <span className="material-symbols-outlined text-[13px]">timer</span>
+                <span>Tempo restante: {formattedExamTimer}</span>
+              </span>
+            )}
             <span className="hidden md:inline text-[11px] text-purple-300/80">
               — Abas avulsas bloqueadas. Salve suas respostas e entregue ao professor ao finalizar.
             </span>
@@ -1913,6 +1998,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               classExercises={classExercises}
               classSolutions={classSolutions}
               classExams={classExams}
+              deliveredExams={deliveredExams}
               classroomMode={classroomMode}
               isExamModeActive={isExamModeActive}
               align="left"
@@ -2130,6 +2216,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         {editorContextMenu.visible && (
           <div
             ref={editorContextMenuRef}
+            data-allow-exam-context="true"
+            data-sql-app-portal="true"
             style={{
               position: 'fixed',
               left: `${editorContextMenu.x}px`,
@@ -2278,6 +2366,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         {tabContextMenu.visible && (
           <div
             ref={tabContextMenuRef}
+            data-allow-exam-context="true"
+            data-sql-app-portal="true"
             style={{
               position: 'fixed',
               left: `${tabContextMenu.x}px`,

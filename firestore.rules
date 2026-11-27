@@ -312,6 +312,9 @@ service cloud.firestore {
         (!('activeExamSessionId' in data) || data.activeExamSessionId == null || (data.activeExamSessionId is string && data.activeExamSessionId.size() <= 128)) &&
         (!('activeExamSessionLabel' in data) || data.activeExamSessionLabel == null || (data.activeExamSessionLabel is string && data.activeExamSessionLabel.size() <= 120)) &&
         (!('activeExamStartedAt' in data) || data.activeExamStartedAt == null || (data.activeExamStartedAt is string && data.activeExamStartedAt.size() <= 50) || data.activeExamStartedAt is timestamp) &&
+        (!('activeExamDurationMinutes' in data) || data.activeExamDurationMinutes == null || data.activeExamDurationMinutes is int || data.activeExamDurationMinutes is number) &&
+        (!('activeExamEndedAt' in data) || data.activeExamEndedAt == null || (data.activeExamEndedAt is string && data.activeExamEndedAt.size() <= 50) || data.activeExamEndedAt is timestamp) &&
+        (!('lastEndedExamSessionId' in data) || data.lastEndedExamSessionId == null || (data.lastEndedExamSessionId is string && data.lastEndedExamSessionId.size() <= 128)) &&
         (!('examAutoOpenScriptIds' in data) || data.examAutoOpenScriptIds == null || (data.examAutoOpenScriptIds is list && data.examAutoOpenScriptIds.size() <= 50)) &&
         (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 50) || data.updatedAt is timestamp) &&
         (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128));
@@ -342,6 +345,10 @@ service cloud.firestore {
         (!('autoGradeDetails' in data) || data.autoGradeDetails == null || (data.autoGradeDetails is map && data.autoGradeDetails.size() <= 50)) &&
         (!('isTemporary' in data) || data.isTemporary == null || data.isTemporary is bool) &&
         (!('submittedAt' in data) || data.submittedAt == null || (data.submittedAt is string && data.submittedAt.size() <= 50)) &&
+        (!('examSessionId' in data) || data.examSessionId == null || (data.examSessionId is string && data.examSessionId.size() <= 128)) &&
+        (!('examSessionLabel' in data) || data.examSessionLabel == null || (data.examSessionLabel is string && data.examSessionLabel.size() <= 120)) &&
+        (!('submissionVersion' in data) || data.submissionVersion == null || data.submissionVersion is int || data.submissionVersion is number) &&
+        (!('isLatestSubmission' in data) || data.isLatestSubmission == null || data.isLatestSubmission is bool) &&
         (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128));
     }
 
@@ -455,6 +462,23 @@ service cloud.firestore {
         (!('frozenMessage' in data) || data.frozenMessage == null || (data.frozenMessage is string && data.frozenMessage.size() <= 1000)) &&
         (!('violationCount' in data) || data.violationCount == null || (data.violationCount is int && data.violationCount >= 0)) &&
         (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is string && data.updatedAt.size() <= 50) || data.updatedAt is timestamp);
+    }
+
+    // Validador de esquema e limites para a coleção 'exam_sessions'
+    function isValidExamSession(data) {
+      return data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
+        data.label is string && data.label.size() >= 1 && data.label.size() <= 120 &&
+        data.status is string && (data.status in ['active', 'ended']) &&
+        data.startedAt is string && data.startedAt.size() <= 50 &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is string && data.createdAt.size() <= 50 &&
+        data.updatedAt is string && data.updatedAt.size() <= 50 &&
+        (!('id' in data) || data.id == null || (data.id is string && data.id.size() <= 128)) &&
+        (!('endedAt' in data) || data.endedAt == null || (data.endedAt is string && data.endedAt.size() <= 50)) &&
+        (!('durationMinutes' in data) || data.durationMinutes == null || data.durationMinutes is int || data.durationMinutes is number) &&
+        (!('maxScore' in data) || data.maxScore == null || data.maxScore is int || data.maxScore is number) &&
+        (!('examScriptIds' in data) || data.examScriptIds == null || (data.examScriptIds is list && data.examScriptIds.size() <= 50)) &&
+        (!('autoOpenScriptIds' in data) || data.autoOpenScriptIds == null || (data.autoOpenScriptIds is list && data.autoOpenScriptIds.size() <= 50));
     }
 
     // ===============================================================
@@ -679,9 +703,18 @@ service cloud.firestore {
                          )
                        );
 
-      // Exclusão: o próprio autor do script ou Administrador
+      // Exclusão: o próprio autor do script, Administrador ou o professor da turma para materiais e avaliações da sua turma
       allow delete: if isAuthenticated() &&
-                       (resource.data.authorUid == request.auth.uid || isAdmin());
+                       (
+                         resource.data.authorUid == request.auth.uid ||
+                         isAdmin() ||
+                         (
+                           isTeacherApproved() &&
+                           resource.data.classIds is list &&
+                           resource.data.classIds.size() > 0 &&
+                           isClassTeacher(resource.data.classIds[0])
+                         )
+                       );
     }
 
     // ===============================================================
@@ -829,6 +862,28 @@ service cloud.firestore {
                            request.resource.data.classId == resource.data.classId
                          )
                        );
+
+      // Exclusão: exclusivamente Administrador ou professor da turma
+      allow delete: if isAuthenticated() &&
+                       (isAdmin() || isClassTeacher(resource.data.classId));
+    }
+
+    // ===============================================================
+    // Coleção: exam_sessions/{sessionId} (Processos de Avaliação da Turma)
+    // ===============================================================
+    match /exam_sessions/{sessionId} {
+      // Leitura: qualquer usuário autenticado
+      allow get, list: if isAuthenticated();
+
+      // Criação: exclusivamente Administrador ou professor da turma
+      allow create: if isAuthenticated() &&
+                       isValidExamSession(request.resource.data) &&
+                       (isAdmin() || isClassTeacher(request.resource.data.classId));
+
+      // Atualização: exclusivamente Administrador ou professor da turma
+      allow update: if isAuthenticated() &&
+                       isValidExamSession(request.resource.data) &&
+                       (isAdmin() || isClassTeacher(resource.data.classId));
 
       // Exclusão: exclusivamente Administrador ou professor da turma
       allow delete: if isAuthenticated() &&

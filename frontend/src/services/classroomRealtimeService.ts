@@ -462,6 +462,32 @@ export async function acknowledgeExamAlertsBatch(alertIds: string[]): Promise<nu
 }
 
 /**
+ * Exclui uma ocorrência individual de avaliação
+ */
+export async function deleteExamAlert(alertId: string): Promise<void> {
+  if (!alertId) return;
+  await deleteDoc(doc(db, 'exam_alerts', alertId));
+}
+
+/**
+ * Exclui ocorrências de avaliação em lote (ex: por sessão ou turma)
+ */
+export async function deleteExamAlertsBatch(alertIds: string[]): Promise<number> {
+  const uniqueIds = Array.from(new Set(alertIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return 0;
+
+  for (let i = 0; i < uniqueIds.length; i += MESSAGE_BATCH_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + MESSAGE_BATCH_CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((id) => {
+      batch.delete(doc(db, 'exam_alerts', id));
+    });
+    await batch.commit();
+  }
+  return uniqueIds.length;
+}
+
+/**
  * Sincroniza o estado ao vivo do workspace do aluno para espelhamento pelo professor
  */
 export async function syncStudentLiveState(params: {

@@ -862,12 +862,12 @@ export const MyClassView: React.FC<MyClassViewProps> = ({
                         <div className="flex items-center gap-2">
                           <span
                             className={`px-3 py-1 rounded-xl text-sm font-black border ${
-                              (sub.grade ?? 0) >= 6
+                              (sub.grade ?? 0) >= 60
                                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
                                 : 'bg-rose-500/15 text-rose-400 border-rose-500/40'
                             }`}
                           >
-                            Nota: {Number(sub.grade ?? 0).toFixed(1)} / 10.0
+                            Nota: {Number(sub.grade ?? 0).toFixed(1)} / 100
                           </span>
                         </div>
                       ) : (

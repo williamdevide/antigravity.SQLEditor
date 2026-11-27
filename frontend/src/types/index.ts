@@ -215,6 +215,9 @@ export interface ClassItem {
   activeExamSessionId?: string | null; // Identificador único da avaliação ativa para encapsular ocorrências
   activeExamSessionLabel?: string | null; // Rótulo da avaliação ativa (ex.: "Avaliação 22/11 16:30")
   activeExamStartedAt?: string | null; // Timestamp ISO de início da avaliação ativa
+  activeExamDurationMinutes?: number | null; // Duração prevista em minutos
+  activeExamEndedAt?: string | null; // Timestamp de encerramento manual pelo professor
+  lastEndedExamSessionId?: string | null; // Última avaliação encerrada para liberar menu de entregues
   examAutoOpenScriptIds?: string[] | null; // IDs de exemplos e provas selecionados para abrir automaticamente no Modo Avaliação
   chatEnabled?: boolean; // Habilita ou desabilita o chat para os alunos na turma (default true)
   scriptSharingEnabled?: boolean; // Habilita ou desabilita o compartilhamento de scripts entre alunos (default true)
@@ -274,18 +277,43 @@ export type SavedScriptCategory =
   | 'exam'
   | 'exam_submission';
 
+export interface ExamSessionItem {
+  id: string;
+  classId: string;
+  label: string;
+  status: 'active' | 'ended';
+  startedAt: string;
+  endedAt?: string | null;
+  durationMinutes?: number | null;
+  maxScore: number; // sempre 100
+  examScriptIds?: string[];
+  autoOpenScriptIds?: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AutoGradeQueryDetail {
   label: string;
   passed: boolean;
+  status?: 'correct' | 'partial' | 'wrong';
+  maxPoints?: number;
+  earnedPoints?: number;
+  manualPoints?: number;
+  studentSqlClean?: string;
+  expectedSqlClean?: string;
   expectedSummary: string;
   actualSummary: string;
+  breakdown?: string[];
   error?: string;
 }
 
 export interface AutoGradeDetails {
   totalQueries: number;
   passedQueries: number;
-  score: number;
+  partialQueries?: number;
+  maxScore?: number; // 100
+  score: number; // 0 a 100
   items: AutoGradeQueryDetail[];
 }
 
@@ -304,7 +332,7 @@ export interface SavedScriptItem {
   visibleInClassroom?: boolean; // Olho Modo Sala de Aula (default true)
   visibleInExam?: boolean; // Olho Modo Avaliação (default true para 'exam', false para demais)
   answerKeySql?: string; // Gabarito SQL opcional da avaliação para correção automática
-  grade?: number; // Nota atribuída (0 a 10) em entregas de avaliação
+  grade?: number; // Nota atribuída (0 a 100) em entregas de avaliação
   teacherFeedback?: string; // Feedback do professor na entrega
   gradedAt?: string;
   gradedBy?: string;
@@ -312,6 +340,10 @@ export interface SavedScriptItem {
   autoGradeDetails?: AutoGradeDetails;
   isTemporary?: boolean; // Backup automático antes de iniciar o modo avaliação
   submittedAt?: string; // Data/hora formal da entrega da avaliação
+  examSessionId?: string | null; // Vínculo da sessão de prova
+  examSessionLabel?: string | null;
+  submissionVersion?: number; // Versão sequencial da entrega (1, 2, 3...)
+  isLatestSubmission?: boolean; // Indica se é a versão mais recente ativa
   createdAt: string;
   updatedAt: string;
 }

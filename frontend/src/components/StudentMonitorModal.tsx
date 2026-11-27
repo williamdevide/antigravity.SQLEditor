@@ -70,7 +70,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
   const [selectedExamId, setSelectedExamId] = useState<string>(classExams[0]?.id || '');
   const [customAnswerKey, setCustomAnswerKey] = useState<string>(classExams[0]?.answerKeySql || '');
   const [autoReport, setAutoReport] = useState<AutoGradeDetails | null>(null);
-  const [gradeValue, setGradeValue] = useState<string>('10');
+  const [gradeValue, setGradeValue] = useState<string>('100');
   const [feedbackText, setFeedbackText] = useState<string>('');
   const [isSavingGrade, setIsSavingGrade] = useState(false);
   const [showGrader, setShowGrader] = useState(false);
@@ -381,13 +381,13 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
                     </div>
                     <div>
                       <label className="block text-[10px] font-semibold text-[var(--text-secondary)] mb-1">
-                        Nota Final (0 a 10):
+                        Nota Final (0 a 100):
                       </label>
                       <input
                         type="number"
                         step="0.5"
                         min="0"
-                        max="10"
+                        max="100"
                         value={gradeValue}
                         onChange={(e) => setGradeValue(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs font-bold text-[#FFE600]"
@@ -413,7 +413,7 @@ export const StudentMonitorModal: React.FC<StudentMonitorModalProps> = ({
                   <div className="space-y-1.5">
                     <p className="text-[11px] font-bold text-[var(--text-primary)]">
                       Resultado Automático: {autoReport.passedQueries}/{autoReport.totalQueries} acertos • Nota sugerida:{' '}
-                      <span className="text-[#FFE600]">{autoReport.score.toFixed(1)}</span>
+                      <span className="text-[#FFE600]">{autoReport.score.toFixed(1)} / 100</span>
                     </p>
                     <div className="max-h-32 overflow-y-auto space-y-1">
                       {autoReport.items.map((it, idx) => (

@@ -7,6 +7,7 @@ import {
   deleteDoc,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import {
@@ -69,6 +70,8 @@ export async function saveScript(
     answerKeySql?: string;
     isTemporary?: boolean;
     submittedAt?: string;
+    examSessionId?: string | null;
+    examSessionLabel?: string | null;
   },
   existingId?: string
 ): Promise<SavedScriptItem> {
@@ -144,6 +147,12 @@ export async function saveScript(
 
   if (payload.submittedAt) {
     docPayload.submittedAt = payload.submittedAt;
+  }
+  if (payload.examSessionId) {
+    docPayload.examSessionId = payload.examSessionId;
+  }
+  if (payload.examSessionLabel) {
+    docPayload.examSessionLabel = payload.examSessionLabel;
   }
 
   const docRef = await withFirestoreTimeout(
@@ -307,11 +316,47 @@ export async function submitExam(params: {
   examId?: string;
   examTitle: string;
   content: string;
+  examSessionId?: string | null;
+  examSessionLabel?: string | null;
 }): Promise<SavedScriptItem> {
   const now = new Date().toISOString();
+
+  // Busca histórico prévio do aluno para versionamento preservado
+  let previousSubmissionsCount = 0;
+  try {
+    const prevQ = query(
+      collection(db, 'savedScripts'),
+      where('authorUid', '==', params.studentUid),
+      where('category', '==', 'exam_submission')
+    );
+    const snap = await getDocs(prevQ);
+    const classSubs: SavedScriptItem[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as Omit<SavedScriptItem, 'id'>;
+      if ((data.classIds || []).includes(params.classId)) {
+        classSubs.push({ id: d.id, ...data });
+      }
+    });
+    previousSubmissionsCount = classSubs.length;
+
+    // Marca versões anteriores com isLatestSubmission = false
+    const batch = writeBatch(db);
+    classSubs.forEach((sub) => {
+      if (sub.isLatestSubmission !== false) {
+        batch.update(doc(db, 'savedScripts', sub.id), { isLatestSubmission: false });
+      }
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn('[submitExam] Falha ao consultar envios anteriores para versionamento:', err);
+  }
+
+  const nextVersion = previousSubmissionsCount + 1;
+  const versionSuffix = nextVersion > 1 ? ` (Versão ${nextVersion})` : '';
+
   const payload = {
-    title: `[Entrega] ${params.examTitle} - ${params.studentName}`,
-    description: `Resolução da avaliação enviada pelo aluno em ${new Date().toLocaleString('pt-BR')}`,
+    title: `[Entrega] ${params.examTitle} - ${params.studentName}${versionSuffix}`,
+    description: `Resolução da avaliação enviada pelo aluno em ${new Date().toLocaleString('pt-BR')} (Envio v${nextVersion})`,
     content: params.content,
     authorUid: params.studentUid,
     authorName: params.studentName,
@@ -319,6 +364,10 @@ export async function submitExam(params: {
     authorRole: 'aluno' as UserRole,
     category: 'exam_submission' as SavedScriptCategory,
     classIds: [params.classId],
+    examSessionId: params.examSessionId || null,
+    examSessionLabel: params.examSessionLabel || null,
+    submissionVersion: nextVersion,
+    isLatestSubmission: true,
     submittedAt: now,
     createdAt: now,
     updatedAt: now,

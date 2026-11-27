@@ -12,39 +12,6 @@ interface UseExamAntiCheatOptions {
   onPageExitPersist?: (details: string) => void;
 }
 
-// Seletores comumente injetados por extensões de IA / copilot / sidebars / tradutores na página
-const KNOWN_AI_EXTENSION_SELECTORS = [
-  '[id*="monica"]',
-  '[class*="monica"]',
-  '[id*="merlin"]',
-  '[class*="merlin"]',
-  '[id*="sider"]',
-  '[class*="sider"]',
-  '[id*="chatgpt"]',
-  '[class*="chatgpt"]',
-  '[id*="copilot"]',
-  '[class*="copilot"]',
-  '[data-testid*="copilot"]',
-  '[id*="perplexity"]',
-  '[class*="perplexity"]',
-  '[id*="claude"]',
-  '[id*="gemini-sidebar"]',
-  '[id*="harpa"]',
-  '[class*="harpa"]',
-  '[id*="maxai"]',
-  '[class*="maxai"]',
-  '[id*="usechatgpt"]',
-  '[id*="liner"]',
-  '[class*="liner"]',
-  '[id*="glasp"]',
-  '[id*="poe"]',
-  '[id*="aria"]',
-  'plasmo-csui',
-  'grammarly-extension',
-  'grammarly-desktop-integration',
-  'div[data-ext-name]',
-  'iframe[src*="extension://"]',
-];
 
 /**
  * Hook anti-trapaça para Modo Avaliação (bloqueia copiar/colar/arrastar,
@@ -255,7 +222,7 @@ export function useExamAntiCheat({
         return;
       }
       clearBlurTimer();
-      // Delay curto para diferenciar troca real de janela de cliques internos em diálogos/monaco
+      // Delay para diferenciar troca real de janela de cliques internos em diálogos, popups de abas ou Monaco Editor
       blurTimer = window.setTimeout(() => {
         blurTimer = null;
         if (
@@ -263,6 +230,17 @@ export function useExamAntiCheat({
           suppressExitAlertRef?.current ||
           document.hidden ||
           document.hasFocus()
+        ) {
+          return;
+        }
+
+        // Se o elemento ativo atual no DOM pertence à aplicação ou aos seus portais flutuantes
+        const activeEl = document.activeElement;
+        if (
+          activeEl &&
+          (activeEl.closest('#root') ||
+            activeEl.closest('[data-sql-app-portal="true"]') ||
+            activeEl.closest('[data-allow-exam-context="true"]'))
         ) {
           return;
         }
@@ -284,7 +262,10 @@ export function useExamAntiCheat({
       }, 1200);
     };
 
-    // 3. Detecção e neutralização de extensões de IA / sidebars injetadas na página
+    // 3. Detecção e neutralização de extensões de IA / sidebars
+    // Conforme diretriz: NÃO varre automaticamente/passivamente elementos silenciosos ou inativos pré-existentes.
+    // Alerta apenas quando houver ação explícita verificável durante a prova (ex: abertura/injeção dinâmica de nós
+    // de assistentes de IA com intenção de uso ou redução abrupta da área útil por painel lateral dockado).
     const neutralizeAndReportExtension = (el: Element, reason: string) => {
       try {
         (el as HTMLElement).style.setProperty('display', 'none', 'important');
@@ -297,62 +278,6 @@ export function useExamAntiCheat({
         'Uma extensão ou painel flutuante externo (ex.: assistente de IA) foi detectado nesta aba e bloqueado. O professor foi alertado.',
         5000
       );
-    };
-
-    const scanSuspiciousElements = () => {
-      for (const selector of KNOWN_AI_EXTENSION_SELECTORS) {
-        try {
-          const found = document.querySelectorAll(selector);
-          found.forEach((el) => {
-            if (!el.closest('#root') && el.getAttribute('data-exam-flagged') !== 'true') {
-              el.setAttribute('data-exam-flagged', 'true');
-              neutralizeAndReportExtension(
-                el,
-                `Elemento suspeito de extensão detectado na página (${selector}).`
-              );
-            }
-          });
-        } catch (_) {}
-      }
-
-      // Varredura genérica de nós externos injetados diretamente no <body> ou <html> por extensões de IA
-      const containers = [document.body, document.documentElement];
-      for (const container of containers) {
-        if (!container) continue;
-        Array.from(container.children).forEach((el) => {
-          if (
-            el === document.head ||
-            el === document.body ||
-            el.id === 'root' ||
-            el.getAttribute('data-sql-app-portal') === 'true' ||
-            el.getAttribute('data-exam-flagged') === 'true'
-          ) {
-            return;
-          }
-          const tag = el.tagName.toLowerCase();
-          if (tag === 'style' || tag === 'noscript') return;
-
-          const srcOrHref = el.getAttribute('src') || el.getAttribute('href') || '';
-          const hasExtensionProto = /^(chrome|edge|moz|safari)-extension:\/\//i.test(srcOrHref);
-          const computed = window.getComputedStyle(el as HTMLElement);
-          const isHighOverlay =
-            computed.position === 'fixed' && Number(computed.zIndex || 0) >= 9999;
-
-          if (
-            tag.includes('-') ||
-            tag === 'iframe' ||
-            Boolean((el as HTMLElement).shadowRoot) ||
-            hasExtensionProto ||
-            isHighOverlay
-          ) {
-            el.setAttribute('data-exam-flagged', 'true');
-            neutralizeAndReportExtension(
-              el,
-              `Sobreposição ou extensão injetada na aba detectada (<${tag}> ${el.id || ''}).`.trim()
-            );
-          }
-        });
-      }
     };
 
     // Detecta abertura súbita de Side Panel do navegador (extensão lateral de IA / DevTools dockado)
@@ -379,38 +304,39 @@ export function useExamAntiCheat({
       }
     };
 
+    // Observa injeção DINÂMICA de novos elementos de extensões de IA abertas durante a avaliação
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType !== Node.ELEMENT_NODE) return;
           const el = node as Element;
-          // Ignora tudo dentro de #root ou portais explícitos da aplicação
-          if (el.id === 'root' || el.closest('#root') || el.getAttribute('data-sql-app-portal') === 'true') {
+          // Ignora rigorosamente tudo dentro do root ou portais da aplicação
+          if (
+            el.id === 'root' ||
+            el.closest('#root') ||
+            el.getAttribute('data-sql-app-portal') === 'true' ||
+            el.closest('[data-sql-app-portal="true"]')
+          ) {
             return;
           }
           const tag = el.tagName.toLowerCase();
-          const hasShadow = Boolean((el as HTMLElement).shadowRoot);
-          const isExtensionHint =
-            tag.includes('-') ||
-            hasShadow ||
-            el.tagName.toLowerCase() === 'iframe' ||
-            /monica|merlin|sider|chatgpt|copilot|grammarly|claude|gemini|extension/i.test(
-              `${el.id} ${typeof el.className === 'string' ? el.className : ''}`
-            );
+          if (tag === 'style' || tag === 'script' || tag === 'link') return;
 
-          if (isExtensionHint && el.getAttribute('data-exam-flagged') !== 'true') {
+          const isExplicitAiPattern = /monica|merlin|sider|chatgpt|copilot|perplexity|claude|gemini-sidebar|harpa|maxai|usechatgpt/i.test(
+            `${el.id} ${typeof el.className === 'string' ? el.className : ''}`
+          );
+
+          if (isExplicitAiPattern && el.getAttribute('data-exam-flagged') !== 'true') {
             el.setAttribute('data-exam-flagged', 'true');
             neutralizeAndReportExtension(
               el,
-              `Extensão/painel externo injetado na aba detectado (<${tag}> ${el.id || ''}).`.trim()
+              `Abertura de assistente de IA externo detectada na página (<${tag}> ${el.id || ''}).`.trim()
             );
           }
         });
       }
     });
 
-    // Verificação inicial + observação contínua
-    scanSuspiciousElements();
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
     document.addEventListener('copy', handleClipboardGuard, true);
@@ -427,13 +353,10 @@ export function useExamAntiCheat({
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handlePageHide);
 
-    const periodicExtensionCheck = window.setInterval(scanSuspiciousElements, 4000);
-
     return () => {
       isDisposed = true;
       clearBlurTimer();
       observer.disconnect();
-      window.clearInterval(periodicExtensionCheck);
       document.removeEventListener('copy', handleClipboardGuard, true);
       document.removeEventListener('paste', handleClipboardGuard, true);
       document.removeEventListener('cut', handleClipboardGuard, true);

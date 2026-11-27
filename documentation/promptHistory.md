@@ -4380,7 +4380,80 @@ SELECT nome_produto, preco FROM tb_produtos ORDER BY preco DESC LIMIT 3 UNION SE
 5. **Ampliação da Bateria de Qualidade (`frontend/scripts/runQualityTests.mjs`):**
    - Adicionados testes para múltiplos erros simultâneos, vírgulas proibidas/válidas e TTL de presença de 300s.
 
+---
+
+### Prompt 47
+> não vou ativar o blaze, vou esperar até amanhã e testar os limites a cada dia agora com essas mudanças
+
+**Ações Executadas:**
+1. Registrada a decisão operacional de permanecer no plano gratuito **Spark**, aguardar a virada diária da cota do Firestore (~05:00 BRT) e monitorar o consumo diário após o envio (`git push`) do build otimizado para produção.
 
 
 
 
+
+
+---
+
+### Prompt 48
+```text
+/agente-orquestrador /grill-me /goal modo avaliação:
+- não detectar automaticamente ia do chrome antes que aluno abra
+- ao reenviar a prova o aluno perde a resposta anterior
+- não detectar o abrir novo script alerta de uso de tela suspensa
+- não estão aparecendo os exemplos para reabrir
+- ao criar a avaliação determinar o tempo de duração, e exibir esse tempo para os alunos. mas só encerrar manualmente pelo professor.
+- criar opção de encerrar avaliação
+- ao encerrar avaliação fecha nos alunos as abas de exemplos e da avaliação. mas a partir dai, no menu suspenso de abrir/criar aba, passa a aparecer uma nova opção: Avaliações Entregues. Esses scripts nunca podem ser sobrescritos. O aluno até pode carregar ele e salvar com outro nome e em outra seção (scripts salvos), mas nunca sobrescrever o que esta em Avaliações Entregues.
+- criar tela para correção das avaliações (inclusive com opção de auto-correção podendo ser confirmada ou alterada pelo professor)
+- criar opção de excluir avaliação e excluir ocorrencias
+```
+
+**Ações Executadas:**
+1. **Anti-Cheat e Alertas Falsos (`useExamAntiCheat.ts`, `EditorWorkspace.tsx`, `NewTabDropdown.tsx`):**
+   - Removida varredura passiva de seletores silenciosos no DOM; detecção de IA agora monitora injeções dinâmicas ativas em tempo real ou abertura de painel lateral com redução brusca da janela;
+   - Menus suspensos e portais de abas receberam `data-sql-app-portal="true"` e `data-allow-exam-context="true"`, prevenindo falsos alertas de perda de foco ao abrir menus ou novos scripts.
+2. **Carregamento de Exemplos no Modo Avaliação (`App.tsx`):**
+   - `classExamples` agora inclui automaticamente scripts selecionados pelo professor em `examAutoOpenScriptIds`, permitindo reabri-los a qualquer momento pelo menu "+" durante a prova.
+3. **Versionamento Preservado de Entregas (`scriptService.ts`, `App.tsx`, `types/index.ts`):**
+   - Cada entrega de avaliação gera uma nova versão sequencial (`submissionVersion: 1, 2, ...`), mantendo as respostas anteriores intactas no histórico do aluno e professor.
+4. **Duração da Prova, Cronômetro e Encerramento Manual (`classService.ts`, `TeacherPanelView.tsx`, `EditorWorkspace.tsx`, `App.tsx`):**
+   - Professor configura o tempo previsto em minutos ao iniciar a avaliação; cronômetro regressivo com destaque visual exibido para os alunos; botão explícito "Encerrar Avaliação" com confirmação para o professor.
+5. **Encerramento da Prova & Menu de "Avaliações Entregues" Imutável (`App.tsx`, `NewTabDropdown.tsx`, `EditorWorkspace.tsx`):**
+   - Ao encerrar a prova, as abas de exame e exemplos são fechadas nos alunos;
+   - Exibida nova seção "Avaliações Entregues" no menu suspenso (+); scripts entregues são estritamente protegidos contra sobrescrita (o aluno pode carregar para estudo e salvar cópia pessoal em Scripts Salvos, mas a entrega original nunca é alterada).
+6. **Tela de Correção de Avaliações com Auto-correção (`ExamGradingModal.tsx`, `TeacherPanelView.tsx`):**
+   - Suporte a seleção de versões do mesmo aluno, auto-correção de consultas contra gabarito e bancos da turma, atribuição de nota (0-10), feedback e publicação imediata.
+7. **Exclusão de Entregas e Ocorrências Individual e em Lote (`TeacherPanelView.tsx`, `classroomRealtimeService.ts`, `firestore.rules`):**
+   - Adicionados botões de exclusão individual e botões em lote ("Limpar Todas as Entregas" e "Limpar Ocorrências") com confirmações de segurança e regras do Firestore atualizadas.
+8. **Validação e Bateria de Qualidade:**
+   - Build de produção verificado com sucesso (`npm run build`); suíte de testes de qualidade passando 100% (17/17).
+
+---
+
+### Prompt 49
+```text
+/agente-orquestrador /grill-me /goal implemente os recursos a seguir:
+- ao sair do modo avaliação, nos alunos são fechadas as abas de exemplos, a aba de avaliação e o bd da avaliação, recarrega os bd de aula da turma.
+- em provas dentro de minhas turmas, ao invés de exibir diretamente as entregas, primeiro exibe as avaliações (processo de avaliação) criadas pelo professor (posso inclusive editar a tag da avaliação ou excluir a avaliação casos ninguem tenha entregue ainda.
+- ao entrar na avaliação aparace as entregas por aluno, caso um aluno tenha feito mais de uma entrega aparece somente a mais recente e um botão entregas adicionais que exibe as outras entregas desse aluno, cada entrega pode ser excluida ou corrigida, se entrar em correção exibe uma tela parecida com a atual, mas quero melhorar a visualização e a correção automatica, analise cada trecho  da avaliação eliminando todos os comentarios tanto da prova quanto do gabarito e dai teste o conteudo. importante, não existe somente certo ou errado, analise os pedaços corretos e proporcionalizando a pontuação.
+- quanto a pontuação, sempre quando criarmos a avaliação a pontuação máxima é definida em 100 e cada questão tem sempre o mesmo peso, proporcional pelo numero de questões.
+```
+
+**Ações Executadas:**
+1. **Persistência de Processos de Avaliação & Segurança (`types/index.ts`, `classService.ts`, `firestore.rules`):**
+   - Criada coleção `exam_sessions` com esquema completo (`ExamSessionItem`, `maxScore: 100`, `status: 'active' | 'ended'`, duração, tags e regras no Firestore);
+   - Implementadas operações de listagem (`getClassExamSessions`), edição inline da tag da avaliação (`updateExamSessionLabel`) e exclusão condicionada (`deleteExamSession`).
+2. **Saída do Modo Avaliação & Entrega Limpa no Aluno (`App.tsx`):**
+   - Ao sair do modo avaliação, além de fechar as abas da prova e exemplos, o sistema substitui o BD da avaliação recarregando automaticamente os BDs de aula da turma (`handleLoadPreset('teacher_class' / 'class')`) e atualiza imediatamente `Avaliações Entregues`;
+   - Ao entregar a prova (`handleDeliverExam`), envia exclusivamente as abas oficiais da avaliação (`isProtectedExamTab`), excluindo abas de exemplos abertas.
+3. **Gestão de Avaliações por Processo e Entregas por Aluno (`TeacherPanelView.tsx`):**
+   - Na aba **Provas**, primeiro são listados os processos de avaliação criados pelo professor (com edição de tag e botão excluir habilitado quando sem entregas e encerrada);
+   - Ao abrir uma avaliação, as entregas são agrupadas por aluno exibindo apenas a mais recente e um botão **"Entregas adicionais"** expansível com os envios anteriores, ambos com ações individuais de corrigir e excluir.
+4. **Motor de Auto-Correção Proporcional 0–100 sem Comentários (`autoGraderService.ts`, `ExamGradingModal.tsx`, `StudentMonitorModal.tsx`, `MyClassView.tsx`, `NewTabDropdown.tsx`):**
+   - Implementado `stripSqlComments` para remoção integral de comentários (`--`, `#`, `/* ... */`) tanto da prova quanto do gabarito;
+   - Implementada avaliação proporcional híbrida (`100 / Nº de questões` por questão), analisando verbo, execução sem erro, estrutura SQL (tabelas, projeções, JOINs, agregações, cláusulas) e sobreposição parcial de linhas/colunas;
+   - Renovada a tela `ExamGradingModal` com visualização questão a questão (código limpo do aluno vs gabarito limpo lado a lado), diagnóstico em chips e edição manual da nota por questão recalculando os 100 pontos automaticamente;
+   - Padronizada a escala **0 a 100** (destaque verde a partir de 60 pts) em toda a interface.
+5. **Validação & Testes (`frontend/scripts/runQualityTests.mjs`):**
+   - Adicionados testes 8.1, 8.2 e 8.3 cobrindo remoção de comentários, escala 0–100, peso igual por questão, pontuação parcial proporcional e regras `exam_sessions` (20/20 passando).

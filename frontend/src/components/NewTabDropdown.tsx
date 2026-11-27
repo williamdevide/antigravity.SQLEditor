@@ -14,6 +14,7 @@ interface NewTabDropdownProps {
   classExercises?: SavedScriptItem[];
   classSolutions?: SavedScriptItem[];
   classExams?: SavedScriptItem[];
+  deliveredExams?: SavedScriptItem[];
   classroomMode?: ClassroomMode;
   isExamModeActive?: boolean;
   triggerButton: (props: {
@@ -23,7 +24,7 @@ interface NewTabDropdownProps {
   align?: 'left' | 'right';
 }
 
-type SubmenuType = 'solutions' | 'saved' | 'examples' | 'exercises' | 'exams' | null;
+type SubmenuType = 'solutions' | 'saved' | 'examples' | 'exercises' | 'exams' | 'deliveredExams' | null;
 
 export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
   onNewBlankTab,
@@ -35,6 +36,7 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
   classExercises = [],
   classSolutions = [],
   classExams = [],
+  deliveredExams = [],
   classroomMode = 'normal',
   isExamModeActive = false,
   triggerButton,
@@ -153,6 +155,8 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
       {isOpen && menuCoords && createPortal(
         <div
           ref={menuRef}
+          data-sql-app-portal="true"
+          data-allow-exam-context="true"
           style={{
             position: 'fixed',
             top: `${menuCoords.top}px`,
@@ -463,6 +467,99 @@ export const NewTabDropdown: React.FC<NewTabDropdownProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Opção Nova: Avaliações Entregues (Aparece fora do Modo Avaliação quando houver entregas do aluno) */}
+              {deliveredExams.length > 0 && (
+                <div
+                  className="relative"
+                  onMouseEnter={() => handleMouseEnterSubmenu('deliveredExams')}
+                  onMouseLeave={handleMouseLeaveSubmenu}
+                >
+                  <button
+                    onClick={() =>
+                      setActiveSubmenu((prev) => (prev === 'deliveredExams' ? null : 'deliveredExams'))
+                    }
+                    type="button"
+                    className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] flex items-center justify-between transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="material-symbols-outlined text-[17px] text-purple-400 group-hover:scale-110 transition-transform">
+                        assignment_turned_in
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-[12px] text-[var(--text-primary)]">
+                          Avaliações Entregues
+                        </span>
+                        <span className="text-[10px] text-purple-300 font-semibold">
+                          {deliveredExams.length}{' '}
+                          {deliveredExams.length === 1 ? 'entrega arquivada' : 'entregas arquivadas'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)]">
+                      chevron_right
+                    </span>
+                  </button>
+
+                  {activeSubmenu === 'deliveredExams' && (
+                    <div
+                      className={`absolute ${openSubmenuLeft ? 'right-full mr-1' : 'left-full ml-1'} top-0 min-w-[280px] max-w-[360px] max-h-[380px] overflow-y-auto bg-[var(--bg-surface)] border border-purple-500/40 rounded-xl shadow-2xl py-1 text-xs font-sans text-[var(--text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}
+                      onMouseEnter={() => handleMouseEnterSubmenu('deliveredExams')}
+                      onMouseLeave={handleMouseLeaveSubmenu}
+                    >
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-purple-300 uppercase tracking-wider border-b border-purple-500/30 flex items-center justify-between bg-purple-500/10">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">verified</span>
+                          <span>Resoluções Entregues</span>
+                        </span>
+                        <span className="text-[9px] text-[var(--text-muted)]">Apenas Leitura / Cópia</span>
+                      </div>
+
+                      {deliveredExams.map((del) => (
+                        <button
+                          key={del.id}
+                          onClick={() => handleSavedScriptClick(del)}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-purple-500/10 flex items-start gap-2 transition-colors cursor-pointer border-b border-[var(--border-color)]/30 last:border-b-0 group"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-purple-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                            lock
+                          </span>
+                          <div className="flex flex-col min-w-0 w-full">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="font-medium text-[11px] text-[var(--text-primary)] truncate group-hover:text-purple-300 transition-colors">
+                                {del.title}
+                              </span>
+                              {typeof del.grade === 'number' && del.gradePublished && (
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                    del.grade >= 60
+                                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                                  }`}
+                                >
+                                  Nota: {del.grade.toFixed(1)} / 100
+                                </span>
+                              )}
+                            </div>
+                            {del.description && (
+                              <p className="text-[9.5px] text-[var(--text-muted)] line-clamp-2 leading-tight mt-0.5">
+                                {del.description}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between mt-1 text-[8.5px] text-[var(--text-muted)]">
+                              <span>
+                                {new Date(del.submittedAt || del.createdAt).toLocaleString('pt-BR')}
+                              </span>
+                              <span className="text-purple-300 font-semibold">🔒 Protegido</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Opção 3: Carregar Exemplos (em Modo Sala de Aula sempre aparece; no Normal aparece se houver marcados p/ Normal) */}
               {(classroomMode === 'classroom' || classExamples.length > 0) && (

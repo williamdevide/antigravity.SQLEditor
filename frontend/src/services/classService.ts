@@ -16,7 +16,7 @@ import { db } from './firebase';
 import { logSystemEvent } from './auditService';
 import { withFirestoreTimeout } from './firestoreUtils';
 import { formatStudentDisplayName, compareNamesPtBr } from '../utils/studentNameFormatter';
-import type { ClassItem, ClassMemberItem, UserProfile, ClassroomMode } from '../types';
+import type { ClassItem, ClassMemberItem, UserProfile, ClassroomMode, ExamSessionItem } from '../types';
 
 /**
  * Gera um código de acesso de 6 caracteres único e legível para a turma
@@ -534,6 +534,9 @@ export interface ExamSessionMetadata {
   activeExamSessionId: string | null;
   activeExamSessionLabel: string | null;
   activeExamStartedAt: string | null;
+  activeExamDurationMinutes?: number | null;
+  activeExamEndedAt?: string | null;
+  lastEndedExamSessionId?: string | null;
   examAutoOpenScriptIds: string[];
 }
 
@@ -560,7 +563,12 @@ export async function updateClassMode(
   classId: string,
   mode: ClassroomMode,
   teacher: UserProfile,
-  options?: { examSessionLabel?: string; examAutoOpenScriptIds?: string[] }
+  options?: {
+    examSessionLabel?: string;
+    examAutoOpenScriptIds?: string[];
+    examDurationMinutes?: number | null;
+    previousExamSessionId?: string | null;
+  }
 ): Promise<ExamSessionMetadata> {
   const classRef = doc(db, 'classes', classId);
   const nowIso = new Date().toISOString();
@@ -568,33 +576,86 @@ export async function updateClassMode(
     new Set((options?.examAutoOpenScriptIds || []).filter((id) => typeof id === 'string' && id.trim()))
   ).slice(0, 50);
 
+  const durationMin =
+    typeof options?.examDurationMinutes === 'number' && options.examDurationMinutes > 0
+      ? Math.round(options.examDurationMinutes)
+      : null;
+
   const sessionMeta: ExamSessionMetadata =
     mode === 'exam'
       ? {
           activeExamSessionId: `exam_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           activeExamSessionLabel: (options?.examSessionLabel?.trim() || buildDefaultExamSessionLabel()).slice(0, 120),
           activeExamStartedAt: nowIso,
+          activeExamDurationMinutes: durationMin,
+          activeExamEndedAt: null,
           examAutoOpenScriptIds: cleanAutoOpenIds,
         }
       : {
           activeExamSessionId: null,
           activeExamSessionLabel: null,
           activeExamStartedAt: null,
+          activeExamDurationMinutes: null,
+          activeExamEndedAt: nowIso,
+          lastEndedExamSessionId: options?.previousExamSessionId || null,
           examAutoOpenScriptIds: [],
         };
 
+  const updatePayload: Record<string, any> = {
+    classroomMode: mode,
+    activeExamSessionId: sessionMeta.activeExamSessionId,
+    activeExamSessionLabel: sessionMeta.activeExamSessionLabel,
+    activeExamStartedAt: sessionMeta.activeExamStartedAt,
+    activeExamDurationMinutes: sessionMeta.activeExamDurationMinutes,
+    examAutoOpenScriptIds: sessionMeta.examAutoOpenScriptIds,
+    updatedAt: nowIso,
+  };
+
+  if (mode !== 'exam') {
+    updatePayload.activeExamEndedAt = sessionMeta.activeExamEndedAt;
+    if (sessionMeta.lastEndedExamSessionId) {
+      updatePayload.lastEndedExamSessionId = sessionMeta.lastEndedExamSessionId;
+    }
+  }
+
   await withFirestoreTimeout(
-    updateDoc(classRef, {
-      classroomMode: mode,
-      activeExamSessionId: sessionMeta.activeExamSessionId,
-      activeExamSessionLabel: sessionMeta.activeExamSessionLabel,
-      activeExamStartedAt: sessionMeta.activeExamStartedAt,
-      examAutoOpenScriptIds: sessionMeta.examAutoOpenScriptIds,
-      updatedAt: nowIso,
-    }),
+    updateDoc(classRef, updatePayload),
     12000,
     'alterar o modo da turma'
   );
+
+  // Persiste ou encerra o processo de avaliação na coleção 'exam_sessions'
+  if (mode === 'exam' && sessionMeta.activeExamSessionId) {
+    try {
+      const sessionDoc: Omit<ExamSessionItem, 'id'> & { id: string } = {
+        id: sessionMeta.activeExamSessionId,
+        classId,
+        label: sessionMeta.activeExamSessionLabel || buildDefaultExamSessionLabel(),
+        status: 'active',
+        startedAt: nowIso,
+        endedAt: null,
+        durationMinutes: durationMin,
+        maxScore: 100,
+        autoOpenScriptIds: cleanAutoOpenIds,
+        createdBy: teacher.uid,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      await setDoc(doc(db, 'exam_sessions', sessionMeta.activeExamSessionId), sessionDoc);
+    } catch (sessionErr) {
+      console.warn('[ClassService] Aviso ao gravar registro em exam_sessions:', sessionErr);
+    }
+  } else if (mode !== 'exam' && options?.previousExamSessionId) {
+    try {
+      await updateDoc(doc(db, 'exam_sessions', options.previousExamSessionId), {
+        status: 'ended',
+        endedAt: nowIso,
+        updatedAt: nowIso,
+      });
+    } catch (sessionErr) {
+      console.warn('[ClassService] Aviso ao encerrar exam_session (pode ser sessão legada):', sessionErr);
+    }
+  }
 
   const modeLabels: Record<ClassroomMode, string> = {
     normal: 'Modo Normal (Padrão)',
@@ -627,12 +688,20 @@ export async function updateAllTeacherClassesMode(
   teacherId: string,
   mode: ClassroomMode,
   teacher: UserProfile,
-  options?: { examSessionLabel?: string; examAutoOpenScriptIds?: string[] }
+  options?: {
+    examSessionLabel?: string;
+    examAutoOpenScriptIds?: string[];
+    examDurationMinutes?: number | null;
+    previousExamSessionId?: string | null;
+  }
 ): Promise<Record<string, ExamSessionMetadata>> {
   const classes = await getClassesByTeacher(teacherId);
   const results: Record<string, ExamSessionMetadata> = {};
   for (const c of classes) {
-    results[c.id] = await updateClassMode(c.id, mode, teacher, options);
+    results[c.id] = await updateClassMode(c.id, mode, teacher, {
+      ...options,
+      previousExamSessionId: c.activeExamSessionId || options?.previousExamSessionId,
+    });
   }
   return results;
 }
@@ -712,4 +781,58 @@ export async function updateClassSettings(
       console.warn('[ClassService] Aviso ao registrar auditoria de configurações da turma:', auditErr);
     }
   }
+}
+
+/**
+ * Busca todos os processos de avaliação criados para uma turma
+ */
+export async function getClassExamSessions(classId: string): Promise<ExamSessionItem[]> {
+  if (!classId) return [];
+  try {
+    const q = query(collection(db, 'exam_sessions'), where('classId', '==', classId));
+    const snap = await getDocs(q);
+    const list: ExamSessionItem[] = [];
+    snap.forEach((d) => {
+      list.push({ id: d.id, ...(d.data() as Omit<ExamSessionItem, 'id'>) });
+    });
+    return list.sort((a, b) => (b.startedAt || b.createdAt || '').localeCompare(a.startedAt || a.createdAt || ''));
+  } catch (err) {
+    console.warn('[ClassService] Erro ao buscar processos de avaliação:', err);
+    return [];
+  }
+}
+
+/**
+ * Atualiza a tag (rótulo) de um processo de avaliação na coleção 'exam_sessions'
+ * e também na turma caso seja a avaliação ativa no momento
+ */
+export async function updateExamSessionLabel(
+  sessionId: string,
+  classId: string,
+  newLabel: string,
+  isCurrentActive = false
+): Promise<void> {
+  const trimmed = newLabel.trim().slice(0, 120);
+  if (!trimmed) throw new Error('Informe um nome/tag válido para a avaliação.');
+  const nowIso = new Date().toISOString();
+
+  await updateDoc(doc(db, 'exam_sessions', sessionId), {
+    label: trimmed,
+    updatedAt: nowIso,
+  });
+
+  if (isCurrentActive) {
+    await updateDoc(doc(db, 'classes', classId), {
+      activeExamSessionLabel: trimmed,
+      updatedAt: nowIso,
+    });
+  }
+}
+
+/**
+ * Exclui um processo de avaliação (permitido apenas quando não houver entregas vinculadas)
+ */
+export async function deleteExamSession(sessionId: string): Promise<void> {
+  if (!sessionId) return;
+  await deleteDoc(doc(db, 'exam_sessions', sessionId));
 }

@@ -55,6 +55,9 @@ const spellchecker = await import(
 const clipboardGuard = await import(
   pathToFileURL(path.join(FRONTEND_DIR, 'src/services/examClipboardGuard.ts')).href
 );
+const autoGrader = await import(
+  pathToFileURL(path.join(FRONTEND_DIR, 'src/services/autoGraderService.ts')).href
+);
 
 let passedCount = 0;
 let failedCount = 0;
@@ -342,6 +345,76 @@ await runTest('7.3 Corretor ortográfico é estritamente desligado em Modo Avali
   assert.ok(editorWs.includes('isProtectedExamTab'));
   assert.ok(antiCheat.includes('isAllowedInternalPaste'));
   assert.ok(antiCheat.includes('extension_detected'));
+});
+
+// ---------------------------------------------------------------------------
+// 8. Auto-Correção Proporcional (0 a 100), Comentários e Regras de exam_sessions
+// ---------------------------------------------------------------------------
+await runTest('8.1 stripSqlComments elimina comentários (--, #, /* */) preservando strings literais', () => {
+  const input = `
+    -- Comentário de linha inicial
+    /* Bloco de
+       enunciado da prova */
+    SELECT '-- nao eh comentario', nome # comentário inline
+    FROM alunos WHERE ativo = 1;
+  `;
+  const cleaned = autoGrader.stripSqlComments(input);
+  assert.equal(cleaned.includes('Comentário de linha'), false);
+  assert.equal(cleaned.includes('enunciado da prova'), false);
+  assert.equal(cleaned.includes('comentário inline'), false);
+  assert.ok(cleaned.includes("'-- nao eh comentario'"));
+  assert.ok(cleaned.includes('SELECT'));
+});
+
+await runTest('8.2 autoGradeStudentSubmission usa escala 0-100, peso igual e pontuação parcial proporcional', () => {
+  const setupDb = [
+    `CREATE TABLE alunos (id INT, nome TEXT, nota INT);
+     INSERT INTO alunos VALUES (1, 'Ana', 90), (2, 'Bruno', 50), (3, 'Carla', 80);`
+  ];
+  const answerKey = `
+    /* Questão 1 */
+    SELECT nome FROM alunos WHERE nota >= 80;
+    -- Questão 2
+    SELECT COUNT(*) AS total FROM alunos;
+  `;
+
+  // Caso A: aluno acertou tudo mesmo com comentários diferentes -> 100 pts (50 + 50)
+  const perfectStudent = `
+    -- Minha resposta Q1
+    SELECT nome FROM alunos WHERE nota >= 80;
+    # Minha resposta Q2
+    SELECT COUNT(*) FROM alunos;
+  `;
+  const perfectRes = autoGrader.autoGradeStudentSubmission({
+    studentSql: perfectStudent,
+    answerKeySql: answerKey,
+    setupDatabaseScripts: setupDb,
+  });
+  assert.equal(perfectRes.maxScore, 100);
+  assert.equal(perfectRes.score, 100);
+  assert.equal(perfectRes.items[0].maxPoints, 50);
+  assert.equal(perfectRes.items[1].maxPoints, 50);
+
+  // Caso B: Q1 sem WHERE (acerto parcial) e Q2 correta -> score entre 50 e 100
+  const partialStudent = `
+    SELECT nome FROM alunos;
+    SELECT COUNT(*) FROM alunos;
+  `;
+  const partialRes = autoGrader.autoGradeStudentSubmission({
+    studentSql: partialStudent,
+    answerKeySql: answerKey,
+    setupDatabaseScripts: setupDb,
+  });
+  assert.equal(partialRes.items[0].status, 'partial');
+  assert.ok((partialRes.items[0].earnedPoints ?? 0) > 0 && (partialRes.items[0].earnedPoints ?? 0) < 50);
+  assert.equal(partialRes.items[1].status, 'correct');
+  assert.ok(partialRes.score > 50 && partialRes.score < 100);
+});
+
+await runTest('8.3 firestore.rules inclui regras de exam_sessions para criação, edição de tag e exclusão', () => {
+  const rules = fs.readFileSync(path.join(ROOT_DIR, 'firestore.rules'), 'utf8');
+  assert.ok(rules.includes('isValidExamSession'));
+  assert.ok(rules.includes('match /exam_sessions/{sessionId}'));
 });
 
 console.log(`\nResumo da Bateria: ${passedCount} passou(aram), ${failedCount} falhou(aram).`);

@@ -16,6 +16,9 @@ import {
   updateAllTeacherClassesMode,
   updateClassSettings,
   buildDefaultExamSessionLabel,
+  getClassExamSessions,
+  updateExamSessionLabel,
+  deleteExamSession,
 } from '../services/classService';
 import {
   saveScript,
@@ -42,6 +45,8 @@ import {
   subscribeToClassExamAlerts,
   acknowledgeExamAlert,
   acknowledgeExamAlertsBatch,
+  deleteExamAlert,
+  deleteExamAlertsBatch,
   groupExamAlertsBySession,
   EXAM_ALERT_TYPE_LABELS,
   subscribeToClassLiveStates,
@@ -62,6 +67,7 @@ import type {
   ExamAlertItem,
   StudentLiveStateItem,
   AutoGradeDetails,
+  ExamSessionItem,
 } from '../types';
 
 interface TeacherPanelViewProps {
@@ -114,6 +120,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const [examSessionLabelInput, setExamSessionLabelInput] = useState<string>(() =>
     buildDefaultExamSessionLabel()
   );
+  const [examDurationMinutesInput, setExamDurationMinutesInput] = useState<number>(60);
   const [examAutoOpenScriptIds, setExamAutoOpenScriptIds] = useState<string[]>([]);
   const [modeChangeError, setModeChangeError] = useState<string | null>(null);
   const [isChangingMode, setIsChangingMode] = useState(false);
@@ -176,7 +183,16 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const [matAnswerKeySql, setMatAnswerKeySql] = useState('');
   const [isSavingMaterial, setIsSavingMaterial] = useState(false);
 
-  // Entregas dos Alunos na Avaliação
+  // Processos de Avaliação e Entregas dos Alunos
+  const [examSessions, setExamSessions] = useState<ExamSessionItem[]>([]);
+  const [isLoadingExamSessions, setIsLoadingExamSessions] = useState(false);
+  const [selectedExamSessionId, setSelectedExamSessionId] = useState<string | null>(null);
+  const [expandedExtraSubmissionsByStudent, setExpandedExtraSubmissionsByStudent] = useState<
+    Record<string, boolean>
+  >({});
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionLabel, setEditingSessionLabel] = useState('');
+  const [isSavingSessionLabel, setIsSavingSessionLabel] = useState(false);
   const [submissions, setSubmissions] = useState<SavedScriptItem[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [viewingSubmission, setViewingSubmission] = useState<SavedScriptItem | null>(null);
@@ -269,16 +285,22 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
     }
   }, [user]);
 
-  // Carrega entregas de avaliações da turma
+  // Carrega entregas e processos de avaliação da turma
   const loadSubmissions = useCallback(async (classId: string) => {
     try {
       setIsLoadingSubmissions(true);
-      const list = await getExamSubmissions(classId);
-      setSubmissions(list);
+      setIsLoadingExamSessions(true);
+      const [subsList, sessionsList] = await Promise.all([
+        getExamSubmissions(classId),
+        getClassExamSessions(classId),
+      ]);
+      setSubmissions(subsList);
+      setExamSessions(sessionsList);
     } catch (err) {
-      console.error('[TeacherPanel] Erro ao carregar entregas:', err);
+      console.error('[TeacherPanel] Erro ao carregar avaliações e entregas:', err);
     } finally {
       setIsLoadingSubmissions(false);
+      setIsLoadingExamSessions(false);
     }
   }, []);
 
@@ -330,6 +352,9 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   }, [loadTeacherClasses, loadAvailableStudents, isAdmin, loadNormalGlobalCatalog]);
 
   useEffect(() => {
+    setSelectedExamSessionId(null);
+    setExpandedExtraSubmissionsByStudent({});
+    setEditingSessionId(null);
     if (selectedClass) {
       loadClassMembers(selectedClass.id);
       loadClassMaterials();
@@ -338,6 +363,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       setMembers([]);
       setMaterials([]);
       setSubmissions([]);
+      setExamSessions([]);
     }
   }, [selectedClass, loadClassMembers, loadClassMaterials, loadSubmissions]);
 
@@ -381,8 +407,11 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
         ? {
             examSessionLabel: examSessionLabelInput,
             examAutoOpenScriptIds,
+            examDurationMinutes: examDurationMinutesInput > 0 ? examDurationMinutesInput : null,
           }
-        : undefined;
+        : {
+            previousExamSessionId: selectedClass.activeExamSessionId || null,
+          };
     try {
       setIsChangingMode(true);
       if (applyAll) {
@@ -427,6 +456,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
         if (mode === 'exam' && sessionMeta.activeExamSessionId) {
           setSelectedAlertSessionFilter(sessionMeta.activeExamSessionId);
         }
+        loadSubmissions(selectedClass.id);
         showFeedback(
           'success',
           mode === 'exam'
@@ -1157,6 +1187,8 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
         authorRole: 'aluno',
         category: 'exam_submission',
         classIds: [selectedClass.id],
+        examSessionId: selectedClass.activeExamSessionId || null,
+        examSessionLabel: selectedClass.activeExamSessionLabel || null,
         submittedAt: new Date().toISOString(),
       });
       await gradeExamSubmission(created.id, {
@@ -1426,6 +1458,138 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
   const examAlertSessions = useMemo(
     () => groupExamAlertsBySession(examAlerts, activeExamSessionInfo),
     [examAlerts, activeExamSessionInfo]
+  );
+
+  // Consolida processos de avaliação criados na turma com as entregas recebidas (incluindo eventuais legados)
+  const mergedExamProcesses = useMemo(() => {
+    interface StudentSubmissionGroup {
+      studentUid: string;
+      studentName: string;
+      studentEmail: string;
+      latest: SavedScriptItem;
+      extras: SavedScriptItem[];
+    }
+    interface ExamProcessSummary {
+      id: string;
+      label: string;
+      status: 'active' | 'ended';
+      startedAt: string;
+      endedAt?: string | null;
+      durationMinutes?: number | null;
+      maxScore: number;
+      isLegacy: boolean;
+      submissions: SavedScriptItem[];
+      studentGroups: StudentSubmissionGroup[];
+      uniqueStudentsCount: number;
+      totalSubmissionsCount: number;
+      canDelete: boolean;
+    }
+
+    const map = new Map<string, {
+      id: string;
+      label: string;
+      status: 'active' | 'ended';
+      startedAt: string;
+      endedAt?: string | null;
+      durationMinutes?: number | null;
+      maxScore: number;
+      isLegacy: boolean;
+      submissions: SavedScriptItem[];
+    }>();
+
+    // 1. Processos formais gravados em 'exam_sessions'
+    examSessions.forEach((sess) => {
+      const isActive =
+        currentMode === 'exam' && selectedClass?.activeExamSessionId === sess.id;
+      map.set(sess.id, {
+        id: sess.id,
+        label: sess.label,
+        status: isActive ? 'active' : sess.status,
+        startedAt: sess.startedAt || sess.createdAt,
+        endedAt: sess.endedAt || null,
+        durationMinutes: sess.durationMinutes || null,
+        maxScore: sess.maxScore || 100,
+        isLegacy: false,
+        submissions: [],
+      });
+    });
+
+    // 2. Garante a sessão ativa caso recém-criada antes do refresh
+    if (
+      currentMode === 'exam' &&
+      selectedClass?.activeExamSessionId &&
+      !map.has(selectedClass.activeExamSessionId)
+    ) {
+      map.set(selectedClass.activeExamSessionId, {
+        id: selectedClass.activeExamSessionId,
+        label: selectedClass.activeExamSessionLabel || 'Avaliação Atual',
+        status: 'active',
+        startedAt: selectedClass.activeExamStartedAt || new Date().toISOString(),
+        endedAt: null,
+        durationMinutes: selectedClass.activeExamDurationMinutes || null,
+        maxScore: 100,
+        isLegacy: false,
+        submissions: [],
+      });
+    }
+
+    // 3. Vincula entregas às respectivas sessões (ou agrupa legadas sem examSessionId)
+    submissions.forEach((sub) => {
+      const sid = sub.examSessionId || '__legacy__';
+      if (!map.has(sid)) {
+        map.set(sid, {
+          id: sid,
+          label: sub.examSessionLabel || (sid === '__legacy__' ? 'Avaliações Anteriores (Sem Sessão)' : sub.title),
+          status: 'ended',
+          startedAt: sub.submittedAt || sub.createdAt,
+          endedAt: sub.submittedAt || sub.createdAt,
+          durationMinutes: null,
+          maxScore: 100,
+          isLegacy: true,
+          submissions: [],
+        });
+      }
+      map.get(sid)!.submissions.push(sub);
+    });
+
+    const list: ExamProcessSummary[] = Array.from(map.values()).map((proc) => {
+      const byStudent = new Map<string, SavedScriptItem[]>();
+      proc.submissions.forEach((sub) => {
+        const key = sub.authorUid || sub.authorEmail || sub.id;
+        if (!byStudent.has(key)) byStudent.set(key, []);
+        byStudent.get(key)!.push(sub);
+      });
+
+      const studentGroups: StudentSubmissionGroup[] = Array.from(byStudent.entries())
+        .map(([studentUid, subs]) => {
+          const sorted = [...subs].sort((a, b) =>
+            (b.submittedAt || b.createdAt || '').localeCompare(a.submittedAt || a.createdAt || '')
+          );
+          return {
+            studentUid,
+            studentName: sorted[0].authorName || 'Aluno',
+            studentEmail: sorted[0].authorEmail || '',
+            latest: sorted[0],
+            extras: sorted.slice(1),
+          };
+        })
+        .sort((a, b) => compareNamesPtBr(a.studentName, b.studentName));
+
+      return {
+        ...proc,
+        studentGroups,
+        uniqueStudentsCount: studentGroups.length,
+        totalSubmissionsCount: proc.submissions.length,
+        canDelete: proc.submissions.length === 0 && !proc.isLegacy && proc.status !== 'active',
+      };
+    });
+
+    return list.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
+  }, [examSessions, submissions, currentMode, selectedClass]);
+
+  const activeSelectedExamProcess = useMemo(
+    () => mergedExamProcesses.find((p) => p.id === selectedExamSessionId) || null,
+    [mergedExamProcesses, selectedExamSessionId]
   );
 
   // Sincroniza filtro da aba Alertas para focar na avaliação atual ao iniciar uma nova prova
@@ -2220,6 +2384,27 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                     </button>
                   </div>
 
+                  {/* Botão de Destaque: Encerrar Avaliação Manualmente */}
+                  {currentMode === 'exam' && (
+                    <button
+                      type="button"
+                      disabled={isChangingMode}
+                      onClick={() => {
+                        const confirmEnd = window.confirm(
+                          `Deseja realmente ENCERRAR a avaliação "${selectedClass.activeExamSessionLabel || selectedClass.name}"?\n\nAs abas da prova nos alunos serão fechadas e as resoluções enviadas ficarão arquivadas em "Avaliações Entregues".`
+                        );
+                        if (confirmEnd) {
+                          requestModeChange('classroom', false);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-bounce"
+                      title="Encerra a avaliação manualmente para todos os alunos da turma"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">stop_circle</span>
+                      <span>Encerrar Avaliação</span>
+                    </button>
+                  )}
+
                   {/* Ação em Lote */}
                   {classes.length > 1 && (
                     <button
@@ -2345,10 +2530,14 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                         </span>
                       </button>
 
-                      {/* Botão Entrega de Provas */}
+                      {/* Botão Avaliações & Entregas de Provas */}
                       <button
                         type="button"
-                        onClick={() => setActiveResourcePanel((prev) => (prev === 'submissions' ? null : 'submissions'))}
+                        onClick={() => {
+                          setActiveResourcePanel((prev) =>
+                            prev === 'submissions' ? null : 'submissions'
+                          );
+                        }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeResourcePanel === 'submissions'
                             ? 'bg-purple-600 text-white shadow font-bold'
@@ -2360,7 +2549,7 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                         <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                           activeResourcePanel === 'submissions' ? 'bg-white/20 text-white' : 'bg-purple-500/15 text-purple-400'
                         }`}>
-                          {submissions.length}
+                          {mergedExamProcesses.length}
                         </span>
                       </button>
 
@@ -2427,79 +2616,465 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                   </div>
                 )}
 
-                {/* PAINEL EXPANSÍVEL: ENTREGAS DE PROVAS */}
+                {/* PAINEL EXPANSÍVEL: PROCESSOS DE AVALIAÇÃO & ENTREGAS */}
                 {activeResourcePanel === 'submissions' && (
                   <div className="pt-3 border-t border-[var(--border-color)] space-y-3 animate-in fade-in duration-150">
-                    {isLoadingSubmissions ? (
-                      <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
-                        <span className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin inline-block" />
-                        <p>Carregando resoluções de provas dos alunos...</p>
-                      </div>
-                    ) : submissions.length === 0 ? (
-                      <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
-                        <span className="material-symbols-outlined text-[32px] text-purple-400">
-                          quiz
-                        </span>
-                        <p className="text-xs text-[var(--text-secondary)] font-medium">
-                          Nenhuma entrega de avaliação registrada para esta turma ainda.
-                        </p>
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          Quando os alunos clicarem em <strong>Entregar Avaliação</strong> durante o modo de prova, suas resoluções completas aparecerão aqui.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-[var(--bg-surface)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
-                            <tr>
-                              <th className="px-4 py-3">Aluno</th>
-                              <th className="px-4 py-3">Avaliação</th>
-                              <th className="px-4 py-3">Data/Hora</th>
-                              <th className="px-4 py-3">Nota</th>
-                              <th className="px-4 py-3 text-right">Correção</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[var(--border-color)]">
-                            {submissions.map((sub) => (
-                              <tr key={sub.id} className="hover:bg-[var(--bg-hover)] transition-colors">
-                                <td className="px-4 py-3">
-                                  <div className="font-semibold text-[var(--text-primary)]">{sub.authorName}</div>
-                                  <div className="font-mono text-[10px] text-[var(--text-muted)]">{sub.authorEmail}</div>
-                                </td>
-                                <td className="px-4 py-3 text-[var(--text-primary)]">{sub.title}</td>
-                                <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
-                                  {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
-                                </td>
-                                <td className="px-4 py-3">
-                                  {sub.grade !== undefined ? (
-                                    <span
-                                      className={`px-2 py-0.5 rounded-lg text-[11px] font-black border ${
-                                        sub.gradePublished
-                                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35'
-                                          : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
-                                      }`}
+                    {!activeSelectedExamProcess ? (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-purple-400 text-[18px]">
+                              quiz
+                            </span>
+                            <div>
+                              <h4 className="text-xs font-bold text-[var(--text-primary)]">
+                                Avaliações Criadas na Turma ({mergedExamProcesses.length})
+                              </h4>
+                              <p className="text-[10px] text-[var(--text-muted)]">
+                                Selecione uma avaliação para corrigir as entregas por aluno • Pontuação máxima padrão: <strong className="text-purple-300">100 pts</strong> (peso igual por questão)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {isLoadingSubmissions || isLoadingExamSessions ? (
+                          <div className="p-8 text-center text-xs text-[var(--text-secondary)] space-y-2">
+                            <span className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin inline-block" />
+                            <p>Carregando processos de avaliação da turma...</p>
+                          </div>
+                        ) : mergedExamProcesses.length === 0 ? (
+                          <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                            <span className="material-symbols-outlined text-[32px] text-purple-400">
+                              quiz
+                            </span>
+                            <p className="text-xs text-[var(--text-secondary)] font-medium">
+                              Nenhum processo de avaliação iniciado nesta turma ainda.
+                            </p>
+                            <p className="text-[11px] text-[var(--text-muted)]">
+                              Clique em <strong>Avaliação</strong> na barra de modos acima para criar e aplicar uma prova aos alunos (nota máxima automática de 100 pontos).
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {mergedExamProcesses.map((proc) => {
+                              const isEditingThis = editingSessionId === proc.id;
+                              return (
+                                <div
+                                  key={proc.id}
+                                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                                    proc.status === 'active'
+                                      ? 'bg-purple-950/25 border-purple-500/50 shadow-lg'
+                                      : 'bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-purple-500/40'
+                                  }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                      {isEditingThis ? (
+                                        <div className="flex items-center gap-1.5 flex-1">
+                                          <input
+                                            type="text"
+                                            maxLength={120}
+                                            value={editingSessionLabel}
+                                            onChange={(e) => setEditingSessionLabel(e.target.value)}
+                                            className="flex-1 px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] border border-purple-400 text-xs font-bold text-[var(--text-primary)] focus:outline-none"
+                                            placeholder="Tag da avaliação..."
+                                          />
+                                          <button
+                                            type="button"
+                                            disabled={isSavingSessionLabel}
+                                            onClick={async () => {
+                                              if (!selectedClass) return;
+                                              try {
+                                                setIsSavingSessionLabel(true);
+                                                await updateExamSessionLabel(
+                                                  proc.id,
+                                                  selectedClass.id,
+                                                  editingSessionLabel,
+                                                  proc.status === 'active'
+                                                );
+                                                setExamSessions((prev) =>
+                                                  prev.map((s) =>
+                                                    s.id === proc.id
+                                                      ? { ...s, label: editingSessionLabel.trim() }
+                                                      : s
+                                                  )
+                                                );
+                                                if (proc.status === 'active') {
+                                                  setSelectedClass((curr) =>
+                                                    curr
+                                                      ? {
+                                                          ...curr,
+                                                          activeExamSessionLabel: editingSessionLabel.trim(),
+                                                        }
+                                                      : null
+                                                  );
+                                                }
+                                                setEditingSessionId(null);
+                                                showFeedback('success', 'Tag da avaliação atualizada!');
+                                              } catch (err: any) {
+                                                showFeedback(
+                                                  'error',
+                                                  'Erro ao renomear avaliação: ' + (err?.message || 'Erro')
+                                                );
+                                              } finally {
+                                                setIsSavingSessionLabel(false);
+                                              }
+                                            }}
+                                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer"
+                                          >
+                                            Salvar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingSessionId(null)}
+                                            className="px-2 py-1 rounded-lg bg-[var(--bg-primary)] text-[var(--text-muted)] text-[11px] cursor-pointer"
+                                          >
+                                            Cancelar
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-bold text-sm text-[var(--text-primary)] truncate">
+                                              {proc.label}
+                                            </span>
+                                            <span
+                                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                proc.status === 'active'
+                                                  ? 'bg-purple-600 text-white animate-pulse'
+                                                  : 'bg-zinc-500/15 text-[var(--text-muted)]'
+                                              }`}
+                                            >
+                                              {proc.status === 'active' ? 'Em andamento' : 'Encerrada'}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                              Máx: {proc.maxScore} pts
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-[var(--text-muted)] mt-1 font-mono">
+                                            Início: {new Date(proc.startedAt).toLocaleString('pt-BR')}
+                                            {proc.durationMinutes ? ` • Duração: ${proc.durationMinutes} min` : ''}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                                      <span className="px-2 py-0.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] font-semibold">
+                                        👥 {proc.uniqueStudentsCount} aluno(s) entregaram
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] font-semibold">
+                                        📄 {proc.totalSubmissionsCount} envio(s) totais
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border-color)]/60">
+                                    <div className="flex items-center gap-1.5">
+                                      {!proc.isLegacy && !isEditingThis && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingSessionId(proc.id);
+                                            setEditingSessionLabel(proc.label);
+                                          }}
+                                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-purple-300 text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                                          title="Editar tag/nome desta avaliação"
+                                        >
+                                          <span className="material-symbols-outlined text-[13px]">edit</span>
+                                          <span>Editar Tag</span>
+                                        </button>
+                                      )}
+
+                                      {!proc.isLegacy && (
+                                        <button
+                                          type="button"
+                                          disabled={!proc.canDelete}
+                                          onClick={async () => {
+                                            if (!proc.canDelete) return;
+                                            const confirmDel = window.confirm(
+                                              `Deseja realmente EXCLUIR o processo de avaliação "${proc.label}"?\n\nComo nenhum aluno realizou entregas ainda, o registro será removido.`
+                                            );
+                                            if (!confirmDel) return;
+                                            try {
+                                              await deleteExamSession(proc.id);
+                                              setExamSessions((prev) => prev.filter((s) => s.id !== proc.id));
+                                              showFeedback('success', `Avaliação "${proc.label}" excluída.`);
+                                            } catch (err: any) {
+                                              showFeedback(
+                                                'error',
+                                                'Erro ao excluir avaliação: ' + (err?.message || 'Erro')
+                                              );
+                                            }
+                                          }}
+                                          title={
+                                            proc.status === 'active'
+                                              ? 'Encerre a avaliação antes de excluir'
+                                              : proc.totalSubmissionsCount > 0
+                                              ? 'Não é possível excluir avaliação pois já existem entregas vinculadas'
+                                              : 'Excluir avaliação (sem entregas)'
+                                          }
+                                          className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-[11px] font-semibold cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+                                        >
+                                          <span className="material-symbols-outlined text-[13px]">delete</span>
+                                          <span>Excluir</span>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedExamSessionId(proc.id)}
+                                      className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5"
                                     >
-                                      {Number(sub.grade).toFixed(1)} {sub.gradePublished ? '✓' : '(rascunho)'}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[11px] text-[var(--text-muted)]">Pendente</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <button
-                                    type="button"
-                                    onClick={() => setViewingSubmission(sub)}
-                                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5 ml-auto"
-                                  >
-                                    <span className="material-symbols-outlined text-[14px]">grading</span>
-                                    <span>Avaliar / Corrigir</span>
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                                      <span className="material-symbols-outlined text-[14px]">folder_open</span>
+                                      <span>Entregas ({proc.uniqueStudentsCount})</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {/* CABEÇALHO DA AVALIAÇÃO SELECIONADA */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--bg-surface)] border border-purple-500/30 rounded-2xl p-3">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExamSessionId(null)}
+                              className="px-3 py-1.5 rounded-xl bg-[var(--bg-primary)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-xs font-bold text-[var(--text-primary)] cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">arrow_back</span>
+                              <span>Voltar para Avaliações</span>
+                            </button>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-bold text-[var(--text-primary)]">
+                                  {activeSelectedExamProcess.label}
+                                </h4>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                  Máx: 100 pts
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[var(--text-muted)]">
+                                {activeSelectedExamProcess.uniqueStudentsCount} aluno(s) •{' '}
+                                {activeSelectedExamProcess.totalSubmissionsCount} entrega(s) totais (exibindo a mais recente por aluno)
+                              </p>
+                            </div>
+                          </div>
+
+                          {activeSelectedExamProcess.totalSubmissionsCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const confirmDeleteAll = window.confirm(
+                                  `ATENÇÃO: Deseja realmente EXCLUIR TODAS as ${activeSelectedExamProcess.totalSubmissionsCount} entregas da avaliação "${activeSelectedExamProcess.label}"?\n\nEsta ação apagará permanentemente as respostas e notas dos alunos.`
+                                );
+                                if (!confirmDeleteAll) return;
+                                try {
+                                  const subIds = activeSelectedExamProcess.submissions.map((s) => s.id);
+                                  await deleteScriptsBatch(subIds);
+                                  setSubmissions((prev) => prev.filter((s) => !subIds.includes(s.id)));
+                                  showFeedback('success', `Todas as ${subIds.length} entregas desta avaliação foram excluídas.`);
+                                } catch (err: any) {
+                                  showFeedback('error', 'Erro ao excluir entregas: ' + (err?.message || 'Erro'));
+                                }
+                              }}
+                              className="px-3 py-1 rounded-xl bg-rose-600/15 border border-rose-500/30 text-rose-400 hover:bg-rose-600 hover:text-white text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1.5"
+                              title="Excluir todas as entregas desta avaliação"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                              <span>Limpar Entregas desta Prova</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {activeSelectedExamProcess.studentGroups.length === 0 ? (
+                          <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl space-y-2">
+                            <span className="material-symbols-outlined text-[32px] text-purple-400">inbox</span>
+                            <p className="text-xs text-[var(--text-secondary)] font-medium">
+                              Nenhum aluno entregou esta avaliação ainda.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded-2xl border border-[var(--border-color)]">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[var(--bg-surface)] text-[var(--text-secondary)] uppercase text-[10px] font-bold border-b border-[var(--border-color)]">
+                                <tr>
+                                  <th className="px-4 py-3">Aluno</th>
+                                  <th className="px-4 py-3">Entrega Mais Recente</th>
+                                  <th className="px-4 py-3">Data/Hora</th>
+                                  <th className="px-4 py-3">Nota (0–100)</th>
+                                  <th className="px-4 py-3 text-right">Ações &amp; Correção</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--border-color)]">
+                                {activeSelectedExamProcess.studentGroups.map((grp) => {
+                                  const sub = grp.latest;
+                                  const isExpanded = Boolean(expandedExtraSubmissionsByStudent[grp.studentUid]);
+                                  return (
+                                    <React.Fragment key={grp.studentUid}>
+                                      <tr className="hover:bg-[var(--bg-hover)] transition-colors">
+                                        <td className="px-4 py-3">
+                                          <div className="font-semibold text-[var(--text-primary)]">{grp.studentName}</div>
+                                          <div className="font-mono text-[10px] text-[var(--text-muted)]">{grp.studentEmail}</div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-[var(--text-primary)] font-medium">{sub.title}</span>
+                                            <span className="px-1.5 py-0.2 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-mono font-bold">
+                                              v{sub.submissionVersion || 1} (Mais recente)
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-[11px]">
+                                          {new Date(sub.submittedAt || sub.createdAt).toLocaleString('pt-BR')}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          {sub.grade !== undefined ? (
+                                            <span
+                                              className={`px-2 py-0.5 rounded-lg text-[11px] font-black border ${
+                                                sub.gradePublished
+                                                  ? Number(sub.grade) >= 60
+                                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/35'
+                                                    : 'bg-rose-500/15 text-rose-400 border-rose-500/35'
+                                                  : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                              }`}
+                                            >
+                                              {Number(sub.grade).toFixed(1)} / 100 {sub.gradePublished ? '✓' : '(rascunho)'}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[11px] text-[var(--text-muted)]">Pendente</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                            {grp.extras.length > 0 && (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setExpandedExtraSubmissionsByStudent((prev) => ({
+                                                    ...prev,
+                                                    [grp.studentUid]: !prev[grp.studentUid],
+                                                  }))
+                                                }
+                                                className="px-2.5 py-1 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-sky-300 font-bold text-[11px] cursor-pointer flex items-center gap-1"
+                                              >
+                                                <span className="material-symbols-outlined text-[14px]">
+                                                  {isExpanded ? 'expand_less' : 'history'}
+                                                </span>
+                                                <span>Entregas adicionais ({grp.extras.length})</span>
+                                              </button>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => setViewingSubmission(sub)}
+                                              className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] cursor-pointer shadow flex items-center gap-1.5"
+                                            >
+                                              <span className="material-symbols-outlined text-[14px]">grading</span>
+                                              <span>Corrigir</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={async () => {
+                                                const confirmDelete = window.confirm(
+                                                  `Excluir esta entrega do aluno "${sub.authorName}" (${sub.title})?`
+                                                );
+                                                if (!confirmDelete) return;
+                                                try {
+                                                  await deleteScript(sub.id);
+                                                  setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
+                                                  showFeedback('success', 'Entrega excluída com sucesso.');
+                                                } catch (err: any) {
+                                                  showFeedback('error', 'Erro ao excluir: ' + (err?.message || 'Erro'));
+                                                }
+                                              }}
+                                              title="Excluir entrega"
+                                              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                                            >
+                                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+
+                                      {/* Entregas adicionais anteriores desse mesmo aluno */}
+                                      {isExpanded &&
+                                        grp.extras.map((extraSub) => (
+                                          <tr
+                                            key={extraSub.id}
+                                            className="bg-[var(--bg-primary)]/60 hover:bg-[var(--bg-hover)] transition-colors"
+                                          >
+                                            <td className="px-4 py-2.5 pl-8 text-[var(--text-muted)] text-[11px]">
+                                              ↳ Envio anterior
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-[var(--text-secondary)] text-[11px]">
+                                                  {extraSub.title}
+                                                </span>
+                                                <span className="px-1.5 py-0.2 rounded bg-zinc-500/15 text-[var(--text-muted)] text-[10px] font-mono">
+                                                  v{extraSub.submissionVersion || 1}
+                                                </span>
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-2.5 text-[var(--text-muted)] font-mono text-[10.5px]">
+                                              {new Date(extraSub.submittedAt || extraSub.createdAt).toLocaleString('pt-BR')}
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                              {extraSub.grade !== undefined ? (
+                                                <span className="px-2 py-0.5 rounded-lg text-[10.5px] font-bold bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-secondary)]">
+                                                  {Number(extraSub.grade).toFixed(1)} / 100
+                                                </span>
+                                              ) : (
+                                                <span className="text-[10.5px] text-[var(--text-muted)]">—</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right">
+                                              <div className="flex items-center justify-end gap-1.5">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setViewingSubmission(extraSub)}
+                                                  className="px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 font-bold text-[10.5px] cursor-pointer flex items-center gap-1 transition-colors"
+                                                >
+                                                  <span className="material-symbols-outlined text-[13px]">grading</span>
+                                                  <span>Corrigir</span>
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={async () => {
+                                                    const confirmDelete = window.confirm(
+                                                      `Excluir esta entrega anterior (v${extraSub.submissionVersion || 1}) de "${extraSub.authorName}"?`
+                                                    );
+                                                    if (!confirmDelete) return;
+                                                    try {
+                                                      await deleteScript(extraSub.id);
+                                                      setSubmissions((prev) => prev.filter((s) => s.id !== extraSub.id));
+                                                      showFeedback('success', 'Entrega adicional excluída com sucesso.');
+                                                    } catch (err: any) {
+                                                      showFeedback('error', 'Erro ao excluir: ' + (err?.message || 'Erro'));
+                                                    }
+                                                  }}
+                                                  title="Excluir entrega anterior"
+                                                  className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                                                >
+                                                  <span className="material-symbols-outlined text-[15px]">delete</span>
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -2782,17 +3357,47 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                           </button>
                         </div>
 
-                        {unackInFilterIds.length > 0 && (
-                          <button
-                            type="button"
-                            disabled={isAcknowledgingAlerts}
-                            onClick={() => handleAcknowledgeBatch(unackInFilterIds)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">done_all</span>
-                            <span>Marcar todas como cientes ({unackInFilterIds.length})</span>
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {visiblePanelAlerts.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const scopeLabel =
+                                  selectedAlertSessionFilter === 'all'
+                                    ? 'TODAS as ocorrências de todas as avaliações desta turma'
+                                    : 'todas as ocorrências da avaliação filtrada';
+                                const confirmDelete = window.confirm(
+                                  `ATENÇÃO: Deseja realmente EXCLUIR ${scopeLabel} (${visiblePanelAlerts.length} registros)?\n\nEsta ação apagará permanentemente os logs anti-trapaça selecionados.`
+                                );
+                                if (!confirmDelete) return;
+                                try {
+                                  const alertIds = visiblePanelAlerts.map((a) => a.id);
+                                  await deleteExamAlertsBatch(alertIds);
+                                  showFeedback('success', `${alertIds.length} ocorrência(s) excluída(s).`);
+                                } catch (err: any) {
+                                  showFeedback('error', 'Erro ao excluir ocorrências: ' + (err?.message || 'Erro'));
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600/15 hover:bg-rose-600 hover:text-white border border-rose-500/35 text-rose-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Excluir todas as ocorrências filtradas"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                              <span>Limpar Ocorrências ({visiblePanelAlerts.length})</span>
+                            </button>
+                          )}
+
+                          {unackInFilterIds.length > 0 && (
+                            <button
+                              type="button"
+                              disabled={isAcknowledgingAlerts}
+                              onClick={() => handleAcknowledgeBatch(unackInFilterIds)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">done_all</span>
+                              <span>Marcar todas como cientes ({unackInFilterIds.length})</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {visiblePanelAlerts.length === 0 ? (
@@ -2856,6 +3461,25 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                                     Ciente
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const confirmDel = window.confirm(
+                                      `Excluir este alerta de "${al.studentName}" (${al.details})?`
+                                    );
+                                    if (!confirmDel) return;
+                                    try {
+                                      await deleteExamAlert(al.id);
+                                      showFeedback('success', 'Ocorrência excluída com sucesso.');
+                                    } catch (err: any) {
+                                      showFeedback('error', 'Erro ao excluir ocorrência: ' + (err?.message || 'Erro'));
+                                    }
+                                  }}
+                                  title="Excluir ocorrência individual"
+                                  className="p-1 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -3421,6 +4045,49 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
                 placeholder="Ex.: Prova P1 SQL"
                 className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-purple-500/40 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-purple-400"
               />
+            </div>
+
+            {/* Duração Estimada da Avaliação */}
+            <div className="text-left space-y-1">
+              <label className="text-[11px] font-bold text-purple-300 flex items-center justify-between">
+                <span>Tempo de Duração (Minutos):</span>
+                <span className="text-[10px] text-purple-200/80 font-normal">
+                  (O encerramento é sempre manual pelo professor)
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={5}
+                  max={480}
+                  step={5}
+                  value={examDurationMinutesInput}
+                  onChange={(e) => setExamDurationMinutesInput(Math.max(5, Number(e.target.value) || 0))}
+                  className="w-28 px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-purple-500/40 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-purple-400"
+                />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[30, 50, 60, 90, 120].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setExamDurationMinutesInput(mins)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                        examDurationMinutesInput === mins
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-purple-500/15 text-purple-300 hover:bg-purple-500/25'
+                      }`}
+                    >
+                      {mins} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[15px] text-amber-400">calculate</span>
+                <span>
+                  Pontuação máxima padrão: <strong>100 pontos</strong> (cada questão recebe peso idêntico proporcional a 100 / Nº de questões).
+                </span>
+              </div>
             </div>
 
             {/* Seleção de scripts de Avaliação e Exemplos a abrir automaticamente nas abas */}
@@ -4148,22 +4815,33 @@ export const TeacherPanelView: React.FC<TeacherPanelViewProps> = ({
       {viewingSubmission && user && (
         <ExamGradingModal
           submission={viewingSubmission}
+          allStudentSubmissions={submissions}
           classExams={classExamMaterials}
           classDatabaseScripts={classDbMaterials}
           teacherUid={user.uid}
           onClose={() => setViewingSubmission(null)}
-          onSaved={({ grade, gradePublished, teacherFeedback }) => {
+          onDeleteSubmission={async (submissionId) => {
+            try {
+              await deleteScript(submissionId);
+              setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
+              setViewingSubmission(null);
+              showFeedback('success', 'Entrega de avaliação excluída com sucesso.');
+            } catch (err: any) {
+              showFeedback('error', 'Falha ao excluir entrega: ' + (err?.message || 'Erro'));
+            }
+          }}
+          onSaved={({ submissionId, grade, gradePublished, teacherFeedback, autoGradeDetails }) => {
             setSubmissions((prev) =>
               prev.map((s) =>
-                s.id === viewingSubmission.id
-                  ? { ...s, grade, gradePublished, teacherFeedback }
+                s.id === submissionId
+                  ? { ...s, grade, gradePublished, teacherFeedback, autoGradeDetails }
                   : s
               )
             );
             setViewingSubmission(null);
             showFeedback(
               'success',
-              `Nota ${grade.toFixed(1)} salva${gradePublished ? ' e publicada para o aluno' : ''}!`
+              `Nota ${grade.toFixed(1)} / 100 salva${gradePublished ? ' e publicada para o aluno' : ''}!`
             );
           }}
         />

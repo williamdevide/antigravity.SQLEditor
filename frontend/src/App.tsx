@@ -284,6 +284,7 @@ export const App: React.FC = () => {
   const isTriggeringExamReloadRef = useRef<boolean>(false);
   const [teacherClasses, setTeacherClasses] = useState<ClassItem[]>([]);
   const [savedScripts, setSavedScripts] = useState<SavedScriptItem[]>([]);
+  const [deliveredExamScripts, setDeliveredExamScripts] = useState<SavedScriptItem[]>([]);
   const [rawClassScripts, setRawClassScripts] = useState<SavedScriptItem[]>([]);
 
   // Comunicação em Tempo Real, Anti-Trapaça e Congelamento Remoto
@@ -1000,10 +1001,18 @@ export const App: React.FC = () => {
   }, [isInRestrictedClassMode, normalGlobalScripts, builtInSolutions]);
 
   const classExamples = useMemo(() => {
+    const configuredExamAutoOpen = Array.isArray(activeClassItem?.examAutoOpenScriptIds)
+      ? activeClassItem.examAutoOpenScriptIds
+      : [];
+
     const classScoped = rawClassScripts.filter((s) => {
       if (s.category !== 'example') return false;
       if (!isStudentInClass) return true;
-      if (activeClassroomMode === 'exam') return Boolean(s.visibleInExam);
+      if (activeClassroomMode === 'exam') {
+        // No Modo Avaliação: liberado se estiver explicitamente marcado visibleInExam
+        // OU se o professor selecionou o exemplo para abrir na prova (examAutoOpenScriptIds)
+        return Boolean(s.visibleInExam) || configuredExamAutoOpen.includes(s.id);
+      }
       if (activeClassroomMode === 'classroom') return s.visibleInClassroom !== false;
       return Boolean(s.visibleInNormal);
     });
@@ -1013,7 +1022,14 @@ export const App: React.FC = () => {
     const normalScoped = normalGlobalScripts.filter((s) => s.category === 'example');
     const seen = new Set(classScoped.map((s) => s.id));
     return [...normalScoped.filter((s) => !seen.has(s.id)), ...classScoped];
-  }, [rawClassScripts, isStudentInClass, activeClassroomMode, isInRestrictedClassMode, normalGlobalScripts]);
+  }, [
+    rawClassScripts,
+    isStudentInClass,
+    activeClassroomMode,
+    isInRestrictedClassMode,
+    normalGlobalScripts,
+    activeClassItem?.examAutoOpenScriptIds,
+  ]);
 
   const classExercises = useMemo(() => {
     const classScoped = rawClassScripts.filter((s) => {
@@ -1199,6 +1215,7 @@ export const App: React.FC = () => {
 
     if (!user) {
       setSavedScripts([]);
+      setDeliveredExamScripts([]);
       setRawClassScripts([]);
       return;
     }
@@ -1207,6 +1224,12 @@ export const App: React.FC = () => {
       // Carrega apenas scripts salvos como Script Pessoal (exclui rascunhos temporários e outros tipos)
       const myScripts = await getUserSavedScripts(user.uid);
       setSavedScripts(filterPersonalSavedScripts(myScripts));
+
+      // Carrega avaliações já entregues pelo aluno para visualização protegida fora do modo avaliação
+      const myDelivered = (myScripts || []).filter(
+        (s) => s.category === 'exam_submission' && !s.isTemporary
+      );
+      setDeliveredExamScripts(myDelivered);
 
       // Se for professor ou admin, busca também as turmas lecionadas
       if (userProfile?.role === 'admin') {
@@ -1458,9 +1481,36 @@ export const App: React.FC = () => {
           }
         }
       } else if (wasInExam) {
-        // Verifica se há scripts temporários para restaurar após o desligamento síncrono
+        // Ao encerrar a avaliação: fecha nos alunos as abas de exemplos e da avaliação
+        setTabs([]);
+        setActiveTabId('');
+
+        // Fecha o BD da avaliação e recarrega os BDs de aula da turma
+        try {
+          const classroomDbScripts = latestClassScripts
+            .filter((s) =>
+              s.category === 'class_database' &&
+              (newMode === 'classroom' ? s.visibleInClassroom !== false : Boolean(s.visibleInNormal))
+            )
+            .map((s) => ({ title: s.title, content: s.content }));
+
+          if (classroomDbScripts.length > 0) {
+            await handleLoadPreset('teacher_class', classroomDbScripts);
+          } else {
+            await handleLoadPreset('class');
+          }
+        } catch (reloadDbErr) {
+          console.warn('[Post Exam DB Reload Error]', reloadDbErr);
+        }
+
+        // Atualiza lista de avaliações entregues e verifica backups temporários para restaurar
         try {
           const userScripts = await getUserSavedScripts(user!.uid);
+          const myDelivered = (userScripts || []).filter(
+            (s) => s.category === 'exam_submission' && !s.isTemporary
+          );
+          setDeliveredExamScripts(myDelivered);
+
           const tempOnly = userScripts.filter(s => s.isTemporary);
           if (tempOnly.length > 0) {
             setTempRecoveryScripts(tempOnly);
@@ -2162,28 +2212,37 @@ export const App: React.FC = () => {
     };
   }, [liveMirrorTargetsKey]);
 
-  // 3. Entregar Avaliação (Aluno envia todas as abas atuais)
+  // 3. Entregar Avaliação (Aluno envia apenas as abas oficiais da prova, ignorando abas de exemplos)
   const handleDeliverExam = useCallback(async () => {
     if (!user || !userProfile || !userProfile.classId) return;
-    if (!window.confirm('Deseja realmente entregar sua avaliação agora? O professor receberá todas as suas respostas salvas.')) return;
+    if (!window.confirm('Deseja realmente entregar sua avaliação agora? O professor receberá suas respostas oficiais versionadas com segurança.')) return;
 
     try {
       setIsExecuting(true);
       const currentTabs = tabsRef.current;
-      const combinedContent = currentTabs
+      const officialExamTabs = currentTabs.filter((t) => t.isProtectedExamTab);
+      const tabsToSubmit = officialExamTabs.length > 0 ? officialExamTabs : currentTabs;
+
+      const combinedContent = tabsToSubmit
         .map(t => `-- === ABA: ${t.title} ===\n${t.content || ''}\n`)
         .join('\n\n');
 
-      await submitExam({
+      const createdSubmission = await submitExam({
         classId: userProfile.classId,
         className: activeClassName || 'Turma',
         studentUid: user.uid,
         studentName: userProfile.displayName || 'Aluno',
         studentEmail: userProfile.email || '',
-        examTitle: activeClassName ? `Avaliação ${activeClassName}` : 'Avaliação SQL',
+        examTitle: activeClassItem?.activeExamSessionLabel || (activeClassName ? `Avaliação ${activeClassName}` : 'Avaliação SQL'),
         content: combinedContent,
+        examSessionId: activeClassItem?.activeExamSessionId || null,
+        examSessionLabel: activeClassItem?.activeExamSessionLabel || null,
       });
-      alert('Avaliação entregue com sucesso! Suas respostas foram enviadas ao professor.');
+      setDeliveredExamScripts((prev) => [
+        createdSubmission,
+        ...prev.filter((s) => s.id !== createdSubmission.id).map((s) => ({ ...s, isLatestSubmission: false })),
+      ]);
+      alert('Avaliação entregue com sucesso! Suas respostas foram enviadas e versionadas com segurança.');
     } catch (err: any) {
       console.error('[handleDeliverExam Error]', err);
       alert('Erro ao entregar avaliação: ' + (err?.message || 'Erro inesperado'));
@@ -2641,6 +2700,8 @@ export const App: React.FC = () => {
     teacherClasses,
     classroomMode: activeClassroomMode,
     isExamModeActive,
+    examStartedAt: activeClassItem?.activeExamStartedAt || null,
+    examDurationMinutes: activeClassItem?.activeExamDurationMinutes || null,
     isEditorFrozen: frozenState.isFrozen,
     classroomName: activeClassName,
     savedScripts,
@@ -2649,6 +2710,7 @@ export const App: React.FC = () => {
     classExercises,
     classSolutions,
     classExams,
+    deliveredExams: deliveredExamScripts,
     onDeliverExam: handleDeliverExam,
     onScriptSaved: handleScriptSaved,
     onBindTabSavedScript: handleBindTabSavedScript,
